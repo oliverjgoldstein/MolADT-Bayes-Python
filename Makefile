@@ -105,7 +105,7 @@ python-setup:
 	.venv/bin/python -m pip install -U -e ".[dev]"
 
 python-cmdstan-install:
-	$(PYTHON_CMD) -c "import cmdstanpy; cmdstanpy.install_cmdstan(dir='.cmdstan')"
+	$(PYTHON_CMD) -m scripts.install_cmdstan
 
 python-test:
 	@start=$$(date +%s); \

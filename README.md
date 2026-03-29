@@ -40,7 +40,7 @@ From this repository:
 make python-cmdstan-install
 ```
 
-This uses `cmdstanpy.install_cmdstan()` and does not require conda.
+This installs CmdStan into `.cmdstan` and also repairs a partial existing install if a previous attempt was interrupted. It does not require conda.
 
 If you already have a CmdStan installation, point CmdStanPy at it with:
 
