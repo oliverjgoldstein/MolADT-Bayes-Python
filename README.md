@@ -2,7 +2,7 @@
 
 `MolADT-Bayes-Python` is the Python implementation of the MolADT chemistry model. The core stays typed and structural: frozen dataclasses, explicit atoms and coordinates, Dietz-style bonding systems, local validation, a lightweight SDF parser, and a conservative SMILES boundary.
 
-This repository also contains the main empirical benchmark pipeline used in the workspace:
+This repository also contains the main empirical benchmark pipeline:
 
 - FreeSolv smoke benchmark
 - QM9 dipole-moment benchmark
@@ -13,28 +13,28 @@ This repository also contains the main empirical benchmark pipeline used in the 
 
 ### 1. Create the environment
 
-From the workspace root, or from this repository now that it has a small forwarding `Makefile`:
+From this repository:
 
 ```bash
 make python-setup
 ```
 
-That creates `MolADT-Bayes-Python/.venv` and installs the Python package plus the benchmark dependencies.
+That creates `.venv` and installs the Python package plus the benchmark dependencies.
 
-If you prefer to run the commands inside this repository directly:
+If you prefer to run the commands directly:
 
 ```bash
-python3 -m venv .venv
+/opt/homebrew/bin/python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -U pip
+python -m pip install -U pip setuptools wheel
 python -m pip install -e ".[dev]"
 ```
 
-Windows users should use WSL2 for the benchmark stack.
+On macOS, the bundled `make python-setup` target already prefers Homebrew Python when it is available. Windows users should use WSL2 for the benchmark stack.
 
 ### 2. Install CmdStan
 
-From the workspace root, or from this repository:
+From this repository:
 
 ```bash
 make python-cmdstan-install
@@ -52,15 +52,10 @@ set_cmdstan_path("/path/to/cmdstan")
 
 ### 3. Check that the install works
 
-From the workspace root, or from this repository:
+From this repository:
 
 ```bash
 make python-test
-```
-
-If you also want the typecheck:
-
-```bash
 make python-typecheck
 ```
 
@@ -80,7 +75,7 @@ The manuscript-facing rendering layer lives in `moladt/chem/pretty.py`, and the 
 
 ### 5. Run the default benchmark
 
-From the workspace root, or from this repository:
+From this repository:
 
 ```bash
 make benchmark
@@ -104,22 +99,14 @@ The main outputs are written to:
 
 ### 6. Run the long job in the background
 
-From the workspace root, or from this repository:
+From this repository:
 
 ```bash
 make benchmark-bg
-tail -f MolADT-Bayes-Python/results/benchmark.out
+tail -f results/benchmark.out
 ```
 
-### 7. Run the full workspace bundle
-
-If you want the shared Python + Haskell run from the workspace root:
-
-```bash
-make showcase
-```
-
-### 8. Need non-default settings?
+### 7. Need non-default settings?
 
 Use:
 
