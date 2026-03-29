@@ -1,0 +1,528 @@
+from __future__ import annotations
+
+import math
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+from scipy.special import logsumexp
+from scipy.stats import t as student_t
+
+from .common import DEFAULT_SEED, LOCAL_CMDSTAN_DIR, PROJECT_ROOT, ensure_directory, write_json
+from .splits import ExportedDataset
+
+MODEL_FILES = {
+    "bayes_linear_student_t": PROJECT_ROOT / "stan" / "bayes_linear_student_t.stan",
+    "bayes_hierarchical_shrinkage": PROJECT_ROOT / "stan" / "bayes_hierarchical_shrinkage.stan",
+}
+ALL_METHODS = ("sample", "variational", "pathfinder", "optimize", "laplace")
+
+
+@dataclass(frozen=True, slots=True)
+class StanRunConfig:
+    methods: tuple[str, ...] = ALL_METHODS
+    seed: int = DEFAULT_SEED
+    student_df: float = 4.0
+    sample_chains: int = 2
+    sample_warmup: int = 200
+    sample_draws: int = 200
+    approximation_draws: int = 500
+    variational_iterations: int = 5000
+    optimize_iterations: int = 2000
+    pathfinder_paths: int = 4
+    predictive_draws: int = 500
+
+
+def ensure_cmdstan_ready() -> None:
+    import cmdstanpy
+
+    candidates = sorted(LOCAL_CMDSTAN_DIR.glob("cmdstan-*"))
+    if candidates:
+        cmdstanpy.set_cmdstan_path(str(candidates[-1]))
+    try:
+        cmdstanpy.cmdstan_path()
+    except Exception as exc:
+        raise RuntimeError(
+            "CmdStan is not installed. Install it with "
+            "`python -c \"import cmdstanpy; cmdstanpy.install_cmdstan(dir='MolADT-Bayes-Python/.cmdstan')\"` "
+            "or point CmdStanPy at an existing installation via set_cmdstan_path()."
+        ) from exc
+
+
+def build_stan_data(bundle: ExportedDataset, *, student_df: float) -> dict[str, Any]:
+    X_eval = np.vstack([bundle.X_valid, bundle.X_test])
+    return {
+        "N": int(bundle.X_train.shape[0]),
+        "K": int(bundle.X_train.shape[1]),
+        "X": bundle.X_train,
+        "y": bundle.y_train,
+        "N_eval": int(X_eval.shape[0]),
+        "X_eval": X_eval,
+        "G": len(bundle.group_names),
+        "group_id": np.array(bundle.group_ids, dtype=int),
+        "nu": float(student_df),
+    }
+
+
+def write_stan_data_json(bundle: ExportedDataset, *, student_df: float) -> Path:
+    payload = _json_ready(build_stan_data(bundle, student_df=student_df))
+    target = bundle.metadata_path.with_name(bundle.metadata_path.stem.replace("_metadata", "_stan_data") + ".json")
+    return write_json(target, payload)
+
+
+def run_model_suite(
+    bundle: ExportedDataset,
+    *,
+    model_name: str,
+    config: StanRunConfig,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    import cmdstanpy
+
+    if model_name not in MODEL_FILES:
+        raise ValueError(f"Unknown model {model_name}")
+    ensure_cmdstan_ready()
+    output_dir = ensure_directory(PROJECT_ROOT / "results" / "stan_output" / bundle.dataset_name / bundle.representation / model_name)
+    data = build_stan_data(bundle, student_df=config.student_df)
+    model = cmdstanpy.CmdStanModel(stan_file=str(MODEL_FILES[model_name]))
+    results: list[dict[str, Any]] = []
+    predictions: list[dict[str, Any]] = []
+    coefficients: list[dict[str, Any]] = []
+    for method in config.methods:
+        fit, runtime_seconds = _run_method(model, data, method=method, config=config, output_dir=output_dir)
+        summary_rows, prediction_rows, coefficient_rows = _evaluate_fit(
+            bundle,
+            model_name=model_name,
+            method=method,
+            fit=fit,
+            runtime_seconds=runtime_seconds,
+            config=config,
+        )
+        results.extend(summary_rows)
+        predictions.extend(prediction_rows)
+        coefficients.extend(coefficient_rows)
+    return results, predictions, coefficients
+
+
+def _run_method(model: Any, data: dict[str, Any], *, method: str, config: StanRunConfig, output_dir: Path) -> tuple[Any, float]:
+    start = time.perf_counter()
+    if method == "sample":
+        fit = model.sample(
+            data=data,
+            chains=config.sample_chains,
+            parallel_chains=config.sample_chains,
+            iter_warmup=config.sample_warmup,
+            iter_sampling=config.sample_draws,
+            seed=config.seed,
+            show_progress=False,
+            output_dir=str(output_dir / method),
+        )
+    elif method == "variational":
+        fit = model.variational(
+            data=data,
+            seed=config.seed,
+            algorithm="fullrank",
+            iter=config.variational_iterations,
+            draws=config.approximation_draws,
+            require_converged=False,
+            show_console=False,
+            output_dir=str(output_dir / method),
+        )
+    elif method == "pathfinder":
+        fit = model.pathfinder(
+            data=data,
+            seed=config.seed,
+            num_paths=config.pathfinder_paths,
+            draws=config.approximation_draws,
+            num_elbo_draws=max(50, min(config.approximation_draws, 500)),
+            num_single_draws=max(50, min(config.approximation_draws, 500)),
+            show_console=False,
+            output_dir=str(output_dir / method),
+        )
+    elif method == "optimize":
+        fit = model.optimize(
+            data=data,
+            seed=config.seed,
+            algorithm="lbfgs",
+            iter=config.optimize_iterations,
+            jacobian=False,
+            show_console=False,
+            output_dir=str(output_dir / method),
+        )
+    elif method == "laplace":
+        mode = model.optimize(
+            data=data,
+            seed=config.seed,
+            algorithm="lbfgs",
+            iter=config.optimize_iterations,
+            jacobian=False,
+            show_console=False,
+            output_dir=str(output_dir / "laplace_optimize"),
+        )
+        fit = model.laplace_sample(
+            data=data,
+            mode=mode,
+            draws=config.approximation_draws,
+            jacobian=False,
+            seed=config.seed,
+            show_console=False,
+            output_dir=str(output_dir / method),
+        )
+    else:
+        raise ValueError(f"Unsupported inference method {method}")
+    return fit, time.perf_counter() - start
+
+
+def _evaluate_fit(
+    bundle: ExportedDataset,
+    *,
+    model_name: str,
+    method: str,
+    fit: Any,
+    runtime_seconds: float,
+    config: StanRunConfig,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    alpha = _ensure_draw_array(_stan_variable_draws(fit, "alpha"), ndim=1)
+    beta = _ensure_draw_array(_stan_variable_draws(fit, "beta"), ndim=2)
+    sigma = _ensure_draw_array(_stan_variable_draws(fit, "sigma"), ndim=1)
+    global_scale = _optional_draw_array(fit, "global_scale", ndim=1)
+    group_scale = _optional_draw_array(fit, "group_scale", ndim=2)
+    finite_mask = np.isfinite(alpha) & np.isfinite(sigma) & np.all(np.isfinite(beta), axis=1)
+    if global_scale is not None:
+        finite_mask &= np.isfinite(global_scale)
+    if group_scale is not None:
+        finite_mask &= np.all(np.isfinite(group_scale), axis=1)
+    if not np.any(finite_mask):
+        raise RuntimeError(f"No finite posterior draws were returned for {model_name}/{method}")
+    alpha = alpha[finite_mask]
+    beta = beta[finite_mask]
+    sigma = sigma[finite_mask]
+    if global_scale is not None:
+        global_scale = global_scale[finite_mask]
+    if group_scale is not None:
+        group_scale = group_scale[finite_mask]
+    valid_metrics, valid_predictions = _evaluate_split(
+        X=bundle.X_valid,
+        y=bundle.y_valid,
+        mol_ids=bundle.mol_ids_valid,
+        dataset_name=bundle.dataset_name,
+        representation=bundle.representation,
+        model_name=model_name,
+        method=method,
+        split_name="valid",
+        alpha=alpha,
+        beta=beta,
+        sigma=sigma,
+        student_df=config.student_df,
+        runtime_seconds=runtime_seconds,
+        feature_count=len(bundle.feature_names),
+        n_train=len(bundle.y_train),
+        seed=config.seed + 17,
+        predictive_draws=config.predictive_draws,
+    )
+    test_metrics, test_predictions = _evaluate_split(
+        X=bundle.X_test,
+        y=bundle.y_test,
+        mol_ids=bundle.mol_ids_test,
+        dataset_name=bundle.dataset_name,
+        representation=bundle.representation,
+        model_name=model_name,
+        method=method,
+        split_name="test",
+        alpha=alpha,
+        beta=beta,
+        sigma=sigma,
+        student_df=config.student_df,
+        runtime_seconds=runtime_seconds,
+        feature_count=len(bundle.feature_names),
+        n_train=len(bundle.y_train),
+        seed=config.seed + 29,
+        predictive_draws=config.predictive_draws,
+    )
+    coefficient_rows = _summarize_parameters(
+        bundle=bundle,
+        model_name=model_name,
+        method=method,
+        runtime_seconds=runtime_seconds,
+        alpha=alpha,
+        beta=beta,
+        sigma=sigma,
+        global_scale=global_scale,
+        group_scale=group_scale,
+    )
+    return [valid_metrics, test_metrics], [*valid_predictions, *test_predictions], coefficient_rows
+
+
+def _evaluate_split(
+    *,
+    X: np.ndarray,
+    y: np.ndarray,
+    mol_ids: tuple[str, ...],
+    dataset_name: str,
+    representation: str,
+    model_name: str,
+    method: str,
+    split_name: str,
+    alpha: np.ndarray,
+    beta: np.ndarray,
+    sigma: np.ndarray,
+    student_df: float,
+    runtime_seconds: float,
+    feature_count: int,
+    n_train: int,
+    seed: int,
+    predictive_draws: int,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    if len(y) == 0:
+        raise ValueError(f"Empty split {split_name}")
+    mu = alpha[:, np.newaxis] + beta @ X.T
+    log_density = student_t.logpdf(y[np.newaxis, :], df=student_df, loc=mu, scale=sigma[:, np.newaxis])
+    mlpd = float(np.mean(logsumexp(log_density, axis=0) - math.log(log_density.shape[0])))
+    predictive_mean = np.mean(mu, axis=0)
+    predictive_samples = _sample_predictive(mu, sigma, student_df=student_df, seed=seed, draws=predictive_draws)
+    predictive_sd = np.std(predictive_samples, axis=0)
+    lower = np.quantile(predictive_samples, 0.05, axis=0)
+    upper = np.quantile(predictive_samples, 0.95, axis=0)
+    residuals = predictive_mean - y
+    rmse = float(np.sqrt(np.mean(np.square(residuals))))
+    mae = float(np.mean(np.abs(residuals)))
+    total_sum_squares = float(np.sum(np.square(y - np.mean(y))))
+    residual_sum_squares = float(np.sum(np.square(residuals)))
+    r2 = 1.0 - residual_sum_squares / total_sum_squares if total_sum_squares > 0.0 else 0.0
+    coverage = float(np.mean((y >= lower) & (y <= upper)))
+    metrics = {
+        "dataset": dataset_name,
+        "representation": representation,
+        "model": model_name,
+        "method": method,
+        "split": split_name,
+        "n_train": n_train,
+        "n_eval": int(len(y)),
+        "feature_count": feature_count,
+        "draw_count": int(alpha.shape[0]),
+        "runtime_seconds": runtime_seconds,
+        "rmse": rmse,
+        "mae": mae,
+        "r2": r2,
+        "mean_log_predictive_density": mlpd,
+        "coverage_90": coverage,
+        "predictive_sd_mean": float(np.mean(predictive_sd)),
+        "student_df": student_df,
+    }
+    predictions = [
+        {
+            "dataset": dataset_name,
+            "representation": representation,
+            "model": model_name,
+            "method": method,
+            "split": split_name,
+            "mol_id": mol_id,
+            "actual": float(actual),
+            "predicted_mean": float(mean),
+            "predictive_sd": float(sd),
+        }
+        for mol_id, actual, mean, sd in zip(mol_ids, y, predictive_mean, predictive_sd, strict=True)
+    ]
+    return metrics, predictions
+
+
+def _sample_predictive(mu: np.ndarray, sigma: np.ndarray, *, student_df: float, seed: int, draws: int) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    if mu.shape[0] >= draws:
+        chosen = rng.choice(mu.shape[0], size=draws, replace=False)
+        sampled_mu = mu[chosen]
+        sampled_sigma = sigma[chosen]
+    else:
+        chosen = rng.choice(mu.shape[0], size=draws, replace=True)
+        sampled_mu = mu[chosen]
+        sampled_sigma = sigma[chosen]
+    noise = student_t.rvs(df=student_df, size=sampled_mu.shape, random_state=rng)
+    return sampled_mu + noise * sampled_sigma[:, np.newaxis]
+
+
+def _summarize_parameters(
+    *,
+    bundle: ExportedDataset,
+    model_name: str,
+    method: str,
+    runtime_seconds: float,
+    alpha: np.ndarray,
+    beta: np.ndarray,
+    sigma: np.ndarray,
+    global_scale: np.ndarray | None,
+    group_scale: np.ndarray | None,
+) -> list[dict[str, Any]]:
+    rows = [
+        _parameter_row(
+            dataset_name=bundle.dataset_name,
+            representation=bundle.representation,
+            target_name=bundle.target_name,
+            model_name=model_name,
+            method=method,
+            parameter_type="intercept",
+            parameter_name="alpha",
+            feature_group="global",
+            equation_term="alpha",
+            draws=alpha,
+            runtime_seconds=runtime_seconds,
+        ),
+        _parameter_row(
+            dataset_name=bundle.dataset_name,
+            representation=bundle.representation,
+            target_name=bundle.target_name,
+            model_name=model_name,
+            method=method,
+            parameter_type="noise_scale",
+            parameter_name="sigma",
+            feature_group="global",
+            equation_term="sigma",
+            draws=sigma,
+            runtime_seconds=runtime_seconds,
+        ),
+    ]
+    if global_scale is not None:
+        rows.append(
+            _parameter_row(
+                dataset_name=bundle.dataset_name,
+                representation=bundle.representation,
+                target_name=bundle.target_name,
+                model_name=model_name,
+                method=method,
+                parameter_type="global_scale",
+                parameter_name="global_scale",
+                feature_group="global",
+                equation_term="global_scale",
+                draws=global_scale,
+                runtime_seconds=runtime_seconds,
+            )
+        )
+    if group_scale is not None:
+        for group_index, group_name in enumerate(bundle.group_names):
+            rows.append(
+                _parameter_row(
+                    dataset_name=bundle.dataset_name,
+                    representation=bundle.representation,
+                    target_name=bundle.target_name,
+                    model_name=model_name,
+                    method=method,
+                    parameter_type="group_scale",
+                    parameter_name=f"group_scale[{group_name}]",
+                    feature_group=group_name,
+                    equation_term=f"group_scale[{group_name}]",
+                    draws=group_scale[:, group_index],
+                    runtime_seconds=runtime_seconds,
+                )
+            )
+
+    coefficient_rows = [
+        _parameter_row(
+            dataset_name=bundle.dataset_name,
+            representation=bundle.representation,
+            target_name=bundle.target_name,
+            model_name=model_name,
+            method=method,
+            parameter_type="coefficient",
+            parameter_name=feature_name,
+            feature_group=bundle.feature_groups[feature_name],
+            equation_term=f"beta[{feature_name}] * z({feature_name})",
+            draws=beta[:, feature_index],
+            runtime_seconds=runtime_seconds,
+        )
+        for feature_index, feature_name in enumerate(bundle.feature_names)
+    ]
+    coefficient_rows.sort(key=lambda row: (-float(row["posterior_abs_mean"]), str(row["parameter_name"])))
+    for rank, row in enumerate(coefficient_rows, start=1):
+        row["importance_rank"] = rank
+    rows.extend(coefficient_rows)
+    return rows
+
+
+def _parameter_row(
+    *,
+    dataset_name: str,
+    representation: str,
+    target_name: str,
+    model_name: str,
+    method: str,
+    parameter_type: str,
+    parameter_name: str,
+    feature_group: str,
+    equation_term: str,
+    draws: np.ndarray,
+    runtime_seconds: float,
+) -> dict[str, Any]:
+    summary = _draw_summary(draws)
+    return {
+        "dataset": dataset_name,
+        "representation": representation,
+        "target": target_name,
+        "model": model_name,
+        "method": method,
+        "parameter_type": parameter_type,
+        "parameter_name": parameter_name,
+        "feature_group": feature_group,
+        "equation_term": equation_term,
+        "draw_count": int(summary["draw_count"]),
+        "runtime_seconds": runtime_seconds,
+        "posterior_mean": summary["mean"],
+        "posterior_abs_mean": abs(float(summary["mean"])),
+        "posterior_sd": summary["sd"],
+        "posterior_median": summary["median"],
+        "posterior_p05": summary["p05"],
+        "posterior_p95": summary["p95"],
+        "importance_rank": 0,
+    }
+
+
+def _draw_summary(draws: np.ndarray) -> dict[str, float]:
+    vector = np.asarray(draws, dtype=float).reshape(-1)
+    return {
+        "draw_count": float(vector.shape[0]),
+        "mean": float(np.mean(vector)),
+        "sd": float(np.std(vector)),
+        "median": float(np.median(vector)),
+        "p05": float(np.quantile(vector, 0.05)),
+        "p95": float(np.quantile(vector, 0.95)),
+    }
+
+
+def _ensure_draw_array(value: Any, *, ndim: int) -> np.ndarray:
+    array = np.asarray(value, dtype=float)
+    if ndim == 1:
+        if array.ndim == 0:
+            return array.reshape(1)
+        if array.ndim == 1:
+            return array
+    if ndim == 2:
+        if array.ndim == 1:
+            return array[np.newaxis, :]
+        if array.ndim == 2:
+            return array
+    raise ValueError(f"Unexpected array shape {array.shape} for ndim={ndim}")
+
+
+def _optional_draw_array(fit: Any, name: str, *, ndim: int) -> np.ndarray | None:
+    try:
+        value = _stan_variable_draws(fit, name)
+    except Exception:
+        return None
+    return _ensure_draw_array(value, ndim=ndim)
+
+
+def _stan_variable_draws(fit: Any, name: str) -> Any:
+    if fit.__class__.__name__ == "CmdStanVB":
+        return fit.stan_variable(name, mean=False)
+    return fit.stan_variable(name)
+
+
+def _json_ready(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _json_ready(item) for key, item in value.items()}
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, (list, tuple)):
+        return [_json_ready(item) for item in value]
+    if isinstance(value, np.generic):
+        return value.item()
+    return value

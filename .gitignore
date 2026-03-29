@@ -1,0 +1,39 @@
+# macOS
+.DS_Store
+
+# Python caches and test artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Local virtual environments
+.venv/
+.venv313/
+
+# Build and packaging artifacts
+build/
+dist/
+*.egg-info/
+pip-wheel-metadata/
+
+# CmdStan and generated Stan build products
+.cmdstan/
+*.o
+*.dylib
+stan/*
+!stan/*.stan
+
+# Generated benchmark data and outputs
+data/raw/
+data/processed/
+results/
+
+# Local editor settings
+.idea/
+.vscode/
