@@ -9,30 +9,19 @@ This repository also contains the main empirical benchmark pipeline used in the 
 - ZINC SMILES timing benchmark
 - exported standardized feature matrices for the aligned Haskell baseline
 
-## Default Path
+## Step By Step
 
-From the workspace root, use these commands exactly as written first. They already use the default settings.
+### 1. Create the environment
 
-- `make python-setup`  
-  Create the virtual environment and install the package plus benchmark dependencies.
-- `make python-cmdstan-install`  
-  Install CmdStan once for the benchmark pipeline.
-- `make python-test`  
-  Run the Python test suite.
-- `make benchmark`  
-  Run the default Python benchmark bundle.
-- `make benchmark-bg`  
-  Run the same default benchmark in the background and write logs to `MolADT-Bayes-Python/results/benchmark.out`.
-- `make showcase`  
-  Run the shared workspace bundle, including the Python benchmark outputs.
-- `make help`  
-  Show the smaller set of optional commands and overrides.
+From the workspace root:
 
-Most users only need `make benchmark`.
+```bash
+make python-setup
+```
 
-## Install
+That creates `MolADT-Bayes-Python/.venv` and installs the Python package plus the benchmark dependencies.
 
-Repository-local install:
+If you prefer to run the commands inside this repository directly:
 
 ```bash
 python3 -m venv .venv
@@ -43,23 +32,17 @@ python -m pip install -e ".[dev]"
 
 Windows users should use WSL2 for the benchmark stack.
 
-## CmdStanPy
+### 2. Install CmdStan
 
-Preferred:
-
-```bash
-conda create -n stan -c conda-forge cmdstanpy
-conda activate stan
-```
-
-Alternative:
+From the workspace root:
 
 ```bash
-python -m pip install --upgrade cmdstanpy
-python -c "import cmdstanpy; cmdstanpy.install_cmdstan()"
+make python-cmdstan-install
 ```
 
-To point CmdStanPy at an existing CmdStan installation:
+This uses `cmdstanpy.install_cmdstan()` and does not require conda.
+
+If you already have a CmdStan installation, point CmdStanPy at it with:
 
 ```python
 from cmdstanpy import set_cmdstan_path
@@ -67,9 +50,23 @@ from cmdstanpy import set_cmdstan_path
 set_cmdstan_path("/path/to/cmdstan")
 ```
 
-## Simple CLI
+### 3. Check that the install works
 
-After installation, the simplest direct commands are:
+From the workspace root:
+
+```bash
+make python-test
+```
+
+If you also want the typecheck:
+
+```bash
+make python-typecheck
+```
+
+### 4. Try the CLI on small examples
+
+From this repository:
 
 ```bash
 python -m moladt.cli parse molecules/benzene.sdf
@@ -81,15 +78,15 @@ python -m moladt.cli pretty-example diborane
 
 The manuscript-facing rendering layer lives in `moladt/chem/pretty.py`, and the named examples live in `moladt/examples/manuscript.py`.
 
-## Benchmark
+### 5. Run the default benchmark
 
-The default benchmark run is:
+From the workspace root:
 
 ```bash
 make benchmark
 ```
 
-It runs:
+This runs, in order:
 
 - the FreeSolv smoke property benchmark
 - the default QM9 dipole benchmark subset
@@ -105,14 +102,26 @@ The main outputs are written to:
 - `results/zinc_timing.csv`
 - `results/zinc_timing.md`
 
-For a long run in the background:
+### 6. Run the long job in the background
+
+From the workspace root:
 
 ```bash
 make benchmark-bg
 tail -f MolADT-Bayes-Python/results/benchmark.out
 ```
 
-If you later need non-default settings, use:
+### 7. Run the full workspace bundle
+
+If you want the shared Python + Haskell run from the workspace root:
+
+```bash
+make showcase
+```
+
+### 8. Need non-default settings?
+
+Use:
 
 ```bash
 make help
