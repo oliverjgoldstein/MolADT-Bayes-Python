@@ -38,7 +38,7 @@ Repository-local install:
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -U pip
-python -m pip install -e ".[dev,legacy-pystan]"
+python -m pip install -e ".[dev]"
 ```
 
 Windows users should use WSL2 for the benchmark stack.
@@ -66,8 +66,6 @@ from cmdstanpy import set_cmdstan_path
 
 set_cmdstan_path("/path/to/cmdstan")
 ```
-
-PyStan 3 is still kept for the older `infer-logp` demo, but the benchmark pipeline uses CmdStanPy as the main inference backend.
 
 ## Simple CLI
 

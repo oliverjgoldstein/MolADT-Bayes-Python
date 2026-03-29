@@ -31,9 +31,6 @@ dev = [
   "mypy>=1.10",
   "pytest>=8.0",
 ]
-legacy-pystan = [
-  "pystan>=3.9,<4",
-]
 
 [tool.setuptools]
 include-package-data = true
