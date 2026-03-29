@@ -59,17 +59,27 @@ make python-test
 make python-typecheck
 ```
 
+If you want plain `python` and `pip` commands in your shell, activate the local virtual environment first:
+
+```bash
+source .venv/bin/activate
+```
+
+Without activation, use `./.venv/bin/python` explicitly.
+
 ### 4. Try the CLI on small examples
 
 From this repository:
 
 ```bash
-python -m moladt.cli parse molecules/benzene.sdf
-python -m moladt.cli parse-smiles "c1ccccc1"
-python -m moladt.cli to-smiles molecules/benzene.sdf
-python -m moladt.cli pretty-example ferrocene
-python -m moladt.cli pretty-example diborane
+./.venv/bin/python -m moladt.cli parse molecules/benzene.sdf
+./.venv/bin/python -m moladt.cli parse-smiles "c1ccccc1"
+./.venv/bin/python -m moladt.cli to-smiles molecules/benzene.sdf
+./.venv/bin/python -m moladt.cli pretty-example ferrocene
+./.venv/bin/python -m moladt.cli pretty-example diborane
 ```
+
+If you have already run `source .venv/bin/activate`, the same commands can be written with plain `python -m ...`.
 
 The manuscript-facing rendering layer lives in `moladt/chem/pretty.py`, and the named examples live in `moladt/examples/manuscript.py`.
 
@@ -112,7 +122,7 @@ Use:
 
 ```bash
 make help
-python -m scripts.run_all --help
+./.venv/bin/python -m scripts.run_all --help
 ```
 
 ## SMILES Scope

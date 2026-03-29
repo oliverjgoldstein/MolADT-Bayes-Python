@@ -1,4 +1,8 @@
 SYSTEM_PYTHON := $(if $(wildcard /opt/homebrew/bin/python3),/opt/homebrew/bin/python3,python3)
+TESTED_PYTHON := 3.14.3
+TESTED_CMDSTANPY := 1.3.0
+TESTED_CMDSTAN := 2.38.0
+TESTED_RDKIT := 2025.9.6
 PYTHON_CMD := $(if $(wildcard .venv/bin/python),./.venv/bin/python,$(SYSTEM_PYTHON))
 
 INFERENCE_PRESET ?= default
@@ -60,7 +64,7 @@ BENCHMARK_ARGS := --methods $(METHODS) --models $(MODELS) --sample-chains $(SAMP
 ZINC_LIMIT_BENCHMARK_ARG := $(if $(ZINC_LIMIT),--zinc-limit $(ZINC_LIMIT),)
 ZINC_LIMIT_TIMING_ARG := $(if $(ZINC_LIMIT),--limit $(ZINC_LIMIT),)
 
-.PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-parse python-parse-smiles python-to-smiles python-pretty-example python-benchmark-smoke python-benchmark-qm9 python-benchmark-zinc benchmark benchmark-bg
+.PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-activate python-parse python-parse-smiles python-to-smiles python-pretty-example python-benchmark-smoke python-benchmark-qm9 python-benchmark-zinc benchmark benchmark-bg
 
 help:
 	@printf "%s\n" \
@@ -69,6 +73,7 @@ help:
 	"  make python-cmdstan-install Install CmdStan into .cmdstan" \
 	"  make python-test            Run the pytest suite" \
 	"  make python-typecheck       Run mypy on the package" \
+	"  make python-activate        Print the command that activates the local venv" \
 	"  make python-parse           Parse molecules/benzene.sdf" \
 	"  make python-parse-smiles    Parse c1ccccc1" \
 	"  make python-to-smiles       Render molecules/benzene.sdf to SMILES" \
@@ -82,6 +87,7 @@ help:
 	"  models=$(MODELS)" \
 	"  sample_chains=$(SAMPLE_CHAINS) sample_warmup=$(SAMPLE_WARMUP) sample_draws=$(SAMPLE_DRAWS)" \
 	"  approximation_draws=$(APPROXIMATION_DRAWS) pathfinder_paths=$(PATHFINDER_PATHS)" \
+	"  tested Python=$(TESTED_PYTHON) cmdstanpy=$(TESTED_CMDSTANPY) CmdStan=$(TESTED_CMDSTAN) RDKit=$(TESTED_RDKIT)" \
 	"  rough runtime: $(RUNTIME_HINT)"
 
 python-setup:
@@ -102,10 +108,25 @@ python-cmdstan-install:
 	$(PYTHON_CMD) -c "import cmdstanpy; cmdstanpy.install_cmdstan(dir='.cmdstan')"
 
 python-test:
-	$(PYTHON_CMD) -m pytest -q
+	@start=$$(date +%s); \
+	printf "%s\n" "Starting Python tests at $$(date '+%H:%M:%S'). Typical runtime: about 5-15 seconds."; \
+	$(PYTHON_CMD) -m pytest -q; \
+	status=$$?; \
+	end=$$(date +%s); \
+	printf "%s\n" "Finished Python tests in $$((end-start)) seconds."; \
+	exit $$status
 
 python-typecheck:
-	$(PYTHON_CMD) -m mypy moladt
+	@start=$$(date +%s); \
+	printf "%s\n" "Starting Python typecheck at $$(date '+%H:%M:%S'). Typical runtime: about 5-15 seconds."; \
+	$(PYTHON_CMD) -m mypy moladt; \
+	status=$$?; \
+	end=$$(date +%s); \
+	printf "%s\n" "Finished Python typecheck in $$((end-start)) seconds."; \
+	exit $$status
+
+python-activate:
+	@printf "%s\n" "Run this in your shell:" "  source .venv/bin/activate"
 
 python-parse:
 	$(PYTHON_CMD) -m moladt.cli parse molecules/benzene.sdf
