@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
-from rdkit import Chem
+from rdkit import Chem, rdBase
 
 from .common import DEFAULT_SEED, FailureRecord, PROCESSED_DATA_DIR, write_failure_csv
 from .download_data import download_qm9
@@ -22,6 +23,15 @@ class QM9Artifacts:
     failure_csv_paths: tuple[Path, ...]
 
 
+@contextmanager
+def _block_rdkit_logs():
+    blocker = rdBase.BlockLogs()
+    try:
+        yield
+    finally:
+        del blocker
+
+
 def process_qm9_dataset(
     *,
     seed: int = DEFAULT_SEED,
@@ -29,7 +39,8 @@ def process_qm9_dataset(
     limit: int | None = None,
 ) -> QM9Artifacts:
     downloads = download_qm9(force=force)
-    combined_frame, failures = _build_qm9_aligned_frame(downloads.sdf_path, downloads.csv_path, limit=limit)
+    with _block_rdkit_logs():
+        combined_frame, failures = _build_qm9_aligned_frame(downloads.sdf_path, downloads.csv_path, limit=limit)
     processed_csv_path = PROCESSED_DATA_DIR / "qm9_processed.csv"
     combined_frame.loc[:, ["mol_id", "smiles", "mu"]].to_csv(processed_csv_path, index=False)
     sdf_index_path = PROCESSED_DATA_DIR / "qm9_sdf_index.csv"
@@ -39,26 +50,28 @@ def process_qm9_dataset(
     write_failure_csv(processing_failure_path, failures)
     failure_paths.append(processing_failure_path)
 
-    smiles_table = featurize_smiles_dataframe(
-        combined_frame.loc[:, ["mol_id", "smiles", "mu"]],
-        dataset_name="qm9_smiles",
-        mol_id_column="mol_id",
-        smiles_column="smiles",
-        target_column="mu",
-    )
+    with _block_rdkit_logs():
+        smiles_table = featurize_smiles_dataframe(
+            combined_frame.loc[:, ["mol_id", "smiles", "mu"]],
+            dataset_name="qm9_smiles",
+            mol_id_column="mol_id",
+            smiles_column="smiles",
+            target_column="mu",
+        )
     smiles_feature_failure_path = PROCESSED_DATA_DIR / "qm9_smiles_feature_failures.csv"
     write_failure_csv(smiles_feature_failure_path, smiles_table.failures)
     failure_paths.append(smiles_feature_failure_path)
     smiles_export = export_standardized_splits(smiles_table, dataset_name="qm9", representation="smiles", target_name="mu", seed=seed)
 
-    sdf_table = featurize_sdf_records(
-        combined_frame,
-        dataset_name="qm9_sdf",
-        mol_id_column="mol_id",
-        mol_column="rdkit_mol",
-        target_column="mu",
-        record_index_column="sdf_record_index",
-    )
+    with _block_rdkit_logs():
+        sdf_table = featurize_sdf_records(
+            combined_frame,
+            dataset_name="qm9_sdf",
+            mol_id_column="mol_id",
+            mol_column="rdkit_mol",
+            target_column="mu",
+            record_index_column="sdf_record_index",
+        )
     sdf_feature_failure_path = PROCESSED_DATA_DIR / "qm9_sdf_feature_failures.csv"
     write_failure_csv(sdf_feature_failure_path, sdf_table.failures)
     failure_paths.append(sdf_feature_failure_path)
@@ -128,4 +141,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

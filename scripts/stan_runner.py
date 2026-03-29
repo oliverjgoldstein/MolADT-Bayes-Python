@@ -53,6 +53,8 @@ def ensure_cmdstan_ready() -> None:
 
 def build_stan_data(bundle: ExportedDataset, *, student_df: float) -> dict[str, Any]:
     X_eval = np.vstack([bundle.X_valid, bundle.X_test])
+    y_mean = float(np.mean(bundle.y_train))
+    y_scale = max(float(np.std(bundle.y_train)), 1e-3)
     return {
         "N": int(bundle.X_train.shape[0]),
         "K": int(bundle.X_train.shape[1]),
@@ -63,6 +65,8 @@ def build_stan_data(bundle: ExportedDataset, *, student_df: float) -> dict[str, 
         "G": len(bundle.group_names),
         "group_id": np.array(bundle.group_ids, dtype=int),
         "nu": float(student_df),
+        "y_mean": y_mean,
+        "y_scale": y_scale,
     }
 
 
@@ -114,6 +118,7 @@ def _run_method(model: Any, data: dict[str, Any], *, method: str, config: StanRu
             parallel_chains=config.sample_chains,
             iter_warmup=config.sample_warmup,
             iter_sampling=config.sample_draws,
+            adapt_delta=0.95,
             seed=config.seed,
             show_progress=False,
             output_dir=str(output_dir / method),
@@ -202,6 +207,22 @@ def _evaluate_fit(
         global_scale = global_scale[finite_mask]
     if group_scale is not None:
         group_scale = group_scale[finite_mask]
+    alpha, beta, sigma, global_scale, group_scale = _filter_draws_for_design_matrix(
+        X=bundle.X_valid,
+        alpha=alpha,
+        beta=beta,
+        sigma=sigma,
+        global_scale=global_scale,
+        group_scale=group_scale,
+    )
+    alpha, beta, sigma, global_scale, group_scale = _filter_draws_for_design_matrix(
+        X=bundle.X_test,
+        alpha=alpha,
+        beta=beta,
+        sigma=sigma,
+        global_scale=global_scale,
+        group_scale=group_scale,
+    )
     valid_metrics, valid_predictions = _evaluate_split(
         X=bundle.X_valid,
         y=bundle.y_valid,
@@ -277,7 +298,20 @@ def _evaluate_split(
     if len(y) == 0:
         raise ValueError(f"Empty split {split_name}")
     mu = alpha[:, np.newaxis] + beta @ X.T
-    log_density = student_t.logpdf(y[np.newaxis, :], df=student_df, loc=mu, scale=sigma[:, np.newaxis])
+    finite_draw_mask = np.isfinite(sigma) & (sigma > 0.0) & np.all(np.isfinite(mu), axis=1)
+    if not np.any(finite_draw_mask):
+        raise RuntimeError(f"No finite posterior draws remained for {dataset_name}/{representation}/{model_name}/{method}/{split_name}")
+    mu = mu[finite_draw_mask]
+    sigma = sigma[finite_draw_mask]
+    with np.errstate(over="ignore", invalid="ignore"):
+        log_density = student_t.logpdf(y[np.newaxis, :], df=student_df, loc=mu, scale=sigma[:, np.newaxis])
+    if not np.all(np.isfinite(log_density)):
+        bad_draws = np.all(np.isfinite(log_density), axis=1)
+        if not np.any(bad_draws):
+            raise RuntimeError(f"All log-density evaluations became non-finite for {dataset_name}/{representation}/{model_name}/{method}/{split_name}")
+        mu = mu[bad_draws]
+        sigma = sigma[bad_draws]
+        log_density = log_density[bad_draws]
     mlpd = float(np.mean(logsumexp(log_density, axis=0) - math.log(log_density.shape[0])))
     predictive_mean = np.mean(mu, axis=0)
     predictive_samples = _sample_predictive(mu, sigma, student_df=student_df, seed=seed, draws=predictive_draws)
@@ -338,7 +372,10 @@ def _sample_predictive(mu: np.ndarray, sigma: np.ndarray, *, student_df: float, 
         sampled_mu = mu[chosen]
         sampled_sigma = sigma[chosen]
     noise = student_t.rvs(df=student_df, size=sampled_mu.shape, random_state=rng)
-    return sampled_mu + noise * sampled_sigma[:, np.newaxis]
+    samples = sampled_mu + noise * sampled_sigma[:, np.newaxis]
+    if not np.all(np.isfinite(samples)):
+        raise RuntimeError("Posterior predictive sampling produced non-finite values")
+    return samples
 
 
 def _summarize_parameters(
@@ -477,6 +514,9 @@ def _parameter_row(
 
 def _draw_summary(draws: np.ndarray) -> dict[str, float]:
     vector = np.asarray(draws, dtype=float).reshape(-1)
+    vector = vector[np.isfinite(vector)]
+    if vector.size == 0:
+        raise RuntimeError("Tried to summarize an empty or non-finite draw vector")
     return {
         "draw_count": float(vector.shape[0]),
         "mean": float(np.mean(vector)),
@@ -511,9 +551,61 @@ def _optional_draw_array(fit: Any, name: str, *, ndim: int) -> np.ndarray | None
 
 
 def _stan_variable_draws(fit: Any, name: str) -> Any:
+    if fit.__class__.__name__ == "CmdStanMLE":
+        return _optimized_parameter_value(fit, name)
     if fit.__class__.__name__ == "CmdStanVB":
         return fit.stan_variable(name, mean=False)
     return fit.stan_variable(name)
+
+
+def _optimized_parameter_value(fit: Any, name: str) -> Any:
+    params = fit.optimized_params_dict
+    if name in params:
+        return params[name]
+    prefix = f"{name}["
+    indexed_entries: list[tuple[int, Any]] = []
+    for key, value in params.items():
+        if not key.startswith(prefix) or not key.endswith("]"):
+            continue
+        index_text = key[len(prefix) : -1]
+        try:
+            index = int(index_text)
+        except ValueError:
+            continue
+        indexed_entries.append((index, value))
+    if indexed_entries:
+        indexed_entries.sort(key=lambda item: item[0])
+        return np.asarray([value for _, value in indexed_entries], dtype=float)
+    raise KeyError(name)
+
+
+def _filter_draws_for_design_matrix(
+    *,
+    X: np.ndarray,
+    alpha: np.ndarray,
+    beta: np.ndarray,
+    sigma: np.ndarray,
+    global_scale: np.ndarray | None,
+    group_scale: np.ndarray | None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, np.ndarray | None]:
+    if X.size == 0:
+        return alpha, beta, sigma, global_scale, group_scale
+    mu = alpha[:, np.newaxis] + beta @ X.T
+    finite_mask = np.isfinite(sigma) & (sigma > 0.0) & np.all(np.isfinite(mu), axis=1)
+    if global_scale is not None:
+        finite_mask &= np.isfinite(global_scale)
+    if group_scale is not None:
+        finite_mask &= np.all(np.isfinite(group_scale), axis=1)
+    if not np.any(finite_mask):
+        raise RuntimeError("No finite posterior draws remained after validating design-matrix projections")
+    alpha = alpha[finite_mask]
+    beta = beta[finite_mask]
+    sigma = sigma[finite_mask]
+    if global_scale is not None:
+        global_scale = global_scale[finite_mask]
+    if group_scale is not None:
+        group_scale = group_scale[finite_mask]
+    return alpha, beta, sigma, global_scale, group_scale
 
 
 def _json_ready(value: Any) -> Any:

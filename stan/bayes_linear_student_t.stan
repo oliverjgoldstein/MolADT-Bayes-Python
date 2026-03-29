@@ -8,32 +8,29 @@ data {
   int<lower=1> G;
   array[K] int<lower=1, upper=G> group_id;
   real<lower=2> nu;
+  real y_mean;
+  real<lower=1e-6> y_scale;
 }
 
 parameters {
+  real<lower=-6, upper=6> alpha_raw;
+  vector<lower=-6, upper=6>[K] beta_raw;
+  real<lower=-6, upper=2> log_sigma_ratio;
+}
+
+transformed parameters {
   real alpha;
   vector[K] beta;
-  real<lower=0> sigma;
+  real<lower=1e-6> sigma;
+
+  alpha = y_mean + y_scale * alpha_raw;
+  beta = y_scale * beta_raw;
+  sigma = y_scale * exp(log_sigma_ratio);
 }
 
 model {
-  alpha ~ normal(0, 1.5);
-  beta ~ normal(0, 1);
-  sigma ~ normal(0, 1);
+  alpha_raw ~ normal(0, 1);
+  beta_raw ~ normal(0, 0.75);
+  log_sigma_ratio ~ normal(log(0.5), 0.35);
   y ~ student_t(nu, alpha + X * beta, sigma);
 }
-
-generated quantities {
-  vector[N] mu_train;
-  vector[N] log_lik;
-  vector[N] y_rep;
-  vector[N_eval] mu_eval;
-
-  mu_train = alpha + X * beta;
-  mu_eval = alpha + X_eval * beta;
-  for (n in 1:N) {
-    log_lik[n] = student_t_lpdf(y[n] | nu, mu_train[n], sigma);
-    y_rep[n] = student_t_rng(nu, mu_train[n], sigma);
-  }
-}
-

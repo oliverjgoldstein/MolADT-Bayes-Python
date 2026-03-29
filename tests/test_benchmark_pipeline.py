@@ -64,3 +64,5 @@ def test_stan_data_serialization_round_trip(tmp_path, monkeypatch) -> None:
     assert payload["K"] == len(exported.feature_names)
     assert len(payload["X"]) == len(exported.y_train)
     assert payload["group_id"] == [1, 2]
+    assert isinstance(payload["y_mean"], float)
+    assert payload["y_scale"] > 0.0

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
-from rdkit import Chem
+from rdkit import Chem, RDLogger
 from rdkit.Chem import Descriptors, Lipinski, rdMolDescriptors
 
 from .common import FailureRecord
@@ -177,9 +178,24 @@ def pairwise_distance_summaries(molecule: Chem.Mol) -> dict[str, float]:
     }
 
 
+@contextmanager
+def _suppress_rdkit_logs(*channels: str):
+    for channel in channels:
+        RDLogger.DisableLog(channel)
+    try:
+        yield
+    finally:
+        for channel in reversed(channels):
+            RDLogger.EnableLog(channel)
+
+
 def _sanitize_rdkit_mol(molecule: Chem.Mol) -> Chem.Mol:
     working = Chem.Mol(molecule)
-    Chem.SanitizeMol(working)
-    without_hydrogens = Chem.RemoveHs(working)
-    Chem.SanitizeMol(without_hydrogens)
+    remove_hs = Chem.RemoveHsParameters()
+    remove_hs.removeDegreeZero = True
+    remove_hs.showWarnings = False
+    with _suppress_rdkit_logs("rdApp.error", "rdApp.warning"):
+        Chem.SanitizeMol(working)
+        without_hydrogens = Chem.RemoveHs(working, remove_hs)
+        Chem.SanitizeMol(without_hydrogens)
     return without_hydrogens
