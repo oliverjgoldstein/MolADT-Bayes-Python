@@ -13,7 +13,7 @@ This repository also contains the main empirical benchmark pipeline used in the 
 
 ### 1. Create the environment
 
-From the workspace root:
+From the workspace root, or from this repository now that it has a small forwarding `Makefile`:
 
 ```bash
 make python-setup
@@ -34,7 +34,7 @@ Windows users should use WSL2 for the benchmark stack.
 
 ### 2. Install CmdStan
 
-From the workspace root:
+From the workspace root, or from this repository:
 
 ```bash
 make python-cmdstan-install
@@ -52,7 +52,7 @@ set_cmdstan_path("/path/to/cmdstan")
 
 ### 3. Check that the install works
 
-From the workspace root:
+From the workspace root, or from this repository:
 
 ```bash
 make python-test
@@ -80,7 +80,7 @@ The manuscript-facing rendering layer lives in `moladt/chem/pretty.py`, and the 
 
 ### 5. Run the default benchmark
 
-From the workspace root:
+From the workspace root, or from this repository:
 
 ```bash
 make benchmark
@@ -104,7 +104,7 @@ The main outputs are written to:
 
 ### 6. Run the long job in the background
 
-From the workspace root:
+From the workspace root, or from this repository:
 
 ```bash
 make benchmark-bg
