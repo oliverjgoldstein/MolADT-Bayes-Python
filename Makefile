@@ -1,9 +1,18 @@
-SYSTEM_PYTHON := $(if $(wildcard /opt/homebrew/bin/python3),/opt/homebrew/bin/python3,python3)
+SYSTEM_PYTHON ?= $(strip $(shell command -v python3 2>/dev/null || command -v python 2>/dev/null))
 TESTED_PYTHON := 3.14.3
 TESTED_CMDSTANPY := 1.3.0
 TESTED_CMDSTAN := 2.38.0
 TESTED_RDKIT := 2025.9.6
-PYTHON_CMD := $(if $(wildcard .venv/bin/python),./.venv/bin/python,$(SYSTEM_PYTHON))
+VENV_PYTHON_UNIX := .venv/bin/python
+VENV_PYTHON_WIN := .venv/Scripts/python.exe
+VENV_PYTHON_WIN_ALT := .venv/Scripts/python
+PYTHON_CMD := $(if $(wildcard $(VENV_PYTHON_UNIX)),./$(VENV_PYTHON_UNIX),$(if $(wildcard $(VENV_PYTHON_WIN)),./$(VENV_PYTHON_WIN),$(if $(wildcard $(VENV_PYTHON_WIN_ALT)),./$(VENV_PYTHON_WIN_ALT),$(SYSTEM_PYTHON))))
+BASH := $(strip $(shell command -v bash 2>/dev/null || printf "%s" /bin/bash))
+APT_GET ?= apt-get
+SUDO ?= sudo
+AUTO_INSTALL_VENV ?= 1
+AUTO_FIX_PROMPT ?= 1
+AUTO_APPROVE_FIXES ?= 0
 
 INFERENCE_PRESET ?= default
 QM9_LIMIT ?= 2000
@@ -106,18 +115,140 @@ help:
 	"  rough runtime: $(RUNTIME_HINT)"
 
 python-setup:
-	for attempt in 1 2 3; do \
-		[ ! -e .venv ] && break; \
-		find .venv -name '.DS_Store' -delete 2>/dev/null || true; \
-		rm -rf .venv 2>/dev/null || true; \
-		find .venv -name '.DS_Store' -delete 2>/dev/null || true; \
-		rmdir .venv/lib/python3.14 .venv/lib/python3.13 .venv/lib/python3.12 .venv/lib/python3.11 .venv/lib/python3.10 .venv/lib .venv 2>/dev/null || true; \
-		sleep 1; \
-	done && \
-	[ ! -e .venv ] && \
-	$(SYSTEM_PYTHON) -m venv .venv && \
-	.venv/bin/python -m pip install -U pip setuptools wheel && \
-	.venv/bin/python -m pip install -U -e ".[dev]"
+	@set -e; \
+	system_python="$(SYSTEM_PYTHON)"; \
+	auto_install_venv="$(AUTO_INSTALL_VENV)"; \
+	prompt_fixes="$(AUTO_FIX_PROMPT)"; \
+	auto_approve_fixes="$(AUTO_APPROVE_FIXES)"; \
+	apt_get_cmd="$(APT_GET)"; \
+	sudo_cmd="$(SUDO)"; \
+	venv_error_log=".venv-setup.log"; \
+	confirm_fix() { \
+		prompt_text="$$1"; \
+		if [ "$$auto_approve_fixes" = "1" ]; then \
+			printf "%s\n" "$$prompt_text" "Auto-approving this repair."; \
+			return 0; \
+		fi; \
+		if [ "$$prompt_fixes" = "0" ]; then \
+			return 1; \
+		fi; \
+		printf "%s" "$$prompt_text"; \
+		IFS= read -r response || response=""; \
+		printf "%s\n" ""; \
+		case "$$response" in \
+			[Yy]|[Yy][Ee][Ss]) return 0 ;; \
+			*) return 1 ;; \
+		esac; \
+	}; \
+	if [ -z "$$system_python" ]; then \
+		printf "%s\n" \
+		"" \
+		"Could not find a Python interpreter." \
+		"Install Python 3.11+ and ensure \`python3\` or \`python\` is on PATH, then rerun:" \
+		"  make python-setup"; \
+		exit 1; \
+	fi; \
+	if ! "$$system_python" -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)"; then \
+		python_version="$$( "$$system_python" -V 2>&1 || printf "%s" "unknown version" )"; \
+		printf "%s\n" \
+		"" \
+		"MolADT-Bayes-Python requires Python 3.11+ for setup." \
+		"Found: $$python_version" \
+		"Install Python 3.11+ and rerun:" \
+		"  make python-setup"; \
+		exit 1; \
+	fi; \
+	"$$system_python" -c "from pathlib import Path; import shutil; path = Path('.venv'); shutil.rmtree(path, ignore_errors=True) if path.exists() else None"; \
+	if [ -e .venv ]; then \
+		printf "%s\n" \
+		"" \
+		"Could not remove the existing .venv directory." \
+		"Delete it manually and rerun:" \
+		"  rm -rf .venv" \
+		"  make python-setup"; \
+		exit 1; \
+	fi; \
+	rm -f "$$venv_error_log"; \
+	create_venv() { "$$system_python" -m venv .venv 2>"$$venv_error_log"; }; \
+	if ! create_venv; then \
+		auto_fixed=0; \
+		is_root=0; \
+		if command -v id >/dev/null 2>&1 && [ "$$(id -u)" = "0" ]; then \
+			is_root=1; \
+		fi; \
+		pkg_prefix=""; \
+		if [ "$$is_root" != "1" ] && { [ -x "$$sudo_cmd" ] || command -v "$$sudo_cmd" >/dev/null 2>&1; }; then \
+			pkg_prefix="$$sudo_cmd"; \
+		fi; \
+		can_use_apt=0; \
+		if [ "$$auto_install_venv" != "0" ] && [ -s "$$venv_error_log" ] && grep -Eiq 'ensurepip is not available|No module named ensurepip' "$$venv_error_log" && { [ -x "$$apt_get_cmd" ] || command -v "$$apt_get_cmd" >/dev/null 2>&1; } && { [ "$$is_root" = "1" ] || [ -n "$$pkg_prefix" ]; }; then \
+			can_use_apt=1; \
+		fi; \
+		run_apt() { \
+			if [ -n "$$pkg_prefix" ]; then \
+				"$$pkg_prefix" "$$apt_get_cmd" "$$@"; \
+			else \
+				"$$apt_get_cmd" "$$@"; \
+			fi; \
+		}; \
+		if [ "$$can_use_apt" = "1" ] && confirm_fix "Detected missing ensurepip support while creating .venv. Install the Linux venv package now? [y/N] "; then \
+			python_short_version="$$( "$$system_python" -c 'import sys; print("{}.{}".format(sys.version_info[0], sys.version_info[1]))' )"; \
+			printf "%s\n" \
+				"" \
+				"Detected missing ensurepip support while creating .venv." \
+				"Attempting automatic installation of Linux venv packages."; \
+			if run_apt update; then \
+				for package in "python3-venv" "python$${python_short_version}-venv"; do \
+					printf "%s\n" "Trying package: $$package"; \
+					if run_apt install -y "$$package"; then \
+						"$$system_python" -c "from pathlib import Path; import shutil; path = Path('.venv'); shutil.rmtree(path, ignore_errors=True) if path.exists() else None"; \
+						if create_venv; then \
+							auto_fixed=1; \
+							break; \
+						fi; \
+					fi; \
+				done; \
+			fi; \
+		fi; \
+		if [ "$$auto_fixed" != "1" ]; then \
+			printf "%s\n" \
+				"" \
+				"Python could not create .venv." \
+				"If you are on WSL, Debian, or Ubuntu, install the venv package for your Linux Python first:" \
+				"  sudo apt update" \
+				"  sudo apt install -y python3-venv" \
+				"" \
+				"If your distro uses a versioned package name instead, install the one that matches \`python3 --version\`," \
+				"for example \`python3.10-venv\` or \`python3.12-venv\`." \
+				"" \
+				"Then rerun:" \
+				"  make python-setup"; \
+			if [ -s "$$venv_error_log" ]; then \
+				printf "%s\n" "" "Original venv error:"; \
+				sed -n '1,20p' "$$venv_error_log"; \
+			fi; \
+			exit 1; \
+		fi; \
+	fi; \
+	rm -f "$$venv_error_log"; \
+	venv_python=""; \
+	if [ -f "$(VENV_PYTHON_UNIX)" ]; then \
+		venv_python="$(VENV_PYTHON_UNIX)"; \
+	elif [ -f "$(VENV_PYTHON_WIN)" ]; then \
+		venv_python="$(VENV_PYTHON_WIN)"; \
+	elif [ -f "$(VENV_PYTHON_WIN_ALT)" ]; then \
+		venv_python="$(VENV_PYTHON_WIN_ALT)"; \
+	else \
+		printf "%s\n" \
+		"" \
+		"Created .venv, but could not find its Python executable." \
+		"Expected one of:" \
+		"  $(VENV_PYTHON_UNIX)" \
+		"  $(VENV_PYTHON_WIN)"; \
+		exit 1; \
+	fi; \
+	"$$venv_python" -m pip install -U pip setuptools wheel; \
+	"$$venv_python" -m pip install -U -e ".[dev]"
 
 python-cmdstan-install:
 	$(PYTHON_CMD) -m scripts.install_cmdstan
@@ -141,7 +272,13 @@ python-typecheck:
 	exit $$status
 
 python-activate:
-	@printf "%s\n" "Run this in your shell:" "  source .venv/bin/activate"
+	@if [ -f .venv/bin/activate ]; then \
+		printf "%s\n" "Run this in your shell:" "  source .venv/bin/activate"; \
+	elif [ -f .venv/Scripts/activate ]; then \
+		printf "%s\n" "Run this in your shell:" "  source .venv/Scripts/activate"; \
+	else \
+		printf "%s\n" "Run this in your shell after \`make python-setup\`:" "  source .venv/bin/activate" "  or, if your environment created a Windows-style venv:" "  source .venv/Scripts/activate"; \
+	fi
 
 python-parse:
 	$(PYTHON_CMD) -m moladt.cli parse molecules/benzene.sdf
@@ -174,4 +311,4 @@ benchmark-bg:
 	"  output is mirrored to: $(BENCHMARK_LOG)" \
 	"  report: $(RESULTS_ROOT)/model_report.md" \
 	"  coefficients: $(RESULTS_ROOT)/model_coefficients.csv"
-	@/bin/bash -o pipefail -c '$(MAKE) --no-print-directory benchmark 2>&1 | tee "$(BENCHMARK_LOG)"'
+	@$(BASH) -o pipefail -c '$(MAKE) --no-print-directory benchmark 2>&1 | tee "$(BENCHMARK_LOG)"'

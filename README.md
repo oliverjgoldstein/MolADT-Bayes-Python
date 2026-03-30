@@ -2,6 +2,8 @@
 
 `MolADT-Bayes-Python` is the main benchmark repo for MolADT. It brings together the molecule representation, explicit orbital data, timing benchmark, Stan models, and the aligned train/valid/test exports used by the Haskell baseline.
 
+Setup expects Python 3.11+ and a POSIX shell. On Windows, the documented path is WSL2.
+
 ## Molecule Representation
 
 MolADT represents a molecule as atoms, localized sigma bonds, and Dietz-style bonding systems. Classical molecules fit cleanly. Non-classical examples such as diborane and ferrocene still fit the core representation even when they are outside the current SMILES renderer.

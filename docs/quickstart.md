@@ -10,18 +10,30 @@ From the repo root:
 make python-setup
 ```
 
-That creates `.venv` and installs the package plus benchmark dependencies.
+That creates `.venv` and installs the package plus benchmark dependencies. The Makefile looks for `python3` first, then `python`, and requires Python 3.11+.
 
 If you prefer direct commands:
 
 ```bash
-/opt/homebrew/bin/python3 -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -U pip setuptools wheel
 python -m pip install -e ".[dev]"
 ```
 
-Windows users should use WSL2 for the benchmark stack.
+Windows users should use WSL2 for the benchmark stack. The Makefile also recognizes Windows-style `.venv/Scripts` layouts when it is run from a POSIX shell, but WSL2 remains the documented Windows path.
+
+If WSL or another apt-based Linux reports that `ensurepip` is unavailable, `make python-setup` now offers to fix it for you. Type `y` and it will run `apt-get update` plus the relevant `venv` package install. That may still prompt for your sudo password.
+
+If that automatic retry still fails, run the install manually:
+
+```bash
+sudo apt update
+sudo apt install -y python3-venv
+make python-setup
+```
+
+If your distro uses a versioned package name instead, install the package that matches `python3 --version`, for example `python3.10-venv` or `python3.12-venv`.
 
 ## 2. Install CmdStan
 
@@ -48,7 +60,13 @@ If you want plain `python` in your shell, activate the local virtual environment
 source .venv/bin/activate
 ```
 
-Otherwise use `./.venv/bin/python` explicitly in every command below.
+If you want the exact activation command for the venv that was created, run:
+
+```bash
+make python-activate
+```
+
+Otherwise use `./.venv/bin/python` explicitly in every command below on macOS, Linux, or WSL.
 
 ## 4. First Successful CLI Run
 
@@ -83,7 +101,7 @@ Use these checks when something looks wrong:
 ```
 
 - Wrong Python path or no venv activation:
-  use `./.venv/bin/python ...` directly, or run `source .venv/bin/activate`.
+  use `./.venv/bin/python ...` directly on macOS, Linux, or WSL, or run `make python-activate` to print the right activation command for the venv layout that was created.
 - Missing CmdStan:
   `scripts.run_all` will fail before fitting Stan models; run `make python-cmdstan-install` or point CmdStanPy at an existing install.
 - Benchmark outputs not where you expect:
