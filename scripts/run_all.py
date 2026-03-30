@@ -6,7 +6,7 @@ from typing import Any
 import pandas as pd
 
 from .benchmark_zinc import run_zinc_benchmark
-from .common import DEFAULT_SEED, RESULTS_DIR, display_path, ensure_directory, render_markdown_table
+from .common import DEFAULT_SEED, RESULTS_DIR, display_path, ensure_directory, log, render_markdown_table
 from .process_freesolv import FreeSolvArtifacts, process_freesolv_dataset
 from .process_qm9 import QM9Artifacts, process_qm9_dataset
 from .report_graphs import write_predicted_vs_actual_overview, write_split_rmse_overview
@@ -35,6 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     zinc.add_argument("--limit", type=int, default=None)
     zinc.add_argument("--include-moladt", action="store_true")
     zinc.add_argument("--force", action="store_true")
+    zinc.add_argument("--verbose", action="store_true")
 
     benchmark = subparsers.add_parser("benchmark", help="Run FreeSolv, QM9, and ZINC in order")
     _add_common_benchmark_args(benchmark)
@@ -68,6 +69,7 @@ def _add_common_benchmark_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--optimize-iterations", type=int, default=2000)
     parser.add_argument("--pathfinder-paths", type=int, default=4)
     parser.add_argument("--predictive-draws", type=int, default=500)
+    parser.add_argument("--verbose", action="store_true")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -77,9 +79,13 @@ def main(argv: list[str] | None = None) -> int:
     coefficient_rows: list[dict[str, object]] = []
 
     if args.command == "smoke-test":
+        if args.verbose:
+            log("Starting FreeSolv smoke benchmark")
         artifacts = process_freesolv_dataset(seed=args.seed, force=args.force, include_sdf=not args.skip_sdf)
         _extend_with_property_results(artifacts, metrics_rows, prediction_rows, coefficient_rows, args)
     elif args.command == "qm9":
+        if args.verbose:
+            log(f"Starting QM9 benchmark with limit={args.limit}")
         artifacts = process_qm9_dataset(seed=args.seed, force=args.force, limit=args.limit)
         _extend_with_property_results(artifacts, metrics_rows, prediction_rows, coefficient_rows, args)
     elif args.command == "zinc-timing":
@@ -89,8 +95,17 @@ def main(argv: list[str] | None = None) -> int:
             limit=args.limit,
             include_moladt=args.include_moladt,
             force=args.force,
+            verbose=args.verbose,
         )
     elif args.command == "benchmark":
+        if args.verbose:
+            log(
+                "Starting full benchmark "
+                f"(qm9_limit={args.qm9_limit}, zinc_dataset_size={args.zinc_dataset_size}, "
+                f"zinc_dataset_dimension={args.zinc_dataset_dimension}, zinc_limit={args.zinc_limit}, "
+                f"include_moladt={args.include_moladt})"
+            )
+            log(f"Results directory: {display_path(RESULTS_DIR)}")
         freesolv = process_freesolv_dataset(seed=args.seed, force=args.force, include_sdf=not args.skip_sdf)
         _extend_with_property_results(freesolv, metrics_rows, prediction_rows, coefficient_rows, args)
         qm9 = process_qm9_dataset(seed=args.seed, force=args.force, limit=args.qm9_limit)
@@ -101,6 +116,7 @@ def main(argv: list[str] | None = None) -> int:
             limit=args.zinc_limit,
             include_moladt=args.include_moladt,
             force=args.force,
+            verbose=args.verbose,
         )
     else:
         raise RuntimeError(f"Unsupported command {args.command}")
@@ -143,6 +159,7 @@ def _extend_with_property_results(
         optimize_iterations=args.optimize_iterations,
         pathfinder_paths=args.pathfinder_paths,
         predictive_draws=args.predictive_draws,
+        verbose=args.verbose,
     )
     bundles = [artifacts.smiles_export]
     if getattr(artifacts, "sdf_export", None) is not None:

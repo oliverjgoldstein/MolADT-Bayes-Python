@@ -10,7 +10,7 @@ import numpy as np
 from scipy.special import logsumexp
 from scipy.stats import t as student_t
 
-from .common import DEFAULT_SEED, LOCAL_CMDSTAN_DIR, PROJECT_ROOT, RESULTS_DIR, ensure_directory, write_json
+from .common import DEFAULT_SEED, LOCAL_CMDSTAN_DIR, PROJECT_ROOT, RESULTS_DIR, display_path, ensure_directory, log, write_json
 from .splits import ExportedDataset
 
 MODEL_FILES = {
@@ -33,6 +33,7 @@ class StanRunConfig:
     optimize_iterations: int = 2000
     pathfinder_paths: int = 4
     predictive_draws: int = 500
+    verbose: bool = False
 
 
 def ensure_cmdstan_ready() -> None:
@@ -94,6 +95,12 @@ def run_model_suite(
     predictions: list[dict[str, Any]] = []
     coefficients: list[dict[str, Any]] = []
     for method in config.methods:
+        if config.verbose:
+            log(
+                "Running Stan fit "
+                f"{bundle.dataset_name}/{bundle.representation}/{model_name}/{method} "
+                f"with output in {display_path(output_dir / method)}"
+            )
         fit, runtime_seconds = _run_method(model, data, method=method, config=config, output_dir=output_dir)
         summary_rows, prediction_rows, coefficient_rows = _evaluate_fit(
             bundle,
@@ -120,7 +127,9 @@ def _run_method(model: Any, data: dict[str, Any], *, method: str, config: StanRu
             iter_sampling=config.sample_draws,
             adapt_delta=0.95,
             seed=config.seed,
-            show_progress=False,
+            show_progress=config.verbose,
+            show_console=config.verbose,
+            refresh=50 if config.verbose else None,
             output_dir=str(output_dir / method),
         )
     elif method == "variational":
@@ -131,7 +140,8 @@ def _run_method(model: Any, data: dict[str, Any], *, method: str, config: StanRu
             iter=config.variational_iterations,
             draws=config.approximation_draws,
             require_converged=False,
-            show_console=False,
+            show_console=config.verbose,
+            refresh=100 if config.verbose else None,
             output_dir=str(output_dir / method),
         )
     elif method == "pathfinder":
@@ -142,7 +152,8 @@ def _run_method(model: Any, data: dict[str, Any], *, method: str, config: StanRu
             draws=config.approximation_draws,
             num_elbo_draws=max(50, min(config.approximation_draws, 500)),
             num_single_draws=max(50, min(config.approximation_draws, 500)),
-            show_console=False,
+            show_console=config.verbose,
+            refresh=100 if config.verbose else None,
             output_dir=str(output_dir / method),
         )
     elif method == "optimize":
@@ -152,7 +163,8 @@ def _run_method(model: Any, data: dict[str, Any], *, method: str, config: StanRu
             algorithm="lbfgs",
             iter=config.optimize_iterations,
             jacobian=False,
-            show_console=False,
+            show_console=config.verbose,
+            refresh=100 if config.verbose else None,
             output_dir=str(output_dir / method),
         )
     elif method == "laplace":
@@ -162,7 +174,8 @@ def _run_method(model: Any, data: dict[str, Any], *, method: str, config: StanRu
             algorithm="lbfgs",
             iter=config.optimize_iterations,
             jacobian=False,
-            show_console=False,
+            show_console=config.verbose,
+            refresh=100 if config.verbose else None,
             output_dir=str(output_dir / "laplace_optimize"),
         )
         fit = model.laplace_sample(
@@ -171,7 +184,8 @@ def _run_method(model: Any, data: dict[str, Any], *, method: str, config: StanRu
             draws=config.approximation_draws,
             jacobian=False,
             seed=config.seed,
-            show_console=False,
+            show_console=config.verbose,
+            refresh=100 if config.verbose else None,
             output_dir=str(output_dir / method),
         )
     else:

@@ -8,7 +8,7 @@ from pathlib import Path
 import pandas as pd
 from rdkit import Chem, rdBase
 
-from .common import DEFAULT_SEED, FailureRecord, PROCESSED_DATA_DIR, write_failure_csv
+from .common import DEFAULT_SEED, FailureRecord, PROCESSED_DATA_DIR, ensure_directory, write_failure_csv
 from .download_data import download_qm9
 from .features import canonical_smiles_from_mol, featurize_sdf_records, featurize_smiles_dataframe
 from .splits import ExportedDataset, export_standardized_splits
@@ -39,6 +39,7 @@ def process_qm9_dataset(
     limit: int | None = None,
 ) -> QM9Artifacts:
     downloads = download_qm9(force=force)
+    ensure_directory(PROCESSED_DATA_DIR)
     with _block_rdkit_logs():
         combined_frame, failures = _build_qm9_aligned_frame(downloads.sdf_path, downloads.csv_path, limit=limit)
     processed_csv_path = PROCESSED_DATA_DIR / "qm9_processed.csv"

@@ -14,7 +14,7 @@ from rdkit import Chem
 
 from moladt.io.smiles import molecule_to_smiles, parse_smiles
 
-from .common import RESULTS_DIR, ensure_directory, render_markdown_table
+from .common import RESULTS_DIR, display_path, ensure_directory, log, render_markdown_table
 from .download_data import download_zinc
 
 
@@ -44,9 +44,17 @@ def run_zinc_benchmark(
     limit: int | None = None,
     include_moladt: bool = False,
     force: bool = False,
+    verbose: bool = False,
 ) -> list[TimingStageResult]:
+    if verbose:
+        log(
+            "Starting ZINC timing benchmark "
+            f"(dataset_size={dataset_size}, dataset_dimension={dataset_dimension}, limit={limit}, include_moladt={include_moladt})"
+        )
     downloads = download_zinc(dataset_size=dataset_size, dataset_dimension=dataset_dimension, force=force)
     smiles_strings, raw_stage = _load_smiles_with_timing(downloads.source_path, dataset_size=dataset_size, dataset_dimension=dataset_dimension, limit=limit)
+    if verbose:
+        _log_stage_result(raw_stage)
     parsed_molecules, parse_stage = _measure_stage(
         smiles_strings,
         lambda smiles: Chem.MolFromSmiles(smiles, sanitize=True),
@@ -56,6 +64,8 @@ def run_zinc_benchmark(
         source_path=downloads.source_path,
         keep_successful_outputs=True,
     )
+    if verbose:
+        _log_stage_result(parse_stage)
     canonical_smiles, canonical_stage = _measure_stage(
         [molecule for molecule in parsed_molecules if molecule is not None],
         lambda molecule: Chem.MolToSmiles(molecule, canonical=True, isomericSmiles=True),
@@ -65,6 +75,8 @@ def run_zinc_benchmark(
         source_path=downloads.source_path,
         keep_successful_outputs=True,
     )
+    if verbose:
+        _log_stage_result(canonical_stage)
     stages = [raw_stage, parse_stage, canonical_stage]
     if include_moladt:
         _, moladt_stage = _measure_stage(
@@ -77,6 +89,8 @@ def run_zinc_benchmark(
             keep_successful_outputs=False,
         )
         stages.append(moladt_stage)
+        if verbose:
+            _log_stage_result(moladt_stage)
     ensure_directory(RESULTS_DIR)
     results_frame = pd.DataFrame([stage.to_dict() for stage in stages])
     results_csv = RESULTS_DIR / "zinc_timing.csv"
@@ -109,6 +123,8 @@ def run_zinc_benchmark(
         ],
     )
     (RESULTS_DIR / "zinc_timing.md").write_text("# ZINC Timing\n\n" + markdown + "\n", encoding="utf-8")
+    if verbose:
+        log(f"Wrote ZINC timing artifacts to {display_path(results_csv)} and {display_path(RESULTS_DIR / 'zinc_timing.md')}")
     return stages
 
 
@@ -238,6 +254,14 @@ def _percentile(values: list[float], percentile: float) -> float:
     return float(series.quantile(percentile / 100.0))
 
 
+def _log_stage_result(stage: TimingStageResult) -> None:
+    log(
+        f"[zinc] {stage.stage}: "
+        f"molecules={stage.molecule_count} success={stage.success_count} failure={stage.failure_count} "
+        f"runtime_s={stage.total_runtime_seconds:.4f} mol_per_s={stage.molecules_per_second:.2f}"
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m scripts.benchmark_zinc")
     parser.add_argument("--dataset-size", default="250K")
@@ -245,6 +269,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--include-moladt", action="store_true")
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--verbose", action="store_true")
     return parser
 
 
@@ -256,6 +281,7 @@ def main(argv: list[str] | None = None) -> int:
         limit=args.limit,
         include_moladt=args.include_moladt,
         force=args.force,
+        verbose=args.verbose,
     )
     return 0
 

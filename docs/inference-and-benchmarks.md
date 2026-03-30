@@ -16,8 +16,13 @@ This is the full run:
 - MolADT timing included
 - paper-scale inference budget
 - results written under `results/paper/`
+- live Stan and timing output shown in the terminal by default
 
 It is the hours-long benchmark command.
+
+Model details: [jump to Model](#model).
+
+If you want a quieter run, use `BENCHMARK_VERBOSE=0 make benchmark ...`.
 
 ## Timing
 

@@ -40,7 +40,9 @@ make python-cmdstan-install
 make benchmark INFERENCE_PRESET=paper INCLUDE_MOLADT=1
 ```
 
-That is the full hours-long run. It includes MolADT timing and writes the long-run artifacts under `results/paper/`.
+That is the full hours-long run. It includes MolADT timing, streams live benchmark output, and writes the long-run artifacts under `results/paper/`.
+
+Model details: [jump to Model](#model).
 
 ## Docs
 

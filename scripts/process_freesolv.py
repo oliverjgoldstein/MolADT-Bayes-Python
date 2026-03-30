@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 from rdkit import Chem
 
-from .common import DEFAULT_SEED, FailureRecord, PROCESSED_DATA_DIR, find_files, write_failure_csv
+from .common import DEFAULT_SEED, FailureRecord, PROCESSED_DATA_DIR, ensure_directory, find_files, write_failure_csv
 from .download_data import FreeSolvDownloads, download_freesolv
 from .features import canonical_smiles_from_mol, canonicalize_smiles, featurize_sdf_records, featurize_smiles_dataframe
 from .splits import ExportedDataset, export_standardized_splits
@@ -29,6 +29,7 @@ def process_freesolv_dataset(
     include_sdf: bool = True,
 ) -> FreeSolvArtifacts:
     downloads = download_freesolv(force=force)
+    ensure_directory(PROCESSED_DATA_DIR)
     processed_frame, canonical_failures = _canonicalize_freesolv_csv(downloads)
     processed_csv_path = PROCESSED_DATA_DIR / "freesolv_processed.csv"
     processed_frame.to_csv(processed_csv_path, index=False)
@@ -158,4 +159,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

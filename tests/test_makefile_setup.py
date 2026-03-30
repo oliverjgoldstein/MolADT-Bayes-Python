@@ -51,6 +51,21 @@ def test_makefile_supports_windows_style_venv_python(tmp_path: Path) -> None:
     assert "./.venv/Scripts/python.exe -m moladt.cli parse molecules/benzene.sdf" in result.stdout
 
 
+def test_makefile_benchmark_defaults_to_verbose_output(tmp_path: Path) -> None:
+    _copy_makefile(tmp_path)
+    _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
+
+    result = subprocess.run(
+        ["make", "-C", str(tmp_path), "-n", "benchmark", "SYSTEM_PYTHON=python3"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "./.venv/bin/python -m scripts.run_all benchmark" in result.stdout
+    assert "--verbose" in result.stdout
+
+
 def test_makefile_prints_windows_style_activate_hint(tmp_path: Path) -> None:
     _copy_makefile(tmp_path)
     _write_executable(tmp_path / ".venv" / "Scripts" / "activate", "# activate\n")

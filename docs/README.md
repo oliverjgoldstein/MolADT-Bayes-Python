@@ -31,7 +31,7 @@ make python-cmdstan-install
 make benchmark INFERENCE_PRESET=paper INCLUDE_MOLADT=1
 ```
 
-That is the full hours-long run.
+That is the full hours-long run and it keeps the benchmark output visible in the terminal.
 
 ## Pages
 

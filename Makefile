@@ -20,6 +20,7 @@ ZINC_DATASET_SIZE ?= 250K
 ZINC_DATASET_DIMENSION ?= 2D
 ZINC_LIMIT ?=
 INCLUDE_MOLADT ?= 0
+BENCHMARK_VERBOSE ?= 1
 EXAMPLE ?= ferrocene
 MODELS ?= bayes_linear_student_t,bayes_hierarchical_shrinkage
 RESULTS_SUBDIR ?=
@@ -84,6 +85,7 @@ BENCHMARK_ARGS := --methods $(METHODS) --models $(MODELS) --sample-chains $(SAMP
 ZINC_LIMIT_BENCHMARK_ARG := $(if $(ZINC_LIMIT),--zinc-limit $(ZINC_LIMIT),)
 ZINC_LIMIT_TIMING_ARG := $(if $(ZINC_LIMIT),--limit $(ZINC_LIMIT),)
 INCLUDE_MOLADT_ARG := $(if $(filter 1 true yes TRUE YES,$(INCLUDE_MOLADT)),--include-moladt,)
+VERBOSE_ARG := $(if $(filter 1 true yes TRUE YES,$(BENCHMARK_VERBOSE)),--verbose,)
 
 .PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-activate python-parse python-parse-smiles python-to-smiles python-pretty-example python-benchmark-smoke python-benchmark-qm9 python-benchmark-zinc benchmark benchmark-bg
 
@@ -102,11 +104,13 @@ help:
 	"  make benchmark              Run FreeSolv, QM9, and ZINC benchmark flows" \
 	"  make benchmark-bg           Run the benchmark in the foreground and mirror output to the active results directory" \
 	"  full long run: make benchmark INFERENCE_PRESET=paper INCLUDE_MOLADT=1" \
+	"  quieter run: BENCHMARK_VERBOSE=0 make benchmark" \
 	"" \
 	"Current inference configuration:" \
 	"  preset=$(INFERENCE_PRESET)" \
 	"  results_root=$(RESULTS_ROOT)" \
 	"  include_moladt=$(INCLUDE_MOLADT)" \
+	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
 	"  methods=$(METHODS)" \
 	"  models=$(MODELS)" \
 	"  sample_chains=$(SAMPLE_CHAINS) sample_warmup=$(SAMPLE_WARMUP) sample_draws=$(SAMPLE_DRAWS)" \
@@ -293,16 +297,16 @@ python-pretty-example:
 	$(PYTHON_CMD) -m moladt.cli pretty-example $(EXAMPLE)
 
 python-benchmark-smoke:
-	$(RESULTS_ENV) $(PYTHON_CMD) -m scripts.run_all smoke-test $(BENCHMARK_ARGS)
+	$(RESULTS_ENV) $(PYTHON_CMD) -m scripts.run_all smoke-test $(VERBOSE_ARG) $(BENCHMARK_ARGS)
 
 python-benchmark-qm9:
-	$(RESULTS_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 --limit $(QM9_LIMIT) $(BENCHMARK_ARGS)
+	$(RESULTS_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 --limit $(QM9_LIMIT) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
 
 python-benchmark-zinc:
-	$(RESULTS_ENV) $(PYTHON_CMD) -m scripts.run_all zinc-timing --dataset-size $(ZINC_DATASET_SIZE) --dataset-dimension $(ZINC_DATASET_DIMENSION) $(ZINC_LIMIT_TIMING_ARG) $(INCLUDE_MOLADT_ARG)
+	$(RESULTS_ENV) $(PYTHON_CMD) -m scripts.run_all zinc-timing --dataset-size $(ZINC_DATASET_SIZE) --dataset-dimension $(ZINC_DATASET_DIMENSION) $(ZINC_LIMIT_TIMING_ARG) $(INCLUDE_MOLADT_ARG) $(VERBOSE_ARG)
 
 benchmark:
-	$(RESULTS_ENV) $(PYTHON_CMD) -m scripts.run_all benchmark --qm9-limit $(QM9_LIMIT) --zinc-dataset-size $(ZINC_DATASET_SIZE) --zinc-dataset-dimension $(ZINC_DATASET_DIMENSION) $(ZINC_LIMIT_BENCHMARK_ARG) $(INCLUDE_MOLADT_ARG) $(BENCHMARK_ARGS)
+	$(RESULTS_ENV) $(PYTHON_CMD) -m scripts.run_all benchmark --qm9-limit $(QM9_LIMIT) --zinc-dataset-size $(ZINC_DATASET_SIZE) --zinc-dataset-dimension $(ZINC_DATASET_DIMENSION) $(ZINC_LIMIT_BENCHMARK_ARG) $(INCLUDE_MOLADT_ARG) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
 
 benchmark-bg:
 	@mkdir -p $(dir $(BENCHMARK_LOG))
