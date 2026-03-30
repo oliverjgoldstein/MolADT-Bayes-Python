@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 import argparse
-import os
 import subprocess
-import sys
-from contextlib import contextmanager
 from pathlib import Path
 
 import cmdstanpy
 
 from .common import LOCAL_CMDSTAN_DIR, ensure_directory, log
+from .toolchain import cmdstan_build_environment
 
 DEFAULT_CMDSTAN_VERSION = "2.38.0"
 
@@ -18,7 +16,7 @@ def install_or_repair_cmdstan(*, version: str = DEFAULT_CMDSTAN_VERSION, force: 
     install_root = ensure_directory(LOCAL_CMDSTAN_DIR)
     version_dir = install_root / f"cmdstan-{version}"
 
-    with _cmdstan_build_environment():
+    with cmdstan_build_environment(verbose=True):
         if version_dir.exists():
             log(f"Found existing CmdStan source tree at {version_dir}")
             _build_cmdstan(version_dir)
@@ -46,53 +44,6 @@ def install_or_repair_cmdstan(*, version: str = DEFAULT_CMDSTAN_VERSION, force: 
             return version_dir
 
     raise RuntimeError(f"CmdStan {version} could not be installed into {install_root}")
-
-
-@contextmanager
-def _cmdstan_build_environment():
-    original = os.environ.copy()
-    try:
-        if sys.platform == "darwin":
-            compiler_env = _darwin_compiler_environment()
-            if compiler_env:
-                for key, value in compiler_env.items():
-                    os.environ[key] = value
-                log(
-                    "Using Apple toolchain for CmdStan build: "
-                    f"CC={compiler_env['CC']} CXX={compiler_env['CXX']}"
-                )
-        yield
-    finally:
-        os.environ.clear()
-        os.environ.update(original)
-
-
-def _darwin_compiler_environment() -> dict[str, str]:
-    clang = _xcrun_path("clang")
-    clangxx = _xcrun_path("clang++")
-    sdkroot = _xcrun_sdkroot()
-    environment: dict[str, str] = {}
-    if clang is not None:
-        environment["CC"] = clang
-    if clangxx is not None:
-        environment["CXX"] = clangxx
-    if sdkroot is not None:
-        environment["SDKROOT"] = sdkroot
-    return environment
-
-
-def _xcrun_path(tool: str) -> str | None:
-    try:
-        return subprocess.check_output(["xcrun", "--find", tool], text=True).strip()
-    except Exception:
-        return None
-
-
-def _xcrun_sdkroot() -> str | None:
-    try:
-        return subprocess.check_output(["xcrun", "--show-sdk-path"], text=True).strip()
-    except Exception:
-        return None
 
 
 def _build_cmdstan(version_dir: Path) -> None:

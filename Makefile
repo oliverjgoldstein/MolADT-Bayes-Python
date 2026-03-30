@@ -1,4 +1,6 @@
 SYSTEM_PYTHON ?= $(strip $(shell command -v python3 2>/dev/null || command -v python 2>/dev/null))
+OS_NAME ?= $(strip $(shell uname -s 2>/dev/null))
+XCRUN ?= $(strip $(shell command -v xcrun 2>/dev/null))
 TESTED_PYTHON := 3.14.3
 TESTED_CMDSTANPY := 1.3.0
 TESTED_CMDSTAN := 2.38.0
@@ -87,6 +89,16 @@ ZINC_LIMIT_TIMING_ARG := $(if $(ZINC_LIMIT),--limit $(ZINC_LIMIT),)
 INCLUDE_MOLADT_ARG := $(if $(filter 1 true yes TRUE YES,$(INCLUDE_MOLADT)),--include-moladt,)
 VERBOSE_ARG := $(if $(filter 1 true yes TRUE YES,$(BENCHMARK_VERBOSE)),--verbose,)
 
+ifeq ($(OS_NAME),Darwin)
+ifneq ($(XCRUN),)
+DARWIN_CLANG := $(strip $(shell $(XCRUN) --find clang 2>/dev/null))
+DARWIN_CLANGXX := $(strip $(shell $(XCRUN) --find clang++ 2>/dev/null))
+DARWIN_SDKROOT := $(strip $(shell $(XCRUN) --show-sdk-path 2>/dev/null))
+endif
+endif
+
+TOOLCHAIN_ENV := $(if $(DARWIN_SDKROOT),env CC="$(DARWIN_CLANG)" CXX="$(DARWIN_CLANGXX)" SDKROOT="$(DARWIN_SDKROOT)" CFLAGS="$${CFLAGS:+$$CFLAGS }-isysroot $(DARWIN_SDKROOT)" CXXFLAGS="$${CXXFLAGS:+$$CXXFLAGS }-isysroot $(DARWIN_SDKROOT)",)
+
 .PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-activate python-parse python-parse-smiles python-to-smiles python-pretty-example python-benchmark-smoke python-benchmark-qm9 python-benchmark-zinc benchmark benchmark-bg
 
 help:
@@ -111,6 +123,7 @@ help:
 	"  results_root=$(RESULTS_ROOT)" \
 	"  include_moladt=$(INCLUDE_MOLADT)" \
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
+	"  toolchain_env=$(if $(DARWIN_SDKROOT),apple-xcrun,default)" \
 	"  methods=$(METHODS)" \
 	"  models=$(MODELS)" \
 	"  sample_chains=$(SAMPLE_CHAINS) sample_warmup=$(SAMPLE_WARMUP) sample_draws=$(SAMPLE_DRAWS)" \
@@ -255,7 +268,7 @@ python-setup:
 	"$$venv_python" -m pip install -U -e ".[dev]"
 
 python-cmdstan-install:
-	$(PYTHON_CMD) -m scripts.install_cmdstan
+	$(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.install_cmdstan
 
 python-test:
 	@start=$$(date +%s); \
@@ -297,16 +310,16 @@ python-pretty-example:
 	$(PYTHON_CMD) -m moladt.cli pretty-example $(EXAMPLE)
 
 python-benchmark-smoke:
-	$(RESULTS_ENV) $(PYTHON_CMD) -m scripts.run_all smoke-test $(VERBOSE_ARG) $(BENCHMARK_ARGS)
+	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all smoke-test $(VERBOSE_ARG) $(BENCHMARK_ARGS)
 
 python-benchmark-qm9:
-	$(RESULTS_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 --limit $(QM9_LIMIT) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
+	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 --limit $(QM9_LIMIT) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
 
 python-benchmark-zinc:
-	$(RESULTS_ENV) $(PYTHON_CMD) -m scripts.run_all zinc-timing --dataset-size $(ZINC_DATASET_SIZE) --dataset-dimension $(ZINC_DATASET_DIMENSION) $(ZINC_LIMIT_TIMING_ARG) $(INCLUDE_MOLADT_ARG) $(VERBOSE_ARG)
+	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all zinc-timing --dataset-size $(ZINC_DATASET_SIZE) --dataset-dimension $(ZINC_DATASET_DIMENSION) $(ZINC_LIMIT_TIMING_ARG) $(INCLUDE_MOLADT_ARG) $(VERBOSE_ARG)
 
 benchmark:
-	$(RESULTS_ENV) $(PYTHON_CMD) -m scripts.run_all benchmark --qm9-limit $(QM9_LIMIT) --zinc-dataset-size $(ZINC_DATASET_SIZE) --zinc-dataset-dimension $(ZINC_DATASET_DIMENSION) $(ZINC_LIMIT_BENCHMARK_ARG) $(INCLUDE_MOLADT_ARG) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
+	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all benchmark --qm9-limit $(QM9_LIMIT) --zinc-dataset-size $(ZINC_DATASET_SIZE) --zinc-dataset-dimension $(ZINC_DATASET_DIMENSION) $(ZINC_LIMIT_BENCHMARK_ARG) $(INCLUDE_MOLADT_ARG) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
 
 benchmark-bg:
 	@mkdir -p $(dir $(BENCHMARK_LOG))

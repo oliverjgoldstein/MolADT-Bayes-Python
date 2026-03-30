@@ -12,6 +12,7 @@ from scipy.stats import t as student_t
 
 from .common import DEFAULT_SEED, LOCAL_CMDSTAN_DIR, PROJECT_ROOT, RESULTS_DIR, display_path, ensure_directory, log, write_json
 from .splits import ExportedDataset
+from .toolchain import cmdstan_build_environment
 
 MODEL_FILES = {
     "bayes_linear_student_t": PROJECT_ROOT / "stan" / "bayes_linear_student_t.stan",
@@ -90,7 +91,8 @@ def run_model_suite(
     ensure_cmdstan_ready()
     output_dir = ensure_directory(RESULTS_DIR / "stan_output" / bundle.dataset_name / bundle.representation / model_name)
     data = build_stan_data(bundle, student_df=config.student_df)
-    model = cmdstanpy.CmdStanModel(stan_file=str(MODEL_FILES[model_name]))
+    with cmdstan_build_environment(verbose=config.verbose):
+        model = cmdstanpy.CmdStanModel(stan_file=str(MODEL_FILES[model_name]))
     results: list[dict[str, Any]] = []
     predictions: list[dict[str, Any]] = []
     coefficients: list[dict[str, Any]] = []

@@ -45,8 +45,8 @@ Current defaults from the code:
 
 The predictive benchmark fits:
 
-- `bayes_linear_student_t`
-- `bayes_hierarchical_shrinkage`
+- [`bayes_linear_student_t`](../stan/bayes_linear_student_t.stan)
+- [`bayes_hierarchical_shrinkage`](../stan/bayes_hierarchical_shrinkage.stan)
 
 The Python side also exports the aligned matrices used by the Haskell baseline:
 

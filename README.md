@@ -27,8 +27,8 @@ The ZINC benchmark measures:
 
 The predictive benchmark fits two Stan models:
 
-- `bayes_linear_student_t`
-- `bayes_hierarchical_shrinkage`
+- [`bayes_linear_student_t`](stan/bayes_linear_student_t.stan)
+- [`bayes_hierarchical_shrinkage`](stan/bayes_hierarchical_shrinkage.stan)
 
 The Python repo also writes aligned `data/processed/` exports. `X_train`, `X_valid`, and `X_test` are standardized from the training split only. `y` stays on the original scale.
 

@@ -23,6 +23,11 @@ The timing story lives in the ZINC benchmark:
 
 The predictive benchmark fits the Stan models, writes `results/`, and exports aligned matrices under `data/processed/` for the Haskell repo.
 
+Core model files:
+
+- [`stan/bayes_linear_student_t.stan`](../stan/bayes_linear_student_t.stan)
+- [`stan/bayes_hierarchical_shrinkage.stan`](../stan/bayes_hierarchical_shrinkage.stan)
+
 ## Run Everything
 
 ```bash

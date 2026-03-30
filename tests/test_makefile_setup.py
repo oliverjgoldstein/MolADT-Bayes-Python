@@ -66,6 +66,74 @@ def test_makefile_benchmark_defaults_to_verbose_output(tmp_path: Path) -> None:
     assert "--verbose" in result.stdout
 
 
+def test_makefile_benchmark_uses_xcrun_toolchain_on_darwin(tmp_path: Path) -> None:
+    _copy_makefile(tmp_path)
+    _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
+    _write_executable(
+        tmp_path / "fake-xcrun",
+        "#!/bin/sh\n"
+        "if [ \"$1\" = \"--find\" ] && [ \"$2\" = \"clang\" ]; then\n"
+        "  printf \"%s\\n\" \"/apple/clang\"\n"
+        "  exit 0\n"
+        "fi\n"
+        "if [ \"$1\" = \"--find\" ] && [ \"$2\" = \"clang++\" ]; then\n"
+        "  printf \"%s\\n\" \"/apple/clang++\"\n"
+        "  exit 0\n"
+        "fi\n"
+        "if [ \"$1\" = \"--show-sdk-path\" ]; then\n"
+        "  printf \"%s\\n\" \"/apple/sdk\"\n"
+        "  exit 0\n"
+        "fi\n"
+        "exit 1\n",
+    )
+
+    result = subprocess.run(
+        ["make", "-C", str(tmp_path), "-n", "benchmark", "SYSTEM_PYTHON=python3", "OS_NAME=Darwin", "XCRUN=./fake-xcrun"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert 'CC="/apple/clang"' in result.stdout
+    assert 'CXX="/apple/clang++"' in result.stdout
+    assert 'SDKROOT="/apple/sdk"' in result.stdout
+    assert '-isysroot /apple/sdk' in result.stdout
+
+
+def test_makefile_cmdstan_install_uses_xcrun_toolchain_on_darwin(tmp_path: Path) -> None:
+    _copy_makefile(tmp_path)
+    _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
+    _write_executable(
+        tmp_path / "fake-xcrun",
+        "#!/bin/sh\n"
+        "if [ \"$1\" = \"--find\" ] && [ \"$2\" = \"clang\" ]; then\n"
+        "  printf \"%s\\n\" \"/apple/clang\"\n"
+        "  exit 0\n"
+        "fi\n"
+        "if [ \"$1\" = \"--find\" ] && [ \"$2\" = \"clang++\" ]; then\n"
+        "  printf \"%s\\n\" \"/apple/clang++\"\n"
+        "  exit 0\n"
+        "fi\n"
+        "if [ \"$1\" = \"--show-sdk-path\" ]; then\n"
+        "  printf \"%s\\n\" \"/apple/sdk\"\n"
+        "  exit 0\n"
+        "fi\n"
+        "exit 1\n",
+    )
+
+    result = subprocess.run(
+        ["make", "-C", str(tmp_path), "-n", "python-cmdstan-install", "SYSTEM_PYTHON=python3", "OS_NAME=Darwin", "XCRUN=./fake-xcrun"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert 'CC="/apple/clang"' in result.stdout
+    assert 'CXX="/apple/clang++"' in result.stdout
+    assert 'SDKROOT="/apple/sdk"' in result.stdout
+    assert "./.venv/bin/python -m scripts.install_cmdstan" in result.stdout
+
+
 def test_makefile_prints_windows_style_activate_hint(tmp_path: Path) -> None:
     _copy_makefile(tmp_path)
     _write_executable(tmp_path / ".venv" / "Scripts" / "activate", "# activate\n")
