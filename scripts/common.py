@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import tarfile
 import zipfile
@@ -14,7 +15,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data"
 RAW_DATA_DIR = DATA_DIR / "raw"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
-RESULTS_DIR = PROJECT_ROOT / "results"
 DOCS_DIR = PROJECT_ROOT / "docs"
 LOCAL_CMDSTAN_DIR = PROJECT_ROOT / ".cmdstan"
 
@@ -36,6 +36,19 @@ QM9_CSV_URL = "https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/qm9.csv"
 ZINC_URL_TEMPLATE = "https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/zinc15_{dataset_size}_{dataset_dimension}.tar.gz"
 
 
+def configured_results_dir() -> Path:
+    override = os.environ.get("MOLADT_RESULTS_DIR")
+    if not override:
+        return PROJECT_ROOT / "results"
+    path = Path(override)
+    if not path.is_absolute():
+        path = PROJECT_ROOT / path
+    return path
+
+
+RESULTS_DIR = configured_results_dir()
+
+
 @dataclass(frozen=True, slots=True)
 class FailureRecord:
     dataset: str
@@ -50,6 +63,13 @@ class FailureRecord:
 def ensure_directory(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def display_path(path: Path) -> str:
+    try:
+        return str(path.relative_to(PROJECT_ROOT))
+    except ValueError:
+        return str(path)
 
 
 def log(message: str) -> None:
@@ -154,4 +174,3 @@ def render_markdown_table(headers: Sequence[str], rows: Sequence[Sequence[Any]])
     line_rule = "| " + " | ".join("---" for _ in headers) + " |"
     line_rows = ["| " + " | ".join(stringify(value) for value in row) + " |" for row in rows]
     return "\n".join([line_header, line_rule, *line_rows])
-

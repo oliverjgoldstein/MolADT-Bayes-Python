@@ -84,13 +84,13 @@ def run_zinc_benchmark(
     markdown = render_markdown_table(
         headers=[
             "stage",
-            "count",
-            "success",
-            "failure",
-            "runtime_s",
-            "mol_per_s",
-            "median_us",
-            "p95_us",
+            "molecule_count",
+            "success_count",
+            "failure_count",
+            "total_runtime_seconds",
+            "molecules_per_second",
+            "median_latency_us",
+            "p95_latency_us",
             "peak_rss_mb",
         ],
         rows=[

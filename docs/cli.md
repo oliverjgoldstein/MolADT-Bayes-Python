@@ -1,0 +1,86 @@
+# CLI
+
+The Python CLI entrypoint is:
+
+```bash
+./.venv/bin/python -m moladt.cli --help
+```
+
+It currently exposes four subcommands.
+
+## `parse`
+
+```bash
+./.venv/bin/python -m moladt.cli parse molecules/benzene.sdf
+```
+
+What it does now:
+
+- reads one SDF record from the given path
+- validates the resulting MolADT structure with `validate_molecule`
+- prints `Title: ...`
+- prints the pretty-printed molecule
+- prints a `Properties:` section if the SDF record contains properties
+
+Use `parse` when the source of truth is a file-backed molecule.
+
+## `parse-smiles`
+
+```bash
+./.venv/bin/python -m moladt.cli parse-smiles "c1ccccc1"
+```
+
+What it validates now:
+
+- the conservative SMILES grammar implemented in [`moladt/io/smiles.py`](../moladt/io/smiles.py)
+- atom, bond, and ring-closure syntax inside that subset
+- structural validation through `validate_molecule`, including valence checks and bond-map consistency
+
+On success it prints the pretty-printed MolADT structure. It does not print a title or property block because the source is a SMILES string, not an SDF record.
+
+## `to-smiles`
+
+```bash
+./.venv/bin/python -m moladt.cli to-smiles molecules/benzene.sdf
+```
+
+What it accepts now:
+
+- validated molecules in the conservative classical subset
+- localized single, double, and triple bonds
+- six-edge `pi_ring` systems that can be rendered as aromatic or deterministic Kekule-style output
+
+What it rejects now:
+
+- empty molecules
+- structures where rendering would require dropping bonded atoms
+- structures outside the supported classical subset, including non-classical multicenter systems like diborane and ferrocene
+- components that would need more than 9 ring closures
+
+Current rejection messages come directly from the SMILES renderer, for example:
+
+- `SMILES rendering only supports localized double/triple bonds and six-edge pi rings`
+- `pi_ring must be a simple six-membered cycle to render as SMILES`
+
+## `pretty-example`
+
+```bash
+./.venv/bin/python -m moladt.cli pretty-example ferrocene
+./.venv/bin/python -m moladt.cli pretty-example diborane
+```
+
+This command loads named built-in examples from [`moladt/examples/manuscript.py`](../moladt/examples/manuscript.py), validates them, and prints the manuscript-facing pretty rendering. It currently supports `ferrocene` and `diborane`.
+
+## How the Commands Differ
+
+- `parse` starts from an SDF file and can print record title and properties.
+- `parse-smiles` starts from a SMILES string and only prints the validated MolADT structure.
+- `to-smiles` starts from an SDF file and emits only the rendered SMILES string.
+- `pretty-example` starts from a built-in example object rather than a file.
+
+## Related Files
+
+- [`moladt/cli.py`](../moladt/cli.py)
+- [`moladt/io/sdf.py`](../moladt/io/sdf.py)
+- [`moladt/io/smiles.py`](../moladt/io/smiles.py)
+- [`moladt/chem/validate.py`](../moladt/chem/validate.py)

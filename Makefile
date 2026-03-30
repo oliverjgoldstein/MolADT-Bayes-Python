@@ -12,8 +12,7 @@ ZINC_DATASET_DIMENSION ?= 2D
 ZINC_LIMIT ?=
 EXAMPLE ?= ferrocene
 MODELS ?= bayes_linear_student_t,bayes_hierarchical_shrinkage
-BENCHMARK_LOG ?= results/benchmark.out
-BENCHMARK_PID ?= results/benchmark.pid
+RESULTS_SUBDIR ?=
 
 ifeq ($(INFERENCE_PRESET),quick)
 METHODS_DEFAULT := sample,pathfinder,optimize
@@ -50,6 +49,17 @@ PREDICTIVE_DRAWS_DEFAULT := 500
 RUNTIME_HINT := usually 15-45 minutes after CmdStan is built, with QM9_LIMIT=2000 and the full ZINC 250K timing pass
 endif
 
+ifeq ($(INFERENCE_PRESET),paper)
+ifeq ($(strip $(RESULTS_SUBDIR)),)
+RESULTS_SUBDIR := paper
+endif
+endif
+
+RESULTS_ROOT := $(if $(RESULTS_SUBDIR),results/$(RESULTS_SUBDIR),results)
+RESULTS_ENV := MOLADT_RESULTS_DIR=$(RESULTS_ROOT)
+BENCHMARK_LOG ?= $(RESULTS_ROOT)/benchmark.out
+BENCHMARK_PID ?= $(RESULTS_ROOT)/benchmark.pid
+
 METHODS ?= $(METHODS_DEFAULT)
 SAMPLE_CHAINS ?= $(SAMPLE_CHAINS_DEFAULT)
 SAMPLE_WARMUP ?= $(SAMPLE_WARMUP_DEFAULT)
@@ -79,10 +89,11 @@ help:
 	"  make python-to-smiles       Render molecules/benzene.sdf to SMILES" \
 	"  make python-pretty-example  Render EXAMPLE=ferrocene or EXAMPLE=diborane" \
 	"  make benchmark              Run FreeSolv, QM9, and ZINC benchmark flows" \
-	"  make benchmark-bg           Run the benchmark in the background" \
+	"  make benchmark-bg           Run the benchmark in the foreground and mirror output to the active results directory" \
 	"" \
 	"Current inference configuration:" \
 	"  preset=$(INFERENCE_PRESET)" \
+	"  results_root=$(RESULTS_ROOT)" \
 	"  methods=$(METHODS)" \
 	"  models=$(MODELS)" \
 	"  sample_chains=$(SAMPLE_CHAINS) sample_warmup=$(SAMPLE_WARMUP) sample_draws=$(SAMPLE_DRAWS)" \
@@ -141,23 +152,22 @@ python-pretty-example:
 	$(PYTHON_CMD) -m moladt.cli pretty-example $(EXAMPLE)
 
 python-benchmark-smoke:
-	$(PYTHON_CMD) -m scripts.run_all smoke-test $(BENCHMARK_ARGS)
+	$(RESULTS_ENV) $(PYTHON_CMD) -m scripts.run_all smoke-test $(BENCHMARK_ARGS)
 
 python-benchmark-qm9:
-	$(PYTHON_CMD) -m scripts.run_all qm9 --limit $(QM9_LIMIT) $(BENCHMARK_ARGS)
+	$(RESULTS_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 --limit $(QM9_LIMIT) $(BENCHMARK_ARGS)
 
 python-benchmark-zinc:
-	$(PYTHON_CMD) -m scripts.run_all zinc-timing --dataset-size $(ZINC_DATASET_SIZE) --dataset-dimension $(ZINC_DATASET_DIMENSION) $(ZINC_LIMIT_TIMING_ARG)
+	$(RESULTS_ENV) $(PYTHON_CMD) -m scripts.run_all zinc-timing --dataset-size $(ZINC_DATASET_SIZE) --dataset-dimension $(ZINC_DATASET_DIMENSION) $(ZINC_LIMIT_TIMING_ARG)
 
 benchmark:
-	$(PYTHON_CMD) -m scripts.run_all benchmark --qm9-limit $(QM9_LIMIT) --zinc-dataset-size $(ZINC_DATASET_SIZE) --zinc-dataset-dimension $(ZINC_DATASET_DIMENSION) $(ZINC_LIMIT_BENCHMARK_ARG) $(BENCHMARK_ARGS)
+	$(RESULTS_ENV) $(PYTHON_CMD) -m scripts.run_all benchmark --qm9-limit $(QM9_LIMIT) --zinc-dataset-size $(ZINC_DATASET_SIZE) --zinc-dataset-dimension $(ZINC_DATASET_DIMENSION) $(ZINC_LIMIT_BENCHMARK_ARG) $(BENCHMARK_ARGS)
 
 benchmark-bg:
 	@mkdir -p $(dir $(BENCHMARK_LOG))
-	@nohup $(MAKE) --no-print-directory benchmark > $(BENCHMARK_LOG) 2>&1 & echo $$! > $(BENCHMARK_PID)
 	@printf "%s\n" \
-	"Started benchmark in the background." \
-	"  pid file: $(BENCHMARK_PID)" \
-	"  log file: $(BENCHMARK_LOG)" \
-	"  report: results/model_report.md" \
-	"  coefficients: results/model_coefficients.csv"
+	"Running benchmark in the foreground." \
+	"  output is mirrored to: $(BENCHMARK_LOG)" \
+	"  report: $(RESULTS_ROOT)/model_report.md" \
+	"  coefficients: $(RESULTS_ROOT)/model_coefficients.csv"
+	@/bin/bash -o pipefail -c '$(MAKE) --no-print-directory benchmark 2>&1 | tee "$(BENCHMARK_LOG)"'

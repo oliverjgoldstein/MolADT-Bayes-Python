@@ -10,7 +10,7 @@ import numpy as np
 from scipy.special import logsumexp
 from scipy.stats import t as student_t
 
-from .common import DEFAULT_SEED, LOCAL_CMDSTAN_DIR, PROJECT_ROOT, ensure_directory, write_json
+from .common import DEFAULT_SEED, LOCAL_CMDSTAN_DIR, PROJECT_ROOT, RESULTS_DIR, ensure_directory, write_json
 from .splits import ExportedDataset
 
 MODEL_FILES = {
@@ -87,7 +87,7 @@ def run_model_suite(
     if model_name not in MODEL_FILES:
         raise ValueError(f"Unknown model {model_name}")
     ensure_cmdstan_ready()
-    output_dir = ensure_directory(PROJECT_ROOT / "results" / "stan_output" / bundle.dataset_name / bundle.representation / model_name)
+    output_dir = ensure_directory(RESULTS_DIR / "stan_output" / bundle.dataset_name / bundle.representation / model_name)
     data = build_stan_data(bundle, student_df=config.student_df)
     model = cmdstanpy.CmdStanModel(stan_file=str(MODEL_FILES[model_name]))
     results: list[dict[str, Any]] = []
@@ -223,6 +223,25 @@ def _evaluate_fit(
         global_scale=global_scale,
         group_scale=group_scale,
     )
+    train_metrics, train_predictions = _evaluate_split(
+        X=bundle.X_train,
+        y=bundle.y_train,
+        mol_ids=bundle.mol_ids_train,
+        dataset_name=bundle.dataset_name,
+        representation=bundle.representation,
+        model_name=model_name,
+        method=method,
+        split_name="train",
+        alpha=alpha,
+        beta=beta,
+        sigma=sigma,
+        student_df=config.student_df,
+        runtime_seconds=runtime_seconds,
+        feature_count=len(bundle.feature_names),
+        n_train=len(bundle.y_train),
+        seed=config.seed + 11,
+        predictive_draws=config.predictive_draws,
+    )
     valid_metrics, valid_predictions = _evaluate_split(
         X=bundle.X_valid,
         y=bundle.y_valid,
@@ -272,7 +291,7 @@ def _evaluate_fit(
         global_scale=global_scale,
         group_scale=group_scale,
     )
-    return [valid_metrics, test_metrics], [*valid_predictions, *test_predictions], coefficient_rows
+    return [train_metrics, valid_metrics, test_metrics], [*train_predictions, *valid_predictions, *test_predictions], coefficient_rows
 
 
 def _evaluate_split(

@@ -1,141 +1,32 @@
 # MolADT-Bayes-Python
 
-`MolADT-Bayes-Python` is the Python implementation of the MolADT chemistry model. The core stays typed and structural: frozen dataclasses, explicit atoms and coordinates, Dietz-style bonding systems, local validation, a lightweight SDF parser, and a conservative SMILES boundary.
+`MolADT-Bayes-Python` is the Python implementation of the MolADT chemistry model and the main benchmark producer for this project. It contains the typed MolADT core, conservative SDF/SMILES I/O, built-in manuscript examples, the CmdStanPy benchmark pipeline, and the aligned `data/processed/` exports consumed by the Haskell baseline.
 
-This repository also contains the main empirical benchmark pipeline:
+This repo is for readers who want to inspect the Python model, run the CLI on small molecules, generate benchmark outputs under `results/`, or export aligned train/valid/test matrices for the sibling Haskell repo.
 
-- FreeSolv smoke benchmark
-- QM9 dipole-moment benchmark
-- ZINC SMILES timing benchmark
-- exported standardized feature matrices for the aligned Haskell baseline
-
-## Step By Step
-
-### 1. Create the environment
-
-From this repository:
+## Start Here
 
 ```bash
 make python-setup
-```
-
-That creates `.venv` and installs the Python package plus the benchmark dependencies.
-
-If you prefer to run the commands directly:
-
-```bash
-/opt/homebrew/bin/python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -U pip setuptools wheel
-python -m pip install -e ".[dev]"
-```
-
-On macOS, the bundled `make python-setup` target already prefers Homebrew Python when it is available. Windows users should use WSL2 for the benchmark stack.
-
-### 2. Install CmdStan
-
-From this repository:
-
-```bash
 make python-cmdstan-install
-```
-
-This installs CmdStan into `.cmdstan` and also repairs a partial existing install if a previous attempt was interrupted. It does not require conda.
-
-If you already have a CmdStan installation, point CmdStanPy at it with:
-
-```python
-from cmdstanpy import set_cmdstan_path
-
-set_cmdstan_path("/path/to/cmdstan")
-```
-
-### 3. Check that the install works
-
-From this repository:
-
-```bash
-make python-test
-make python-typecheck
-```
-
-If you want plain `python` and `pip` commands in your shell, activate the local virtual environment first:
-
-```bash
-source .venv/bin/activate
-```
-
-Without activation, use `./.venv/bin/python` explicitly.
-
-### 4. Try the CLI on small examples
-
-From this repository:
-
-```bash
 ./.venv/bin/python -m moladt.cli parse molecules/benzene.sdf
-./.venv/bin/python -m moladt.cli parse-smiles "c1ccccc1"
-./.venv/bin/python -m moladt.cli to-smiles molecules/benzene.sdf
-./.venv/bin/python -m moladt.cli pretty-example ferrocene
-./.venv/bin/python -m moladt.cli pretty-example diborane
+./.venv/bin/python -m scripts.run_all smoke-test --methods optimize --models bayes_linear_student_t
 ```
 
-If you have already run `source .venv/bin/activate`, the same commands can be written with plain `python -m ...`.
+## Docs
 
-The manuscript-facing rendering layer lives in `moladt/chem/pretty.py`, and the named examples live in `moladt/examples/manuscript.py`.
+- [Docs index](docs/README.md)
+- [Quickstart](docs/quickstart.md)
+- [Examples](docs/examples.md)
+- [CLI](docs/cli.md)
+- [Inference and benchmarks](docs/inference-and-benchmarks.md)
+- [SMILES scope and validation](docs/smiles-scope-and-validation.md)
+- [Repo map](docs/repo-map.md)
+- [Haskell interop](docs/haskell_interop.md)
 
-### 5. Run the default benchmark
+## Sibling Repo
 
-From this repository:
-
-```bash
-make benchmark
-```
-
-This runs, in order:
-
-- the FreeSolv smoke property benchmark
-- the default QM9 dipole benchmark subset
-- the default ZINC timing benchmark
-
-The main outputs are written to:
-
-- `results/summary.md`
-- `results/predictive_metrics.csv`
-- `results/predictions.csv`
-- `results/model_report.md`
-- `results/model_coefficients.csv`
-- `results/zinc_timing.csv`
-- `results/zinc_timing.md`
-
-### 6. Run the long job in the background
-
-From this repository:
-
-```bash
-make benchmark-bg
-tail -f results/benchmark.out
-```
-
-### 7. Need non-default settings?
-
-Use:
-
-```bash
-make help
-./.venv/bin/python -m scripts.run_all --help
-```
-
-## SMILES Scope
-
-The SMILES boundary is intentionally conservative. It supports:
-
-- atoms and bracket atoms
-- bracket hydrogens and formal charges
-- branches and ring digits `1-9`
-- single, double, and triple bonds
-- benzene-style aromatic input such as `c1ccccc1`
-
-It does not try to encode non-classical multicenter systems like diborane or ferrocene as SMILES. Those remain representable in the MolADT core, but `to-smiles` rejects structures outside the supported classical subset.
+- [MolADT-Bayes-Haskell](https://github.com/oliverjgoldstein/MolADT-Bayes-Haskell)
 
 ## License
 
