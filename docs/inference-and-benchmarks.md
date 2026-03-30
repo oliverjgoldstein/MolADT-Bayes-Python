@@ -1,6 +1,6 @@
 # Inference and Benchmarks
 
-This repo owns the main benchmark run. It prepares the datasets, exports aligned matrices, fits the Stan models, writes the reports, and runs the timing pass.
+This repo owns the main benchmark run. It prepares the datasets, exports aligned matrices, fits the Stan models, writes a compact CSV-first result bundle, and runs the timing pass.
 
 ## The One Big Command
 
@@ -15,7 +15,7 @@ This is the full run:
 - ZINC timing benchmark
 - MolADT timing included
 - paper-scale inference budget
-- results written under `results/paper/`
+- results written under `results/paper/run_<timestamp>/`
 - live Stan and timing output shown in the terminal by default
 
 It is the hours-long benchmark command.
@@ -58,22 +58,24 @@ The Python side also exports the aligned matrices used by the Haskell baseline:
 
 ## Outputs
 
-The main outputs are:
+Each run writes a timestamped folder. The top level is intentionally small:
 
-- `results/summary.md`
-- `results/predictive_metrics.csv`
-- `results/predictions.csv`
-- `results/model_report.md`
-- `results/model_coefficients.csv`
-- `results/zinc_timing.csv`
-- `results/zinc_timing.md`
-- `results/generalization_metrics.csv`
-- `results/generalization_report.md`
-- `results/split_rmse_overview.svg`
-- `results/predicted_vs_actual_overview.svg`
-- `results/literature_context.md`
+- `results.csv`
+- `rmse_train_test_vs_literature.svg`
+- `timing_overview.svg` when timing ran
+- `details/`
 
-For the paper-scale make run, outputs go under `results/paper/`.
+`details/` holds the raw CSVs and Stan outputs:
+
+- `details/predictive_metrics.csv`
+- `details/generalization_metrics.csv`
+- `details/predictions.csv`
+- `details/model_coefficients.csv`
+- `details/literature_context.csv`
+- `details/zinc_timing.csv`
+- `details/stan_output/`
+
+For the paper-scale make run, outputs go under `results/paper/run_<timestamp>/`.
 
 ## Other Entrypoints
 

@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 import argparse
+import shutil
+from datetime import datetime
 from typing import Any
 
 import pandas as pd
 
 from .benchmark_zinc import run_zinc_benchmark
-from .common import DEFAULT_SEED, RESULTS_DIR, display_path, ensure_directory, log, render_markdown_table
+from .common import DEFAULT_SEED, RESULTS_DIR, display_path, ensure_directory, log
 from .process_freesolv import FreeSolvArtifacts, process_freesolv_dataset
 from .process_qm9 import QM9Artifacts, process_qm9_dataset
-from .report_graphs import write_predicted_vs_actual_overview, write_split_rmse_overview
+from .report_graphs import (
+    write_review_rmse_overview,
+    write_timing_stage_overview,
+)
 from .stan_runner import ALL_METHODS, StanRunConfig, run_model_suite, write_stan_data_json
 
 MOLECULENET_SOURCE_URL = "https://pmc.ncbi.nlm.nih.gov/articles/PMC5868307/"
@@ -74,6 +79,7 @@ def _add_common_benchmark_args(parser: argparse.ArgumentParser) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    _remove_legacy_report_artifacts()
     metrics_rows: list[dict[str, object]] = []
     prediction_rows: list[dict[str, object]] = []
     coefficient_rows: list[dict[str, object]] = []
@@ -122,20 +128,32 @@ def main(argv: list[str] | None = None) -> int:
         raise RuntimeError(f"Unsupported command {args.command}")
 
     if metrics_rows:
-        ensure_directory(RESULTS_DIR)
-        metrics_path = RESULTS_DIR / "predictive_metrics.csv"
-        predictions_path = RESULTS_DIR / "predictions.csv"
-        coefficients_path = RESULTS_DIR / "model_coefficients.csv"
+        details_dir = _details_dir()
+        metrics_path = details_dir / "predictive_metrics.csv"
+        predictions_path = details_dir / "predictions.csv"
+        coefficients_path = details_dir / "model_coefficients.csv"
         metrics_frame = pd.DataFrame(metrics_rows)
         predictions_frame = pd.DataFrame(prediction_rows)
         coefficients_frame = pd.DataFrame(coefficient_rows)
         metrics_frame.to_csv(metrics_path, index=False)
         predictions_frame.to_csv(predictions_path, index=False)
         coefficients_frame.to_csv(coefficients_path, index=False)
-        _write_model_report(metrics_rows, coefficient_rows, args=args)
-        _write_generalization_artifacts(metrics_frame, predictions_frame)
+        generalization = _write_generalization_artifacts(metrics_frame)
         _write_literature_context()
-    _write_summary(include_predictive=bool(metrics_rows), include_zinc=args.command in {"zinc-timing", "benchmark"})
+        review_frame = _build_simple_review_frame(generalization)
+        write_review_rmse_overview(review_frame, RESULTS_DIR / "rmse_train_test_vs_literature.svg")
+    else:
+        generalization = pd.DataFrame()
+        review_frame = pd.DataFrame()
+    timing = _load_timing_results() if args.command in {"zinc-timing", "benchmark"} else pd.DataFrame()
+    if not timing.empty:
+        write_timing_stage_overview(timing, RESULTS_DIR / "timing_overview.svg")
+    _write_results_csv(
+        command=args.command,
+        generated_at=datetime.now().strftime("%Y%m%d_%H%M%S"),
+        review_frame=review_frame,
+        timing=timing,
+    )
     return 0
 
 
@@ -173,366 +191,32 @@ def _extend_with_property_results(
             coefficient_rows.extend(coefficients)
 
 
-def _write_model_report(
-    metrics_rows: list[dict[str, object]],
-    coefficient_rows: list[dict[str, object]],
-    *,
-    args: argparse.Namespace,
-) -> None:
-    ensure_directory(RESULTS_DIR)
-    metrics = pd.DataFrame(metrics_rows)
-    coefficients = pd.DataFrame(coefficient_rows)
-    if metrics.empty or coefficients.empty:
-        return
-
-    sections: list[str] = [
-        "# Fitted Model Report",
-        "",
-        "Predictors are standardized with train-split means and standard deviations only. Coefficients therefore multiply z-scored predictors, while the response stays in its original units.",
-        "",
-        "## Run Configuration",
-        "",
-        f"- command: `{args.command}`",
-        f"- methods: `{args.methods}`",
-        f"- models: `{args.models}`",
-        f"- sample chains: `{args.sample_chains}`",
-        f"- sample warmup: `{args.sample_warmup}`",
-        f"- sample draws: `{args.sample_draws}`",
-        f"- approximation draws: `{args.approximation_draws}`",
-        f"- variational iterations: `{args.variational_iterations}`",
-        f"- optimize iterations: `{args.optimize_iterations}`",
-        f"- pathfinder paths: `{args.pathfinder_paths}`",
-        f"- predictive draws: `{args.predictive_draws}`",
-        "",
-    ]
-
-    grouped_metrics = metrics.groupby(["dataset", "representation", "model", "method"], sort=True)
-    for (dataset, representation, model, method), run_metrics in grouped_metrics:
-        coeff_subset = coefficients.loc[
-            (coefficients["dataset"] == dataset)
-            & (coefficients["representation"] == representation)
-            & (coefficients["model"] == model)
-            & (coefficients["method"] == method)
-        ].copy()
-        if coeff_subset.empty:
-            continue
-        target = str(coeff_subset["target"].iloc[0])
-        sections.extend(
-            [
-                f"## {dataset} / {representation} / {model} / {method}",
-                "",
-                "### Equation",
-                "",
-                "```text",
-                _equation_text(target=target, model_name=str(model), feature_names=tuple(coeff_subset.loc[coeff_subset["parameter_type"] == "coefficient", "parameter_name"].astype(str))),
-                "```",
-                "",
-            ]
-        )
-        performance_rows = []
-        for split_name in ("train", "valid", "test"):
-            split_metrics = run_metrics.loc[run_metrics["split"] == split_name]
-            if split_metrics.empty:
-                continue
-            row = split_metrics.iloc[0]
-            performance_rows.append(
-                [
-                    row["split"],
-                    row["n_train"],
-                    row["n_eval"],
-                    row["draw_count"],
-                    row["runtime_seconds"],
-                    row["rmse"],
-                    row["mae"],
-                    row["r2"],
-                    row["mean_log_predictive_density"],
-                    row["coverage_90"],
-                ]
-            )
-        if performance_rows:
-            sections.extend(
-                [
-                    "### Predictive Metrics",
-                    "",
-                    render_markdown_table(
-                        headers=["split", "n_train", "n_eval", "draws", "runtime_s", "rmse", "mae", "r2", "mlpd", "coverage_90"],
-                        rows=performance_rows,
-                    ),
-                    "",
-                ]
-            )
-
-        scalar_rows = []
-        scalar_subset = coeff_subset.loc[coeff_subset["parameter_type"].isin(["intercept", "noise_scale", "global_scale"])]
-        for _, row in scalar_subset.iterrows():
-            scalar_rows.append(
-                [
-                    row["parameter_name"],
-                    row["posterior_mean"],
-                    row["posterior_sd"],
-                    row["posterior_median"],
-                    row["posterior_p05"],
-                    row["posterior_p95"],
-                ]
-            )
-        if scalar_rows:
-            sections.extend(
-                [
-                    "### Scalar Parameters",
-                    "",
-                    render_markdown_table(
-                        headers=["parameter", "mean", "sd", "median", "p05", "p95"],
-                        rows=scalar_rows,
-                    ),
-                    "",
-                ]
-            )
-
-        group_scale_rows = []
-        group_scale_subset = coeff_subset.loc[coeff_subset["parameter_type"] == "group_scale"].sort_values("feature_group")
-        for _, row in group_scale_subset.iterrows():
-            group_scale_rows.append(
-                [
-                    row["feature_group"],
-                    row["posterior_mean"],
-                    row["posterior_sd"],
-                    row["posterior_median"],
-                    row["posterior_p05"],
-                    row["posterior_p95"],
-                ]
-            )
-        if group_scale_rows:
-            sections.extend(
-                [
-                    "### Group Scales",
-                    "",
-                    render_markdown_table(
-                        headers=["group", "mean", "sd", "median", "p05", "p95"],
-                        rows=group_scale_rows,
-                    ),
-                    "",
-                ]
-            )
-
-        coefficient_table_rows = []
-        coefficient_subset = coeff_subset.loc[coeff_subset["parameter_type"] == "coefficient"].sort_values(["importance_rank", "parameter_name"])
-        for _, row in coefficient_subset.iterrows():
-            coefficient_table_rows.append(
-                [
-                    row["importance_rank"],
-                    row["parameter_name"],
-                    row["feature_group"],
-                    row["posterior_mean"],
-                    row["posterior_sd"],
-                    row["posterior_median"],
-                    row["posterior_p05"],
-                    row["posterior_p95"],
-                ]
-            )
-        sections.extend(
-            [
-                "### Coefficients",
-                "",
-                render_markdown_table(
-                    headers=["rank", "feature", "group", "mean", "sd", "median", "p05", "p95"],
-                    rows=coefficient_table_rows,
-                ),
-                "",
-            ]
-        )
-    (RESULTS_DIR / "model_report.md").write_text("\n".join(sections), encoding="utf-8")
+def _details_dir() -> Any:
+    return ensure_directory(RESULTS_DIR / "details")
 
 
-def _equation_text(*, target: str, model_name: str, feature_names: tuple[str, ...]) -> str:
-    predictor_terms = "\n  + ".join(f"beta[{feature_name}] * z({feature_name})" for feature_name in feature_names)
-    lines = []
-    if model_name == "bayes_hierarchical_shrinkage":
-        lines.append("beta[k] = beta_raw[k] * global_scale * group_scale[group_id[k]]")
-    lines.append("eta = alpha")
-    if predictor_terms:
-        lines.append(f"  + {predictor_terms}")
-    lines.append(f"{target} ~ StudentT(nu=4.0, eta, sigma)")
-    return "\n".join(lines)
-
-
-def _write_summary(*, include_predictive: bool, include_zinc: bool) -> None:
-    ensure_directory(RESULTS_DIR)
-    sections: list[str] = [
-        "# Benchmark Summary",
-        "",
-        "Local benchmark outputs from this repository are shown first. Literature context is kept separate and marked as partial unless split, subset size, metric, and units line up closely enough for a direct comparison.",
-    ]
-    coefficient_report_path = RESULTS_DIR / "model_report.md"
-    coefficients_csv_path = RESULTS_DIR / "model_coefficients.csv"
-    predictive_metrics_path = RESULTS_DIR / "predictive_metrics.csv"
-    generalization_report_path = RESULTS_DIR / "generalization_report.md"
-    generalization_metrics_path = RESULTS_DIR / "generalization_metrics.csv"
-    split_rmse_graph_path = RESULTS_DIR / "split_rmse_overview.svg"
-    predicted_vs_actual_graph_path = RESULTS_DIR / "predicted_vs_actual_overview.svg"
-    if include_predictive and predictive_metrics_path.exists():
-        metrics = pd.read_csv(predictive_metrics_path)
-        test_rows = metrics.loc[metrics["split"] == "test"].copy()
-        if not test_rows.empty:
-            selected_rows = _select_reviewer_rows(test_rows)
-            sections.extend(
-                [
-                    "",
-                    "## Local Predictive Results",
-                    "",
-                    f"Reviewer-facing selection rule: the lowest test RMSE within each dataset/representation from this run. The full local grid remains in `{display_path(predictive_metrics_path)}`.",
-                    "",
-                ]
-            )
-            sections.append(
-                render_markdown_table(
-                    headers=[
-                        "dataset",
-                        "representation",
-                        "model",
-                        "method",
-                        "rmse",
-                        "mae",
-                        "r2",
-                        "mean_log_predictive_density",
-                        "coverage_90",
-                        "runtime_seconds",
-                    ],
-                    rows=[
-                        [
-                            row["dataset"],
-                            row["representation"],
-                            row["model"],
-                            row["method"],
-                            row["rmse"],
-                            row["mae"],
-                            row["r2"],
-                            row["mean_log_predictive_density"],
-                            row["coverage_90"],
-                            row["runtime_seconds"],
-                        ]
-                        for _, row in selected_rows.iterrows()
-                    ],
-                )
-            )
-            split_notes = _split_note_lines(test_rows)
-            if split_notes:
-                sections.extend(["", *split_notes])
-            literature_rows = _build_literature_context_rows(test_rows)
-            if literature_rows:
-                sections.extend(
-                    [
-                        "",
-                        "## Tiny Literature Context",
-                        "",
-                        f"These rows are context only. Full source links and notes are in `{display_path(RESULTS_DIR / 'literature_context.md')}`.",
-                        "",
-                        render_markdown_table(
-                            headers=["task", "literature_result", "directly_comparable", "note"],
-                            rows=[
-                                [
-                                    row["task"],
-                                    row["literature_result"],
-                                    row["directly_comparable"],
-                                    row["note"],
-                                ]
-                                for row in literature_rows
-                            ],
-                        ),
-                    ]
-                )
-            if generalization_metrics_path.exists():
-                generalization = pd.read_csv(generalization_metrics_path)
-                if not generalization.empty:
-                    sections.extend(
-                        [
-                            "",
-                            "## Train vs Test Overview",
-                            "",
-                            f"Positive `test_minus_train_rmse` values mean the held-out error is worse than the training error. Full detail: `{display_path(generalization_report_path)}` and `{display_path(generalization_metrics_path)}`.",
-                            "",
-                            render_markdown_table(
-                                headers=[
-                                    "dataset",
-                                    "representation",
-                                    "model",
-                                    "method",
-                                    "train_rmse",
-                                    "valid_rmse",
-                                    "test_rmse",
-                                    "test_minus_train_rmse",
-                                    "train_mae",
-                                    "test_mae",
-                                    "train_r2",
-                                    "test_r2",
-                                ],
-                                rows=[
-                                    [
-                                        row["dataset"],
-                                        row["representation"],
-                                        row["model"],
-                                        row["method"],
-                                        row["train_rmse"],
-                                        row["valid_rmse"],
-                                        row["test_rmse"],
-                                        row["test_minus_train_rmse"],
-                                        row["train_mae"],
-                                        row["test_mae"],
-                                        row["train_r2"],
-                                        row["test_r2"],
-                                    ]
-                                    for _, row in generalization.iterrows()
-                                ],
-                            ),
-                        ]
-                    )
-                    if split_rmse_graph_path.exists():
-                        sections.extend(["", "![Split RMSE overview](split_rmse_overview.svg)"])
-                    if predicted_vs_actual_graph_path.exists():
-                        sections.extend(["", "![Predicted versus actual overview](predicted_vs_actual_overview.svg)"])
-    zinc_timing_path = RESULTS_DIR / "zinc_timing.csv"
-    if include_zinc and zinc_timing_path.exists():
-        timing = pd.read_csv(zinc_timing_path)
-        sections.extend(["", "## Local ZINC Timing", ""])
-        sections.append(
-            render_markdown_table(
-                headers=[
-                    "stage",
-                    "molecule_count",
-                    "success_count",
-                    "failure_count",
-                    "total_runtime_seconds",
-                    "molecules_per_second",
-                    "median_latency_us",
-                    "p95_latency_us",
-                    "peak_rss_mb",
-                ],
-                rows=[
-                    [
-                        row["stage"],
-                        row["molecule_count"],
-                        row["success_count"],
-                        row["failure_count"],
-                        row["total_runtime_seconds"],
-                        row["molecules_per_second"],
-                        row["median_latency_us"],
-                        row["p95_latency_us"],
-                        row["peak_rss_mb"],
-                    ]
-                    for _, row in timing.iterrows()
-                ],
-            )
-        )
-    if include_predictive and (coefficient_report_path.exists() or coefficients_csv_path.exists()):
-        sections.extend(
-            [
-                "",
-                "## Fitted Model Outputs",
-                "",
-                f"- `{display_path(coefficient_report_path)}` contains the fitted equations, predictive metrics, and posterior summaries.",
-                f"- `{display_path(coefficients_csv_path)}` contains the full posterior summary table for coefficients and scales.",
-            ]
-        )
-    (RESULTS_DIR / "summary.md").write_text("\n".join(sections) + "\n", encoding="utf-8")
+def _remove_legacy_report_artifacts() -> None:
+    legacy_files = (
+        "summary.md",
+        "model_report.md",
+        "generalization_report.md",
+        "literature_context.md",
+        "zinc_timing.md",
+        "predictive_metrics.csv",
+        "predictions.csv",
+        "model_coefficients.csv",
+        "generalization_metrics.csv",
+        "zinc_timing.csv",
+        "split_rmse_overview.svg",
+        "predicted_vs_actual_overview.svg",
+    )
+    for name in legacy_files:
+        path = RESULTS_DIR / name
+        if path.exists():
+            path.unlink()
+    for path in RESULTS_DIR.iterdir() if RESULTS_DIR.exists() else ():
+        if path.is_dir() and (path.name == "stan_output" or path.name.startswith("review_")):
+            shutil.rmtree(path, ignore_errors=True)
 
 
 def _select_reviewer_rows(test_rows: pd.DataFrame) -> pd.DataFrame:
@@ -540,22 +224,6 @@ def _select_reviewer_rows(test_rows: pd.DataFrame) -> pd.DataFrame:
     return ranked.groupby(["dataset", "representation"], sort=True, as_index=False).head(1)
 
 
-def _split_note_lines(test_rows: pd.DataFrame) -> list[str]:
-    notes: list[str] = []
-    for dataset in ("freesolv", "qm9"):
-        dataset_rows = test_rows.loc[test_rows["dataset"] == dataset]
-        if dataset_rows.empty:
-            continue
-        reference = dataset_rows.sort_values(["n_train", "n_eval", "representation", "model", "method"]).iloc[0]
-        if dataset == "freesolv":
-            notes.append(
-                f"- FreeSolv local split in this run: {int(reference['n_train'])} train / {int(reference['n_eval'])} test molecules."
-            )
-        elif dataset == "qm9":
-            notes.append(
-                f"- QM9 local split in this run: {int(reference['n_train'])} train / {int(reference['n_eval'])} test molecules from the repo's benchmark subset."
-            )
-    return notes
 
 
 def _best_test_row(test_rows: pd.DataFrame, *, dataset: str, metric: str) -> dict[str, Any] | None:
@@ -651,7 +319,7 @@ def _build_literature_context_rows(test_rows: pd.DataFrame) -> list[dict[str, st
                     f"MAE {float(qm9['mae']):.4f}, RMSE {float(qm9['rmse']):.4f} "
                     f"({qm9['representation']}, {qm9['model']}, {qm9['method']}, test)"
                 ),
-                "literature_result": "Error ratio 0.20 for mu (enn-s2s-ens5, Gilmer Table 2), equivalent to about 0.020 Debye MAE using the paper's 0.1 Debye chemical-accuracy table",
+                "literature_result": "Error ratio 0.30 for mu (Gilmer supplementary Table 2 at N=110k), equivalent to about 0.030 Debye MAE using the paper's 0.1 Debye chemical-accuracy table",
                 "metric": "MAE (paper reports MAE-to-chemical-accuracy ratio)",
                 "directly_comparable": "partial",
                 "note": "Gilmer et al. use the full QM9 split with 110462 train / 10000 validation / 10000 test molecules and a 3D MPNN. This repo run uses a deterministic 2000-molecule subset and reports descriptor-based Bayesian baselines.",
@@ -661,113 +329,172 @@ def _build_literature_context_rows(test_rows: pd.DataFrame) -> list[dict[str, st
     return rows
 
 
-def _write_generalization_artifacts(metrics: pd.DataFrame, predictions: pd.DataFrame) -> None:
-    if metrics.empty or predictions.empty:
-        return
+def _write_generalization_artifacts(metrics: pd.DataFrame) -> pd.DataFrame:
+    if metrics.empty:
+        return pd.DataFrame()
     generalization = _build_generalization_frame(metrics)
     if generalization.empty:
-        return
-    generalization_metrics_path = RESULTS_DIR / "generalization_metrics.csv"
-    generalization_report_path = RESULTS_DIR / "generalization_report.md"
-    split_rmse_graph_path = RESULTS_DIR / "split_rmse_overview.svg"
-    predicted_vs_actual_graph_path = RESULTS_DIR / "predicted_vs_actual_overview.svg"
+        return pd.DataFrame()
+    generalization_metrics_path = _details_dir() / "generalization_metrics.csv"
     generalization.to_csv(generalization_metrics_path, index=False)
-
-    key_frame = generalization.loc[:, ["dataset", "representation", "model", "method"]].drop_duplicates()
-    selected_metrics = metrics.merge(key_frame, on=["dataset", "representation", "model", "method"], how="inner")
-    selected_predictions = predictions.merge(key_frame, on=["dataset", "representation", "model", "method"], how="inner")
-    write_split_rmse_overview(selected_metrics, split_rmse_graph_path)
-    write_predicted_vs_actual_overview(selected_predictions, predicted_vs_actual_graph_path)
-
-    sections = [
-        "# Train vs Test Overview",
-        "",
-        "These rows follow the same reviewer-facing selection rule as `summary.md`: the lowest test RMSE within each dataset/representation from this run.",
-        "",
-        f"- numeric table: `{display_path(generalization_metrics_path)}`",
-        f"- RMSE graph: `{split_rmse_graph_path.name}`",
-        f"- predicted-vs-actual graph: `{predicted_vs_actual_graph_path.name}`",
-        "",
-        render_markdown_table(
-            headers=[
-                "dataset",
-                "representation",
-                "model",
-                "method",
-                "train_rmse",
-                "valid_rmse",
-                "test_rmse",
-                "test_minus_train_rmse",
-                "train_mae",
-                "test_mae",
-                "train_r2",
-                "test_r2",
-                "fit_runtime_seconds",
-            ],
-            rows=[
-                [
-                    row["dataset"],
-                    row["representation"],
-                    row["model"],
-                    row["method"],
-                    row["train_rmse"],
-                    row["valid_rmse"],
-                    row["test_rmse"],
-                    row["test_minus_train_rmse"],
-                    row["train_mae"],
-                    row["test_mae"],
-                    row["train_r2"],
-                    row["test_r2"],
-                    row["fit_runtime_seconds"],
-                ]
-                for _, row in generalization.iterrows()
-            ],
-        ),
-        "",
-        "## Graphs",
-        "",
-        "![Split RMSE overview](split_rmse_overview.svg)",
-        "",
-        "![Predicted versus actual overview](predicted_vs_actual_overview.svg)",
-        "",
-    ]
-    generalization_report_path.write_text("\n".join(sections), encoding="utf-8")
+    return generalization
 
 
-def _write_literature_context() -> None:
-    predictive_metrics_path = RESULTS_DIR / "predictive_metrics.csv"
+def _write_literature_context() -> pd.DataFrame:
+    predictive_metrics_path = _details_dir() / "predictive_metrics.csv"
     if not predictive_metrics_path.exists():
-        return
+        return pd.DataFrame()
     metrics = pd.read_csv(predictive_metrics_path)
     test_rows = metrics.loc[metrics["split"] == "test"].copy()
     if test_rows.empty:
-        return
+        return pd.DataFrame()
     literature_rows = _build_literature_context_rows(test_rows)
     if not literature_rows:
-        return
-    sections = [
-        "# Literature Context",
-        "",
-        "This file keeps literature context separate from the local repo outputs. A row is only directly comparable when split, subset size, metric, and units align closely enough; otherwise it is marked as partial context.",
-        "",
-        render_markdown_table(
-            headers=["task", "local_result", "literature_result", "metric", "directly_comparable", "note", "source"],
-            rows=[
-                [
-                    row["task"],
-                    row["local_result"],
-                    row["literature_result"],
-                    row["metric"],
-                    row["directly_comparable"],
-                    row["note"],
-                    row["source"],
-                ]
-                for row in literature_rows
-            ],
-        ),
-        "",
-    ]
-    (RESULTS_DIR / "literature_context.md").write_text("\n".join(sections), encoding="utf-8")
+        return pd.DataFrame()
+    frame = pd.DataFrame(literature_rows)
+    frame.to_csv(_details_dir() / "literature_context.csv", index=False)
+    return frame
+
+
+def _build_simple_review_frame(generalization: pd.DataFrame) -> pd.DataFrame:
+    rows: list[dict[str, object]] = []
+    for _, row in generalization.iterrows():
+        dataset = str(row["dataset"])
+        representation = str(row["representation"])
+        if dataset == "freesolv":
+            literature_display = "MoleculeNet MPNN RMSE 1.15"
+            literature_rmse = 1.15
+            literature_metric = "RMSE"
+            note = "Partial context only: MoleculeNet uses its own random split; this repo uses the local deterministic split."
+            source = MOLECULENET_SOURCE_URL
+        elif dataset == "qm9":
+            literature_display = "Gilmer supplementary Table 2: mu ratio 0.30 at N=110k (about 0.030 Debye MAE)"
+            literature_rmse = None
+            literature_metric = "MAE ratio"
+            note = "Partial context only: the paper reports a different metric and a much larger QM9 split."
+            source = f"{GILMER_SOURCE_URL} ; {GILMER_SUPPLEMENT_URL}"
+        else:
+            literature_display = "No external context attached"
+            literature_rmse = None
+            literature_metric = ""
+            note = "Local result only."
+            source = ""
+        rows.append(
+            {
+                "task": f"{dataset} / {representation}",
+                "dataset": dataset,
+                "representation": representation,
+                "model": str(row["model"]),
+                "method": str(row["method"]),
+                "train_rmse": float(row["train_rmse"]),
+                "test_rmse": float(row["test_rmse"]),
+                "test_minus_train_rmse": float(row["test_minus_train_rmse"]),
+                "train_mae": float(row.get("train_mae", float("nan"))),
+                "test_mae": float(row.get("test_mae", float("nan"))),
+                "train_r2": float(row.get("train_r2", float("nan"))),
+                "test_r2": float(row.get("test_r2", float("nan"))),
+                "fit_runtime_seconds": float(row.get("fit_runtime_seconds", float("nan"))),
+                "literature_display": literature_display,
+                "literature_rmse": literature_rmse,
+                "literature_metric": literature_metric,
+                "directly_comparable": "partial",
+                "note": note,
+                "source": source,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _load_timing_results() -> pd.DataFrame:
+    timing_path = _details_dir() / "zinc_timing.csv"
+    if not timing_path.exists():
+        return pd.DataFrame()
+    return pd.read_csv(timing_path)
+
+
+def _write_results_csv(
+    *,
+    command: str,
+    generated_at: str,
+    review_frame: pd.DataFrame,
+    timing: pd.DataFrame,
+) -> None:
+    rows: list[dict[str, object]] = []
+    for _, row in review_frame.iterrows():
+        rows.append(
+            {
+                "generated_at": generated_at,
+                "command": command,
+                "row_type": "predictive_summary",
+                "task": row["task"],
+                "dataset": row["dataset"],
+                "representation": row["representation"],
+                "model": row["model"],
+                "method": row["method"],
+                "train_rmse": row["train_rmse"],
+                "test_rmse": row["test_rmse"],
+                "test_minus_train_rmse": row["test_minus_train_rmse"],
+                "train_mae": row["train_mae"],
+                "test_mae": row["test_mae"],
+                "train_r2": row["train_r2"],
+                "test_r2": row["test_r2"],
+                "fit_runtime_seconds": row["fit_runtime_seconds"],
+                "literature_context": row["literature_display"],
+                "literature_rmse": row["literature_rmse"],
+                "literature_metric": row["literature_metric"],
+                "directly_comparable": row["directly_comparable"],
+                "note": row["note"],
+                "source": row["source"],
+                "stage": "",
+                "molecule_count": pd.NA,
+                "success_count": pd.NA,
+                "failure_count": pd.NA,
+                "total_runtime_seconds": pd.NA,
+                "molecules_per_second": pd.NA,
+                "median_latency_us": pd.NA,
+                "p95_latency_us": pd.NA,
+                "peak_rss_mb": pd.NA,
+            }
+        )
+    for _, row in timing.iterrows():
+        rows.append(
+            {
+                "generated_at": generated_at,
+                "command": command,
+                "row_type": "timing_stage",
+                "task": "",
+                "dataset": "",
+                "representation": "",
+                "model": "",
+                "method": "",
+                "train_rmse": pd.NA,
+                "test_rmse": pd.NA,
+                "test_minus_train_rmse": pd.NA,
+                "train_mae": pd.NA,
+                "test_mae": pd.NA,
+                "train_r2": pd.NA,
+                "test_r2": pd.NA,
+                "fit_runtime_seconds": pd.NA,
+                "literature_context": "",
+                "literature_rmse": pd.NA,
+                "literature_metric": "",
+                "directly_comparable": "",
+                "note": "",
+                "source": "",
+                "stage": row["stage"],
+                "molecule_count": row["molecule_count"],
+                "success_count": row["success_count"],
+                "failure_count": row["failure_count"],
+                "total_runtime_seconds": row["total_runtime_seconds"],
+                "molecules_per_second": row["molecules_per_second"],
+                "median_latency_us": row["median_latency_us"],
+                "p95_latency_us": row["p95_latency_us"],
+                "peak_rss_mb": row["peak_rss_mb"],
+            }
+        )
+    frame = pd.DataFrame(rows)
+    ensure_directory(RESULTS_DIR)
+    frame.to_csv(RESULTS_DIR / "results.csv", index=False)
 
 
 if __name__ == "__main__":

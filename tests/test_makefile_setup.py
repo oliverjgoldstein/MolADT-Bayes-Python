@@ -66,6 +66,43 @@ def test_makefile_benchmark_defaults_to_verbose_output(tmp_path: Path) -> None:
     assert "--verbose" in result.stdout
 
 
+def test_makefile_benchmark_defaults_to_timestamped_results_directory(tmp_path: Path) -> None:
+    _copy_makefile(tmp_path)
+    _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
+
+    result = subprocess.run(
+        ["make", "-C", str(tmp_path), "-n", "benchmark", "SYSTEM_PYTHON=python3", "RUN_TIMESTAMP=20260330_170000"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "MOLADT_RESULTS_DIR=results/run_20260330_170000" in result.stdout
+
+
+def test_makefile_paper_benchmark_uses_timestamped_paper_subdirectory(tmp_path: Path) -> None:
+    _copy_makefile(tmp_path)
+    _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
+
+    result = subprocess.run(
+        [
+            "make",
+            "-C",
+            str(tmp_path),
+            "-n",
+            "benchmark",
+            "SYSTEM_PYTHON=python3",
+            "INFERENCE_PRESET=paper",
+            "RUN_TIMESTAMP=20260330_170000",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "MOLADT_RESULTS_DIR=results/paper/run_20260330_170000" in result.stdout
+
+
 def test_makefile_benchmark_uses_xcrun_toolchain_on_darwin(tmp_path: Path) -> None:
     _copy_makefile(tmp_path)
     _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")

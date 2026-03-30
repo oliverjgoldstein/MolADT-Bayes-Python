@@ -89,7 +89,7 @@ def run_model_suite(
     if model_name not in MODEL_FILES:
         raise ValueError(f"Unknown model {model_name}")
     ensure_cmdstan_ready()
-    output_dir = ensure_directory(RESULTS_DIR / "stan_output" / bundle.dataset_name / bundle.representation / model_name)
+    output_dir = ensure_directory(RESULTS_DIR / "details" / "stan_output" / bundle.dataset_name / bundle.representation / model_name)
     data = build_stan_data(bundle, student_df=config.student_df)
     with cmdstan_build_environment(verbose=config.verbose):
         model = cmdstanpy.CmdStanModel(stan_file=str(MODEL_FILES[model_name]))

@@ -26,6 +26,7 @@ BENCHMARK_VERBOSE ?= 1
 EXAMPLE ?= ferrocene
 MODELS ?= bayes_linear_student_t,bayes_hierarchical_shrinkage
 RESULTS_SUBDIR ?=
+RUN_TIMESTAMP ?= $(shell date +%Y%m%d_%H%M%S)
 
 ifeq ($(INFERENCE_PRESET),quick)
 METHODS_DEFAULT := sample,pathfinder,optimize
@@ -64,14 +65,15 @@ endif
 
 ifeq ($(INFERENCE_PRESET),paper)
 ifeq ($(strip $(RESULTS_SUBDIR)),)
-RESULTS_SUBDIR := paper
+RESULTS_SUBDIR := paper/run_$(RUN_TIMESTAMP)
 endif
+else ifeq ($(strip $(RESULTS_SUBDIR)),)
+RESULTS_SUBDIR := run_$(RUN_TIMESTAMP)
 endif
 
 RESULTS_ROOT := $(if $(RESULTS_SUBDIR),results/$(RESULTS_SUBDIR),results)
 RESULTS_ENV := MOLADT_RESULTS_DIR=$(RESULTS_ROOT)
 BENCHMARK_LOG ?= $(RESULTS_ROOT)/benchmark.out
-BENCHMARK_PID ?= $(RESULTS_ROOT)/benchmark.pid
 
 METHODS ?= $(METHODS_DEFAULT)
 SAMPLE_CHAINS ?= $(SAMPLE_CHAINS_DEFAULT)
@@ -326,6 +328,6 @@ benchmark-bg:
 	@printf "%s\n" \
 	"Running benchmark in the foreground." \
 	"  output is mirrored to: $(BENCHMARK_LOG)" \
-	"  report: $(RESULTS_ROOT)/model_report.md" \
-	"  coefficients: $(RESULTS_ROOT)/model_coefficients.csv"
+	"  summary csv: $(RESULTS_ROOT)/results.csv" \
+	"  details dir: $(RESULTS_ROOT)/details/"
 	@$(BASH) -o pipefail -c '$(MAKE) --no-print-directory benchmark 2>&1 | tee "$(BENCHMARK_LOG)"'

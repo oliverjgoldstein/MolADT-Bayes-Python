@@ -162,15 +162,3 @@ def write_failure_csv(path: Path, failures: Iterable[FailureRecord]) -> Path:
     ensure_directory(path.parent)
     frame.to_csv(path, index=False)
     return path
-
-
-def render_markdown_table(headers: Sequence[str], rows: Sequence[Sequence[Any]]) -> str:
-    def stringify(value: Any) -> str:
-        if isinstance(value, float):
-            return f"{value:.4f}"
-        return str(value)
-
-    line_header = "| " + " | ".join(headers) + " |"
-    line_rule = "| " + " | ".join("---" for _ in headers) + " |"
-    line_rows = ["| " + " | ".join(stringify(value) for value in row) + " |" for row in rows]
-    return "\n".join([line_header, line_rule, *line_rows])

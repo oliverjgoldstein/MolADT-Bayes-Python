@@ -40,7 +40,8 @@ make python-cmdstan-install
 make benchmark INFERENCE_PRESET=paper INCLUDE_MOLADT=1
 ```
 
-That is the full hours-long run. It includes MolADT timing, streams live benchmark output, and writes the long-run artifacts under `results/paper/`.
+That is the full hours-long run. It includes MolADT timing, streams live benchmark output, and writes the long-run artifacts under `results/paper/run_<timestamp>/`.
+Each run now lands in its own timestamped folder with a top-level `results.csv`, `rmse_train_test_vs_literature.svg`, `timing_overview.svg`, and a `details/` subfolder for the raw CSVs and Stan output.
 
 Model details: [jump to Model](#model).
 

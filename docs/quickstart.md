@@ -105,7 +105,7 @@ Use these checks when something looks wrong:
 - Missing CmdStan:
   `scripts.run_all` will fail before fitting Stan models; run `make python-cmdstan-install` or point CmdStanPy at an existing install.
 - Benchmark outputs not where you expect:
-  default runs write to `results/`; `INFERENCE_PRESET=paper` writes to `results/paper/`; `MOLADT_RESULTS_DIR` overrides the root entirely.
+  default runs now write to `results/run_<timestamp>/`; `INFERENCE_PRESET=paper` writes to `results/paper/run_<timestamp>/`; `MOLADT_RESULTS_DIR` overrides the root entirely. Each run keeps the top level small with `results.csv`, `rmse_train_test_vs_literature.svg`, `timing_overview.svg`, and a `details/` folder.
 - Unsupported SMILES:
   the parser and renderer only support the conservative subset documented in [SMILES scope and validation](smiles-scope-and-validation.md).
 

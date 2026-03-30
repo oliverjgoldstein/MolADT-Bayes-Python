@@ -21,7 +21,7 @@ The timing story lives in the ZINC benchmark:
 
 ## Model
 
-The predictive benchmark fits the Stan models, writes `results/`, and exports aligned matrices under `data/processed/` for the Haskell repo.
+The predictive benchmark fits the Stan models, writes a timestamped results bundle with one top-level `results.csv` plus two SVG graphs, and exports aligned matrices under `data/processed/` for the Haskell repo.
 
 Core model files:
 

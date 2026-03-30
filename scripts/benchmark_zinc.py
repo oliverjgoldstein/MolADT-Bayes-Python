@@ -14,7 +14,7 @@ from rdkit import Chem
 
 from moladt.io.smiles import molecule_to_smiles, parse_smiles
 
-from .common import RESULTS_DIR, display_path, ensure_directory, log, render_markdown_table
+from .common import RESULTS_DIR, display_path, ensure_directory, log
 from .download_data import download_zinc
 
 
@@ -91,40 +91,12 @@ def run_zinc_benchmark(
         stages.append(moladt_stage)
         if verbose:
             _log_stage_result(moladt_stage)
-    ensure_directory(RESULTS_DIR)
+    details_dir = ensure_directory(RESULTS_DIR / "details")
     results_frame = pd.DataFrame([stage.to_dict() for stage in stages])
-    results_csv = RESULTS_DIR / "zinc_timing.csv"
+    results_csv = details_dir / "zinc_timing.csv"
     results_frame.to_csv(results_csv, index=False)
-    markdown = render_markdown_table(
-        headers=[
-            "stage",
-            "molecule_count",
-            "success_count",
-            "failure_count",
-            "total_runtime_seconds",
-            "molecules_per_second",
-            "median_latency_us",
-            "p95_latency_us",
-            "peak_rss_mb",
-        ],
-        rows=[
-            [
-                stage.stage,
-                stage.molecule_count,
-                stage.success_count,
-                stage.failure_count,
-                stage.total_runtime_seconds,
-                stage.molecules_per_second,
-                stage.median_latency_us,
-                stage.p95_latency_us,
-                stage.peak_rss_mb,
-            ]
-            for stage in stages
-        ],
-    )
-    (RESULTS_DIR / "zinc_timing.md").write_text("# ZINC Timing\n\n" + markdown + "\n", encoding="utf-8")
     if verbose:
-        log(f"Wrote ZINC timing artifacts to {display_path(results_csv)} and {display_path(RESULTS_DIR / 'zinc_timing.md')}")
+        log(f"Wrote ZINC timing CSV to {display_path(results_csv)}")
     return stages
 
 
