@@ -1,27 +1,50 @@
 # MolADT-Bayes-Python
 
-`MolADT-Bayes-Python` is the Python implementation of the MolADT chemistry model and the main benchmark producer for this project. It contains the typed MolADT core, conservative SDF/SMILES I/O, built-in manuscript examples, the CmdStanPy benchmark pipeline, and the aligned `data/processed/` exports consumed by the Haskell baseline.
+`MolADT-Bayes-Python` is the main benchmark repo for MolADT. It brings together the molecule representation, explicit orbital data, timing benchmark, Stan models, and the aligned train/valid/test exports used by the Haskell baseline.
 
-This repo is for readers who want to inspect the Python model, run the CLI on small molecules, generate benchmark outputs under `results/`, or export aligned train/valid/test matrices for the sibling Haskell repo.
+## Molecule Representation
 
-## Start Here
+MolADT represents a molecule as atoms, localized sigma bonds, and Dietz-style bonding systems. Classical molecules fit cleanly. Non-classical examples such as diborane and ferrocene still fit the core representation even when they are outside the current SMILES renderer.
+
+## Orbitals
+
+Atoms keep explicit shell and orbital information. The pretty-printer exposes that directly, so the representation is not just a graph with labels.
+
+## Timing
+
+The ZINC benchmark measures:
+
+- raw file read
+- SMILES parse and sanitize
+- SMILES canonicalization
+- optional MolADT parse and render
+
+## Model
+
+The predictive benchmark fits two Stan models:
+
+- `bayes_linear_student_t`
+- `bayes_hierarchical_shrinkage`
+
+The Python repo also writes aligned `data/processed/` exports. `X_train`, `X_valid`, and `X_test` are standardized from the training split only. `y` stays on the original scale.
+
+## Run Everything
 
 ```bash
 make python-setup
 make python-cmdstan-install
-./.venv/bin/python -m moladt.cli parse molecules/benzene.sdf
-./.venv/bin/python -m scripts.run_all smoke-test --methods optimize --models bayes_linear_student_t
+make benchmark INFERENCE_PRESET=paper INCLUDE_MOLADT=1
 ```
+
+That is the full hours-long run. It includes MolADT timing and writes the long-run artifacts under `results/paper/`.
 
 ## Docs
 
 - [Docs index](docs/README.md)
-- [Quickstart](docs/quickstart.md)
+- [Inference and benchmarks](docs/inference-and-benchmarks.md)
 - [Examples](docs/examples.md)
 - [CLI](docs/cli.md)
-- [Inference and benchmarks](docs/inference-and-benchmarks.md)
 - [SMILES scope and validation](docs/smiles-scope-and-validation.md)
-- [Repo map](docs/repo-map.md)
 - [Haskell interop](docs/haskell_interop.md)
 
 ## Sibling Repo

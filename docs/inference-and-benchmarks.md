@@ -1,141 +1,59 @@
 # Inference and Benchmarks
 
-The Python repo owns the main empirical benchmark pipeline. It prepares aligned datasets, exports standardized train/valid/test matrices to `data/processed/`, fits Stan models, writes reviewer-facing summaries under `results/`, and optionally runs the ZINC timing comparison with MolADT included.
+This repo owns the main benchmark run. It prepares the datasets, exports aligned matrices, fits the Stan models, writes the reports, and runs the timing pass.
 
-## Main Entrypoints
-
-```bash
-make benchmark
-make benchmark-bg
-./.venv/bin/python -m scripts.run_all --help
-```
-
-`make benchmark-bg` currently runs in the foreground and mirrors live output to `results/benchmark.out` or the active results directory.
-
-## `scripts.run_all` Subcommands
-
-### `smoke-test`
+## The One Big Command
 
 ```bash
-./.venv/bin/python -m scripts.run_all smoke-test
+make benchmark INFERENCE_PRESET=paper INCLUDE_MOLADT=1
 ```
 
-Runs the FreeSolv smoke benchmark. By default it prepares the SMILES export and also the aligned SDF export unless `--skip-sdf` is passed.
+This is the full run:
 
-### `qm9`
+- FreeSolv predictive benchmark
+- QM9 dipole benchmark for `mu`
+- ZINC timing benchmark
+- MolADT timing included
+- paper-scale inference budget
+- results written under `results/paper/`
 
-```bash
-./.venv/bin/python -m scripts.run_all qm9
-```
+It is the hours-long benchmark command.
 
-Runs the QM9 dipole benchmark for target `mu`. The current default deterministic subset size is `2000` rows.
+## Timing
 
-### `zinc-timing`
+The ZINC timing benchmark measures:
 
-```bash
-./.venv/bin/python -m scripts.run_all zinc-timing
-./.venv/bin/python -m scripts.run_all zinc-timing --include-moladt
-```
+- `raw_file_read`
+- `smiles_parse_sanitize`
+- `smiles_canonicalization`
+- `moladt_parse_render` when `--include-moladt` or `INCLUDE_MOLADT=1` is used
 
-Runs the ZINC SMILES timing benchmark. Current defaults from the code are:
+Current defaults from the code:
 
 - dataset size: `250K`
 - dataset dimension: `2D`
-- limit: no explicit row cap unless `--limit` is passed
-- stages always included: `raw_file_read`, `smiles_parse_sanitize`, `smiles_canonicalization`
-- MolADT stage: `moladt_parse_render` only when `--include-moladt` is passed
-
-The default path does not include MolADT timing unless you request it explicitly.
-
-### `benchmark`
-
-```bash
-./.venv/bin/python -m scripts.run_all benchmark
-./.venv/bin/python -m scripts.run_all benchmark --include-moladt
-```
-
-Runs FreeSolv, QM9, and ZINC in order. Current defaults from the code are:
-
-- methods: `sample,variational,pathfinder,optimize,laplace`
-- models: `bayes_linear_student_t,bayes_hierarchical_shrinkage`
 - QM9 limit: `2000`
-- ZINC dataset size: `250K`
-- ZINC dataset dimension: `2D`
-- ZINC limit: unset
-- MolADT timing: off unless `--include-moladt` is passed
+- inference methods: `sample,variational,pathfinder,optimize,laplace`
+- models: `bayes_linear_student_t,bayes_hierarchical_shrinkage`
 
-`make benchmark` currently maps to this subcommand without `--include-moladt`. If you want `moladt_parse_render` in `results/zinc_timing.csv`, run:
+## Model
 
-```bash
-./.venv/bin/python -m scripts.run_all benchmark --include-moladt
-```
-
-## Important Options
-
-### `--methods`
-
-Comma-separated inference methods to run for each selected model. The current set is:
-
-- `sample`
-- `variational`
-- `pathfinder`
-- `optimize`
-- `laplace`
-
-Example:
-
-```bash
-./.venv/bin/python -m scripts.run_all smoke-test --methods optimize,pathfinder
-```
-
-### `--models`
-
-Comma-separated Stan models to run. Current defaults:
+The predictive benchmark fits:
 
 - `bayes_linear_student_t`
 - `bayes_hierarchical_shrinkage`
 
-Example:
+The Python side also exports the aligned matrices used by the Haskell baseline:
 
-```bash
-./.venv/bin/python -m scripts.run_all qm9 --models bayes_linear_student_t
-```
+- `*_X_train.csv`, `*_X_valid.csv`, `*_X_test.csv`
+- `*_y_train.csv`, `*_y_valid.csv`, `*_y_test.csv`
+- `*_metadata.json`
 
-### `--include-moladt`
-
-Relevant to `zinc-timing` and `benchmark`. It adds the `moladt_parse_render` timing stage. Without it, the benchmark stops after RDKit file read, parse/sanitize, and canonicalization stages.
-
-### `--qm9-limit`
-
-Used by `benchmark` to choose the QM9 subset size. The current default is `2000`.
-
-### `--zinc-dataset-size`
-
-Used by `benchmark` and `zinc-timing`. The current default is `250K`.
-
-### `--zinc-dataset-dimension`
-
-Used by `benchmark` and `zinc-timing`. The current default is `2D`.
-
-### `--zinc-limit`
-
-Optional row cap for the ZINC pass. If omitted, the timing run uses the full selected dataset file.
-
-## What `make benchmark` Runs
-
-From the current `Makefile`, the default benchmark helper sets:
-
-- `--qm9-limit 2000`
-- `--zinc-dataset-size 250K`
-- `--zinc-dataset-dimension 2D`
-- `--methods sample,variational,pathfinder,optimize,laplace`
-- `--models bayes_linear_student_t,bayes_hierarchical_shrinkage`
-
-It also injects preset-dependent sampling and optimization budgets. The `Makefile` exposes `INFERENCE_PRESET=quick` and `INFERENCE_PRESET=paper` to change those budgets, the expected runtime, and the output location.
+`X_train`, `X_valid`, and `X_test` use training-split mean and standard deviation only. `y` stays on the original scale.
 
 ## Outputs
 
-The main benchmark outputs go under `results/` by default:
+The main outputs are:
 
 - `results/summary.md`
 - `results/predictive_metrics.csv`
@@ -144,34 +62,22 @@ The main benchmark outputs go under `results/` by default:
 - `results/model_coefficients.csv`
 - `results/zinc_timing.csv`
 - `results/zinc_timing.md`
-
-Current reporting also writes:
-
 - `results/generalization_metrics.csv`
 - `results/generalization_report.md`
 - `results/split_rmse_overview.svg`
 - `results/predicted_vs_actual_overview.svg`
 - `results/literature_context.md`
 
-If `INFERENCE_PRESET=paper` is used through `make`, outputs go under `results/paper/`. If `MOLADT_RESULTS_DIR` is set, that path becomes the results root.
+For the paper-scale make run, outputs go under `results/paper/`.
 
-## Processed Exports for Haskell
+## Other Entrypoints
 
-The Python side is the producer of the aligned benchmark exports used by the Haskell repo. Those files live under `data/processed/` and include:
+```bash
+make benchmark
+make benchmark-bg
+./.venv/bin/python -m scripts.run_all --help
+```
 
-- `*_X_train.csv`, `*_X_valid.csv`, `*_X_test.csv`
-- `*_y_train.csv`, `*_y_valid.csv`, `*_y_test.csv`
-- `*_metadata.json`
-
-The exported predictors are standardized with train-split mean and standard deviation only. The targets stay on their original scale.
+`make benchmark-bg` mirrors live output to the active results log while still running in the foreground.
 
 For the Haskell consumer view, see [Haskell interop](haskell_interop.md).
-
-## Related Files
-
-- [`scripts/run_all.py`](../scripts/run_all.py)
-- [`scripts/benchmark_zinc.py`](../scripts/benchmark_zinc.py)
-- [`scripts/process_freesolv.py`](../scripts/process_freesolv.py)
-- [`scripts/process_qm9.py`](../scripts/process_qm9.py)
-- [`scripts/stan_runner.py`](../scripts/stan_runner.py)
-- [`stan/`](../stan/)
