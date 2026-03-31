@@ -6,6 +6,8 @@ MolADT is intended as a replacement molecular representation for bringing chemin
 
 Setup expects Python 3.11+ and a POSIX shell. On Windows, the documented path is WSL2.
 
+The intended workflow is local to the directory you are in. The default setup creates a repo-local `.venv`, installs CmdStan into repo-local `.cmdstan`, downloads datasets under `data/`, and writes benchmark outputs under `results/`. In normal use, you do not need a global Python environment for this project beyond having a working Python with `venv` support.
+
 ## Molecule Representation
 
 MolADT represents a molecule as atoms, localized sigma bonds, and Dietz-style bonding systems. Classical molecules fit cleanly. Non-classical examples such as diborane and ferrocene still fit the core representation even when they are outside the current SMILES renderer.
@@ -33,7 +35,7 @@ The predictive benchmark fits two Stan models:
 The Python repo also writes aligned `data/processed/` exports. `X_train`, `X_valid`, and `X_test` are standardized from the training split only. `y` stays on the original scale.
 Reported representations are `smiles` and `moladt`: the `moladt` branch is built by parsing structure-backed molecules into the ADT and then extracting ADT-native descriptor features from that object.
 
-By default, `make python-setup` installs the CatBoost tabular stack and the PyTorch Geometric geometry stack needed for `make model`.
+By default, `make python-setup` installs the CatBoost tabular stack and the PyTorch Geometric geometry stack needed for `make model`, and it does so inside the local repo environment.
 
 Scientific framing:
 
@@ -54,6 +56,7 @@ make benchmark-paper
 `make benchmark-paper` runs the paper-sized QM9 split counts `110462 / 10000 / 10000`, uses the paper inference preset, includes MolADT timing, and writes the long-run artifacts under `results/paper/run_<timestamp>/`.
 That QM9 paper-style split uses `130,462` molecules in total: `110,462` train, `10,000` validation, and `10,000` test. It is not `100k` in each split.
 `make model` runs the predictive model suite only, without the ZINC timing pass. It prepares FreeSolv and QM9, runs the configured predictive models, writes the run under `results/models/run_<timestamp>/` or `results/models/paper/run_<timestamp>/`, and then creates per-model folders under `models/` so you can open one model at a time and see its filtered metrics, predictions, and a short explanation of how to read that model against `smiles` and `MolADT`.
+All of those paths are local to this repo directory: `.venv/`, `.cmdstan/`, `data/`, and `results/`.
 By default, `make model` runs the two Stan baselines plus the default extra-model set from the `models` subcommand: `catboost_uncertainty` and `visnet_ensemble`. So the default suite is:
 
 - Stan: `bayes_linear_student_t`
