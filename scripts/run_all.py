@@ -13,6 +13,7 @@ from .benchmark_zinc import run_zinc_benchmark
 from .common import DEFAULT_SEED, RESULTS_DIR, display_path, ensure_directory, log
 from .geometry_runner import GeometryRunConfig
 from .literature_baselines import literature_baselines_frame
+from .model_errors import OptionalModelDependencyError
 from .model_registry import GEOMETRIC_MODEL_REGISTRY, TABULAR_MODEL_REGISTRY
 from .process_freesolv import FreeSolvArtifacts, process_freesolv_dataset
 from .process_qm9 import QM9Artifacts, process_qm9_dataset
@@ -20,6 +21,7 @@ from .predictive_metrics import aggregate_seed_metrics, build_calibration_rows
 from .report_graphs import (
     write_calibration_overview,
     write_inference_sweep_overview,
+    write_metric_comparison_overviews,
     write_predicted_vs_actual_overview,
     write_residual_vs_uncertainty_overview,
     write_review_rmse_overview,
@@ -278,6 +280,7 @@ def main(argv: list[str] | None = None) -> int:
         baselines_frame.to_csv(baselines_path, index=False)
         generalization = _write_generalization_artifacts(metrics_frame)
         review_frame = _build_simple_review_frame(generalization, baselines_frame=baselines_frame)
+        metric_comparisons = _build_metric_comparison_frame(metrics_frame, baselines_frame=baselines_frame)
         _write_summary_report(review_frame, timing=_load_timing_results() if args.command in {"zinc-timing", "benchmark"} else pd.DataFrame())
         _write_model_report(
             metrics_frame=metrics_frame,
@@ -299,6 +302,7 @@ def main(argv: list[str] | None = None) -> int:
         write_review_rmse_overview(review_frame, RESULTS_DIR / "rmse_train_test_vs_literature.svg")
         write_inference_sweep_overview(metrics_frame, RESULTS_DIR / "inference_sweep_overview.svg")
         figures_dir = ensure_directory(RESULTS_DIR / "figures")
+        write_metric_comparison_overviews(metric_comparisons, figures_dir / "metric_comparisons")
         selected_predictions = _selected_prediction_rows(predictions_frame, generalization)
         write_predicted_vs_actual_overview(selected_predictions, figures_dir / "predicted_vs_actual_scatter.svg")
         write_residual_vs_uncertainty_overview(selected_predictions, figures_dir / "residual_vs_uncertainty.svg")
@@ -364,25 +368,31 @@ def _extend_with_property_results(
     for model_name in extra_models:
         if model_name in TABULAR_MODEL_REGISTRY:
             runner = TABULAR_MODEL_REGISTRY[model_name].runner
-            for bundle in tabular_exports.values():
-                rows, predictions, artifact_rows = runner(
-                    bundle,
-                    config=CatBoostRunConfig(seeds=extra_seeds, verbose=args.verbose),
-                )
-                metrics_rows.extend(rows)
-                prediction_rows.extend(predictions)
-                model_artifact_rows.extend(artifact_rows)
+            try:
+                for bundle in tabular_exports.values():
+                    rows, predictions, artifact_rows = runner(
+                        bundle,
+                        config=CatBoostRunConfig(seeds=extra_seeds, verbose=args.verbose),
+                    )
+                    metrics_rows.extend(rows)
+                    prediction_rows.extend(predictions)
+                    model_artifact_rows.extend(artifact_rows)
+            except OptionalModelDependencyError as exc:
+                log(f"Skipping optional model `{model_name}`: {exc}")
         elif model_name in GEOMETRIC_MODEL_REGISTRY:
             runner = GEOMETRIC_MODEL_REGISTRY[model_name].runner
-            for bundle in getattr(artifacts, "geometric_exports", {}).values():
-                rows, predictions, training_curves, artifact_manifest = runner(
-                    bundle,
-                    config=GeometryRunConfig(model_name=model_name, seeds=extra_seeds, verbose=args.verbose),
-                )
-                metrics_rows.extend(rows)
-                prediction_rows.extend(predictions)
-                training_curve_rows.extend(training_curves)
-                model_artifact_rows.extend(artifact_manifest)
+            try:
+                for bundle in getattr(artifacts, "geometric_exports", {}).values():
+                    rows, predictions, training_curves, artifact_manifest = runner(
+                        bundle,
+                        config=GeometryRunConfig(model_name=model_name, seeds=extra_seeds, verbose=args.verbose),
+                    )
+                    metrics_rows.extend(rows)
+                    prediction_rows.extend(predictions)
+                    training_curve_rows.extend(training_curves)
+                    model_artifact_rows.extend(artifact_manifest)
+            except OptionalModelDependencyError as exc:
+                log(f"Skipping optional model `{model_name}`: {exc}")
 
 
 def _details_dir() -> Any:
@@ -615,6 +625,138 @@ def _selected_prediction_rows(predictions: pd.DataFrame, generalization: pd.Data
     selected = generalization.loc[:, ["dataset", "representation", "model", "method"]].drop_duplicates()
     merged = predictions.merge(selected, on=["dataset", "representation", "model", "method"], how="inner")
     return merged.loc[merged["split"] == "test"].copy()
+
+
+_METRIC_COMPARISON_SPECS: tuple[dict[str, str], ...] = (
+    {"metric_key": "rmse", "column": "rmse", "label": "Test RMSE", "baseline_metric": "RMSE"},
+    {"metric_key": "mae", "column": "mae", "label": "Test MAE", "baseline_metric": "MAE"},
+    {"metric_key": "r2", "column": "r2", "label": "Test R2", "baseline_metric": ""},
+    {"metric_key": "coverage_90", "column": "coverage_90", "label": "90% Interval Coverage", "baseline_metric": ""},
+)
+_LOCAL_COMPARISON_REPRESENTATIONS = ("smiles", "moladt")
+_LOCAL_MODEL_PREFERENCE = (
+    "catboost_uncertainty",
+    "bayes_hierarchical_shrinkage",
+    "bayes_linear_student_t",
+    "visnet_ensemble",
+    "dimenetpp_ensemble",
+)
+
+
+def _build_metric_comparison_frame(metrics: pd.DataFrame, *, baselines_frame: pd.DataFrame) -> pd.DataFrame:
+    if metrics.empty:
+        return pd.DataFrame()
+    local_rows = _selected_local_comparison_rows(metrics)
+    if local_rows.empty:
+        return pd.DataFrame()
+    rows: list[dict[str, Any]] = []
+    for _, spec in enumerate(_METRIC_COMPARISON_SPECS):
+        metric_key = spec["metric_key"]
+        column = spec["column"]
+        metric_label = spec["label"]
+        baseline_metric = spec["baseline_metric"]
+        for dataset, dataset_frame in local_rows.groupby("dataset", sort=True):
+            if set(dataset_frame["representation"].astype(str)) != set(_LOCAL_COMPARISON_REPRESENTATIONS):
+                continue
+            local_context = str(dataset_frame.iloc[0]["comparison_context"])
+            for representation in _LOCAL_COMPARISON_REPRESENTATIONS:
+                representation_row = dataset_frame.loc[dataset_frame["representation"] == representation]
+                if representation_row.empty or pd.isna(representation_row.iloc[0].get(column, pd.NA)):
+                    continue
+                rows.append(
+                    {
+                        "dataset": str(dataset),
+                        "metric_key": metric_key,
+                        "metric_label": metric_label,
+                        "series_key": representation,
+                        "series_label": representation,
+                        "value": float(representation_row.iloc[0][column]),
+                        "comparison_context": local_context,
+                        "paper_source_title": "",
+                        "paper_note": "",
+                    }
+                )
+            baseline = _select_metric_baseline(baselines_frame, dataset=str(dataset), metric_name=baseline_metric)
+            if baseline is not None:
+                rows.append(
+                    {
+                        "dataset": str(dataset),
+                        "metric_key": metric_key,
+                        "metric_label": metric_label,
+                        "series_key": "paper",
+                        "series_label": str(baseline["model_name"]),
+                        "value": float(baseline["metric_value"]),
+                        "comparison_context": local_context,
+                        "paper_source_title": str(baseline["source_title"]),
+                        "paper_note": str(baseline["note"]),
+                    }
+                )
+    return pd.DataFrame(rows)
+
+
+def _selected_local_comparison_rows(metrics: pd.DataFrame) -> pd.DataFrame:
+    test_rows = metrics.loc[
+        (metrics["split"] == "test") & metrics["representation"].isin(_LOCAL_COMPARISON_REPRESENTATIONS)
+    ].copy()
+    if test_rows.empty:
+        return pd.DataFrame()
+    rows: list[pd.DataFrame] = []
+    for dataset, dataset_frame in test_rows.groupby("dataset", sort=True):
+        shared_rows = _best_shared_local_rows(dataset_frame)
+        if shared_rows.empty:
+            independent_rows = _select_reviewer_rows(dataset_frame).copy()
+            if set(independent_rows["representation"].astype(str)) != set(_LOCAL_COMPARISON_REPRESENTATIONS):
+                continue
+            independent_rows["comparison_context"] = (
+                "Local rows chosen independently because no shared smiles/MolADT model family was present."
+            )
+            rows.append(independent_rows)
+            continue
+        rows.append(shared_rows)
+    if not rows:
+        return pd.DataFrame()
+    return pd.concat(rows, ignore_index=True)
+
+
+def _best_shared_local_rows(test_rows: pd.DataFrame) -> pd.DataFrame:
+    candidates: list[tuple[int, float, float, pd.DataFrame]] = []
+    for (_, _), frame in test_rows.groupby(["model", "method"], sort=False):
+        chosen = (
+            frame.sort_values(["representation", "rmse", "mae", "runtime_seconds"])
+            .groupby("representation", sort=False, as_index=False)
+            .head(1)
+            .copy()
+        )
+        if set(chosen["representation"].astype(str)) != set(_LOCAL_COMPARISON_REPRESENTATIONS):
+            continue
+        model_name = str(chosen.iloc[0]["model"])
+        method_name = str(chosen.iloc[0]["method"])
+        chosen["comparison_context"] = f"Local shared family: {model_name} / {method_name}"
+        candidates.append(
+            (
+                _LOCAL_MODEL_PREFERENCE.index(model_name) if model_name in _LOCAL_MODEL_PREFERENCE else len(_LOCAL_MODEL_PREFERENCE),
+                float(chosen["rmse"].mean()),
+                float(chosen["runtime_seconds"].mean()),
+                chosen,
+            )
+        )
+    if not candidates:
+        return pd.DataFrame()
+    candidates.sort(key=lambda item: (item[0], item[1], item[2]))
+    return candidates[0][3].reset_index(drop=True)
+
+
+def _select_metric_baseline(baselines_frame: pd.DataFrame, *, dataset: str, metric_name: str) -> pd.Series | None:
+    if not metric_name:
+        return None
+    subset = baselines_frame.loc[
+        (baselines_frame["dataset"] == dataset)
+        & (baselines_frame["metric_name"] == metric_name)
+        & baselines_frame["metric_value"].notna()
+    ].copy()
+    if subset.empty:
+        return None
+    return subset.sort_values(["metric_value", "model_name"]).iloc[0]
 
 
 def _load_timing_results() -> pd.DataFrame:
@@ -1105,6 +1247,30 @@ def _write_timing_report(timing: pd.DataFrame) -> None:
             f"- `{row['stage']}`: {row.get('description', '')} "
             f"{float(row['molecules_per_second']):.1f} mol/s with {int(row['failure_count'])} failures."
         )
+    items_path = _details_dir() / "zinc_timing_items.csv"
+    if items_path.exists():
+        lines.append("")
+        lines.append(f"Detailed per-item parse timings: `{display_path(items_path)}`")
+        items = pd.read_csv(items_path)
+        if not items.empty:
+            lines.append("")
+            lines.append("## Slowest Parse Items")
+            lines.append("")
+            for stage_name in ("smiles_library_parse", "moladt_file_parse"):
+                stage_items = items.loc[items["stage"] == stage_name].sort_values("latency_us", ascending=False).head(5)
+                if stage_items.empty:
+                    continue
+                lines.append(f"### {stage_name}")
+                lines.append("")
+                for _, item in stage_items.iterrows():
+                    lines.append(
+                        f"- `{item['mol_id']}` `{item['item_path']}`: "
+                        f"{float(item['latency_us']):.1f} us, success={bool(item['success'])}."
+                    )
+                lines.append("")
+    manifest_path = _details_dir() / "zinc_timing_library_manifest.csv"
+    if manifest_path.exists():
+        lines.append(f"Matched timing-library manifest: `{display_path(manifest_path)}`")
     (RESULTS_DIR / "zinc_timing.md").write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
 

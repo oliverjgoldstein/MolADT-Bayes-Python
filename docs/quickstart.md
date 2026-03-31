@@ -18,7 +18,7 @@ If you prefer direct commands:
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -U pip setuptools wheel
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[dev,ml,geom]"
 ```
 
 Windows users should use WSL2 for the benchmark stack. The Makefile also recognizes Windows-style `.venv/Scripts` layouts when it is run from a POSIX shell, but WSL2 remains the documented Windows path.
@@ -90,6 +90,12 @@ After that works, the default full benchmark entrypoint is:
 
 ```bash
 make benchmark
+```
+
+If you want the timing-only path that builds the local matched ADT/SMILES corpus first, run:
+
+```bash
+make timing
 ```
 
 ## Verify and Troubleshoot

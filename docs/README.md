@@ -17,7 +17,9 @@ The timing story lives in the ZINC benchmark:
 - `raw_file_read`
 - `smiles_parse_sanitize`
 - `smiles_canonicalization`
-- `moladt_parse_render` when MolADT timing is enabled, using RDKit MolBlock -> MolADT parse -> MolADT pretty render
+- `timing_library_prepare` when MolADT timing is enabled
+- `smiles_library_parse` for matched MolADT-compatible SMILES entries
+- `moladt_file_parse` for the local ADT JSON file library
 
 ## Model
 
@@ -33,10 +35,12 @@ Core model files:
 ```bash
 make python-setup
 make python-cmdstan-install
+make timing
 make benchmark-small
 make benchmark-paper
 ```
 
+`make timing` builds the local timing corpus and compares SMILES-entry parsing against MolADT-file parsing.
 `make benchmark-small` is the default 2000-row QM9 subset run.
 `make benchmark-paper` is the paper-sized QM9 count-matched run.
 

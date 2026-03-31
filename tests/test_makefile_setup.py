@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -73,13 +74,13 @@ def test_makefile_benchmark_defaults_to_timestamped_results_directory(tmp_path: 
     _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
 
     result = subprocess.run(
-        ["make", "-C", str(tmp_path), "-n", "benchmark", "SYSTEM_PYTHON=python3", "RUN_TIMESTAMP=20260330_170000"],
+        ["make", "-C", str(tmp_path), "-n", "benchmark", "SYSTEM_PYTHON=python3"],
         capture_output=True,
         text=True,
         check=True,
     )
 
-    assert "MOLADT_RESULTS_DIR=results/run_20260330_170000" in result.stdout
+    assert re.search(r"MOLADT_RESULTS_DIR=results/run_\d{8}_\d{6}", result.stdout)
 
 
 def test_makefile_paper_benchmark_uses_timestamped_paper_subdirectory(tmp_path: Path) -> None:
@@ -95,14 +96,13 @@ def test_makefile_paper_benchmark_uses_timestamped_paper_subdirectory(tmp_path: 
             "benchmark",
             "SYSTEM_PYTHON=python3",
             "INFERENCE_PRESET=paper",
-            "RUN_TIMESTAMP=20260330_170000",
         ],
         capture_output=True,
         text=True,
         check=True,
     )
 
-    assert "MOLADT_RESULTS_DIR=results/paper/run_20260330_170000" in result.stdout
+    assert re.search(r"MOLADT_RESULTS_DIR=results/paper/run_\d{8}_\d{6}", result.stdout)
 
 
 def test_makefile_benchmark_small_target_enables_moladt_subset_mode(tmp_path: Path) -> None:
@@ -133,19 +133,50 @@ def test_makefile_benchmark_paper_target_enables_paper_split(tmp_path: Path) -> 
     assert "benchmark INFERENCE_PRESET=paper QM9_LIMIT= QM9_SPLIT_MODE=paper INCLUDE_MOLADT=1" in result.stdout
 
 
-def test_makefile_model_target_writes_model_results_subdirectory(tmp_path: Path) -> None:
+def test_makefile_catboost_geom_model_target_writes_model_results_subdirectory(tmp_path: Path) -> None:
     _copy_makefile(tmp_path)
     _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
 
     result = subprocess.run(
-        ["make", "-C", str(tmp_path), "-n", "model", "SYSTEM_PYTHON=python3", "RUN_TIMESTAMP=20260331_090000"],
+        ["make", "-C", str(tmp_path), "-n", "catboost-geom-model", "SYSTEM_PYTHON=python3"],
         capture_output=True,
         text=True,
         check=True,
     )
 
-    assert "MOLADT_RESULTS_DIR=results/models/run_20260331_090000" in result.stdout
+    assert re.search(r"MOLADT_RESULTS_DIR=results/models/run_\d{8}_\d{6}", result.stdout)
     assert "./.venv/bin/python -m scripts.run_all models" in result.stdout
+
+
+def test_makefile_catboost_geom_model_paper_target_uses_paper_results_subdirectory(tmp_path: Path) -> None:
+    _copy_makefile(tmp_path)
+    _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
+
+    result = subprocess.run(
+        ["make", "-C", str(tmp_path), "-n", "catboost-geom-model-paper", "SYSTEM_PYTHON=python3"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "catboost-geom-model INFERENCE_PRESET=paper QM9_LIMIT= QM9_SPLIT_MODE=paper" in result.stdout
+    assert re.search(r"MOLADT_RESULTS_DIR=results/models/paper/run_\d{8}_\d{6}", result.stdout)
+
+
+def test_makefile_timing_target_writes_timing_results_subdirectory(tmp_path: Path) -> None:
+    _copy_makefile(tmp_path)
+    _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
+
+    result = subprocess.run(
+        ["make", "-C", str(tmp_path), "-n", "timing", "SYSTEM_PYTHON=python3"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert re.search(r"MOLADT_RESULTS_DIR=results/timing/run_\d{8}_\d{6}", result.stdout)
+    assert "./.venv/bin/python -m scripts.run_all zinc-timing" in result.stdout
+    assert "--include-moladt" in result.stdout
 
 
 def test_makefile_benchmark_uses_xcrun_toolchain_on_darwin(tmp_path: Path) -> None:

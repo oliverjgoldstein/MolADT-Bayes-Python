@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import shutil
 import stat
 import subprocess
@@ -25,13 +26,13 @@ def test_workspace_makefile_benchmark_uses_timestamped_results_directory(tmp_pat
     _write_executable(tmp_path / "MolADT-Bayes-Python" / ".venv313" / "bin" / "python")
 
     result = subprocess.run(
-        ["make", "-C", str(tmp_path), "-n", "benchmark", "SYSTEM_PYTHON=python3", "RUN_TIMESTAMP=20260330_170000"],
+        ["make", "-C", str(tmp_path), "-n", "benchmark", "SYSTEM_PYTHON=python3"],
         capture_output=True,
         text=True,
         check=True,
     )
 
-    assert "MOLADT_RESULTS_DIR=results/run_20260330_170000" in result.stdout
+    assert re.search(r"MOLADT_RESULTS_DIR=results/run_\d{8}_\d{6}", result.stdout)
 
 
 def test_workspace_makefile_paper_benchmark_uses_paper_results_directory(tmp_path: Path) -> None:
@@ -47,14 +48,13 @@ def test_workspace_makefile_paper_benchmark_uses_paper_results_directory(tmp_pat
             "benchmark",
             "SYSTEM_PYTHON=python3",
             "INFERENCE_PRESET=paper",
-            "RUN_TIMESTAMP=20260330_170000",
         ],
         capture_output=True,
         text=True,
         check=True,
     )
 
-    assert "MOLADT_RESULTS_DIR=results/paper/run_20260330_170000" in result.stdout
+    assert re.search(r"MOLADT_RESULTS_DIR=results/paper/run_\d{8}_\d{6}", result.stdout)
 
 
 def test_workspace_makefile_showcase_passes_results_subdir(tmp_path: Path) -> None:
@@ -62,10 +62,10 @@ def test_workspace_makefile_showcase_passes_results_subdir(tmp_path: Path) -> No
     _write_executable(tmp_path / "MolADT-Bayes-Python" / ".venv313" / "bin" / "python")
 
     result = subprocess.run(
-        ["make", "-C", str(tmp_path), "-n", "showcase", "SYSTEM_PYTHON=python3", "RUN_TIMESTAMP=20260330_170000"],
+        ["make", "-C", str(tmp_path), "-n", "showcase", "SYSTEM_PYTHON=python3"],
         capture_output=True,
         text=True,
         check=True,
     )
 
-    assert "--results-subdir run_20260330_170000" in result.stdout
+    assert re.search(r"--results-subdir run_\d{8}_\d{6}", result.stdout)

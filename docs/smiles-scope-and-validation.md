@@ -51,7 +51,7 @@ That is why:
 
 The predictive benchmarks use canonicalized classical SMILES or MolADT-derived features. The structural branch is not reported as a raw SDF descriptor path: structure-backed molecules are parsed into the MolADT object first and then featurized from that ADT.
 
-The ZINC timing benchmark measures RDKit parsing/canonicalization, and optionally a MolADT ingest/render stage driven by RDKit MolBlock -> MolADT SDF parse -> MolADT pretty render. That avoids the old failure-prone dependence on the conservative SMILES renderer for timing runs.
+The ZINC timing benchmark still measures RDKit parsing/canonicalization, and the MolADT-enabled path now also builds a matched local corpus with one MolADT JSON file per molecule plus one canonical SMILES file with the same molecule count. It then measures the local MolADT SMILES parser against local MolADT file parsing on that matched corpus.
 
 ## Related Files
 

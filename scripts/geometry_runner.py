@@ -10,6 +10,7 @@ from typing import Any
 import numpy as np
 
 from .common import RESULTS_DIR, ensure_directory
+from .model_errors import OptionalModelDependencyError
 from .predictive_metrics import build_metric_row, build_prediction_rows
 from .splits import GeometricDatasetSpec
 
@@ -409,8 +410,15 @@ def _import_geometry_stack() -> tuple[Any, Any, Any, Any]:
         pyg_loader = importlib.import_module("torch_geometric.loader")
         pyg_models = importlib.import_module("torch_geometric.nn.models")
     except ModuleNotFoundError as exc:
-        raise RuntimeError(
-            "Geometry models require the optional geometric dependencies. Install them with "
-            "`pip install -e .[geom]`."
+        raise OptionalModelDependencyError(
+            "Geometry models require the local geometric stack. Re-run `make python-setup` "
+            "to install the default model dependencies."
+        ) from exc
+    try:
+        importlib.import_module("torch_cluster")
+    except ModuleNotFoundError as exc:
+        raise OptionalModelDependencyError(
+            "Geometry models require `torch-cluster` in the local repo environment. "
+            "Re-run `make python-setup` so the full PyTorch Geometric runtime is installed."
         ) from exc
     return torch, pyg_data, pyg_loader, pyg_models

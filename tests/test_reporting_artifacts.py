@@ -8,12 +8,14 @@ from scripts.literature_baselines import literature_baselines_frame
 from scripts.report_graphs import (
     write_calibration_overview,
     write_inference_sweep_overview,
+    write_metric_comparison_overviews,
     write_predicted_vs_actual_overview,
     write_residual_vs_uncertainty_overview,
     write_review_rmse_overview,
     write_timing_stage_overview,
 )
 from scripts.run_all import (
+    _build_metric_comparison_frame,
     _build_generalization_frame,
     _build_literature_comparison_rows,
     _build_simple_review_frame,
@@ -164,8 +166,8 @@ def test_review_pack_graphs_write_svg_files(tmp_path) -> None:
                 "median_latency_us": 10.0,
             },
             {
-                "stage": "moladt_parse_render",
-                "description": "RDKit MolBlock to MolADT parse and pretty render.",
+                "stage": "moladt_file_parse",
+                "description": "Read each MolADT JSON file and parsed it into the local Molecule ADT using the fast JSON loader when available.",
                 "molecule_count": 100,
                 "success_count": 100,
                 "failure_count": 0,
@@ -249,10 +251,56 @@ def test_review_pack_graphs_write_svg_files(tmp_path) -> None:
     assert "freesolv / moladt" in inference_svg
     assert "<svg" in timing_svg
     assert "raw_file_read" in timing_svg
-    assert "RDKit MolBlock to MolADT parse" in timing_svg
+    assert "MolADT JSON file" in timing_svg
     assert "Predicted vs actual" in scatter_svg
     assert "Residual vs uncertainty" in residual_svg
     assert "Coverage calibration" in calibration_svg
+
+
+def test_metric_comparison_frame_prefers_shared_catboost_rows_and_attaches_paper_context() -> None:
+    metrics = pd.DataFrame(
+        [
+            {"dataset": "freesolv", "representation": "smiles", "model": "catboost_uncertainty", "method": "native_uncertainty", "split": "test", "rmse": 1.20, "mae": 0.92, "r2": 0.72, "coverage_90": 0.80, "runtime_seconds": 2.0},
+            {"dataset": "freesolv", "representation": "moladt", "model": "catboost_uncertainty", "method": "native_uncertainty", "split": "test", "rmse": 1.02, "mae": 0.81, "r2": 0.79, "coverage_90": 0.84, "runtime_seconds": 2.1},
+            {"dataset": "freesolv", "representation": "smiles", "model": "bayes_linear_student_t", "method": "sample", "split": "test", "rmse": 1.35, "mae": 1.01, "r2": 0.66, "coverage_90": 0.77, "runtime_seconds": 10.0},
+            {"dataset": "freesolv", "representation": "moladt", "model": "bayes_linear_student_t", "method": "sample", "split": "test", "rmse": 1.10, "mae": 0.88, "r2": 0.75, "coverage_90": 0.81, "runtime_seconds": 10.2},
+            {"dataset": "qm9", "representation": "smiles", "model": "catboost_uncertainty", "method": "native_uncertainty", "split": "test", "rmse": 0.12, "mae": 0.041, "r2": 0.91, "coverage_90": 0.78, "runtime_seconds": 5.0},
+            {"dataset": "qm9", "representation": "moladt", "model": "catboost_uncertainty", "method": "native_uncertainty", "split": "test", "rmse": 0.10, "mae": 0.033, "r2": 0.94, "coverage_90": 0.82, "runtime_seconds": 5.1},
+        ]
+    )
+
+    comparison = _build_metric_comparison_frame(metrics, baselines_frame=literature_baselines_frame())
+
+    freesolv_rmse = comparison.loc[(comparison["dataset"] == "freesolv") & (comparison["metric_key"] == "rmse")]
+    qm9_mae = comparison.loc[(comparison["dataset"] == "qm9") & (comparison["metric_key"] == "mae")]
+    assert set(freesolv_rmse["series_key"]) == {"smiles", "moladt", "paper"}
+    assert "catboost_uncertainty / native_uncertainty" in freesolv_rmse.iloc[0]["comparison_context"]
+    assert set(qm9_mae["series_key"]) == {"smiles", "moladt", "paper"}
+    assert "PaiNN" in qm9_mae["series_label"].tolist()
+
+
+def test_metric_comparison_overviews_write_svg_files(tmp_path) -> None:
+    comparison = pd.DataFrame(
+        [
+            {"dataset": "freesolv", "metric_key": "rmse", "metric_label": "Test RMSE", "series_key": "smiles", "series_label": "smiles", "value": 1.20, "comparison_context": "Local shared family: catboost_uncertainty / native_uncertainty", "paper_source_title": "", "paper_note": ""},
+            {"dataset": "freesolv", "metric_key": "rmse", "metric_label": "Test RMSE", "series_key": "moladt", "series_label": "moladt", "value": 1.02, "comparison_context": "Local shared family: catboost_uncertainty / native_uncertainty", "paper_source_title": "", "paper_note": ""},
+            {"dataset": "freesolv", "metric_key": "rmse", "metric_label": "Test RMSE", "series_key": "paper", "series_label": "MPNN", "value": 1.15, "comparison_context": "Local shared family: catboost_uncertainty / native_uncertainty", "paper_source_title": "MoleculeNet: a benchmark for molecular machine learning", "paper_note": "Useful external context only."},
+            {"dataset": "qm9", "metric_key": "mae", "metric_label": "Test MAE", "series_key": "smiles", "series_label": "smiles", "value": 0.041, "comparison_context": "Local shared family: catboost_uncertainty / native_uncertainty", "paper_source_title": "", "paper_note": ""},
+            {"dataset": "qm9", "metric_key": "mae", "metric_label": "Test MAE", "series_key": "moladt", "series_label": "moladt", "value": 0.033, "comparison_context": "Local shared family: catboost_uncertainty / native_uncertainty", "paper_source_title": "", "paper_note": ""},
+            {"dataset": "qm9", "metric_key": "mae", "metric_label": "Test MAE", "series_key": "paper", "series_label": "PaiNN", "value": 0.012, "comparison_context": "Local shared family: catboost_uncertainty / native_uncertainty", "paper_source_title": "Equivariant message passing for the prediction of tensorial properties and molecular spectra", "paper_note": "ICML 2021 equivariant message-passing baseline."},
+        ]
+    )
+
+    write_metric_comparison_overviews(comparison, tmp_path)
+
+    rmse_svg = (tmp_path / "rmse_comparison.svg").read_text(encoding="utf-8")
+    mae_svg = (tmp_path / "mae_comparison.svg").read_text(encoding="utf-8")
+    assert "Test RMSE comparison" in rmse_svg
+    assert "MoleculeNet: a benchmark for molecular machine learning" in rmse_svg
+    assert "smiles" in rmse_svg
+    assert "moladt" in rmse_svg
+    assert "PaiNN" in mae_svg
+    assert "Test MAE comparison" in mae_svg
 
 
 def test_results_csv_combines_summary_metric_and_timing_rows(tmp_path, monkeypatch) -> None:

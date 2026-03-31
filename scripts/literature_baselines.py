@@ -11,6 +11,7 @@ GILMER_SUPPLEMENT_URL = "https://proceedings.mlr.press/v70/gilmer17a/gilmer17a-s
 UNIMOL_SOURCE_URL = "https://openreview.net/forum?id=6K2RM6wVqKu"
 UNIMOL_REPO_URL = "https://github.com/deepmodeling/Uni-Mol"
 MGNN_SOURCE_URL = "https://www.nature.com/articles/s41524-025-01541-5"
+PAINN_SOURCE_URL = "https://proceedings.mlr.press/v139/schutt21a.html"
 VISNET_SOURCE_URL = "https://pytorch-geometric.readthedocs.io/en/2.5.2/generated/torch_geometric.nn.models.ViSNet.html"
 DIMENETPP_SOURCE_URL = "https://pytorch-geometric.readthedocs.io/en/2.5.1/_modules/torch_geometric/nn/models/dimenet.html"
 
@@ -120,6 +121,20 @@ BASELINES: tuple[LiteratureBaseline, ...] = (
         source_url=MGNN_SOURCE_URL,
         directly_comparable=False,
         note="The 2025 MGNN paper reports strong QM9 results, but this repo has not verified an exact mu metric row under the same split and training recipe.",
+    ),
+    LiteratureBaseline(
+        dataset="qm9",
+        target="mu",
+        model_name="PaiNN",
+        model_family="equivariant_message_passing",
+        metric_name="MAE",
+        metric_value=0.012,
+        units="Debye",
+        split_protocol="QM9 protocol reported in PaiNN Table 2",
+        source_title="Equivariant message passing for the prediction of tensorial properties and molecular spectra",
+        source_url=PAINN_SOURCE_URL,
+        directly_comparable=False,
+        note="ICML 2021 equivariant message-passing baseline for QM9 mu. Included as external MAE context only; this repo has not verified an exact split-and-training match to the local benchmark.",
     ),
     LiteratureBaseline(
         dataset="qm9",

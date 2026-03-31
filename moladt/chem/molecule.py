@@ -11,6 +11,11 @@ from .coordinate import Angstrom, Coordinate, mk_angstrom
 from .dietz import AtomId, BondingSystem, Edge, SystemId, mk_edge
 from .orbital import Shells
 
+try:
+    import orjson
+except ModuleNotFoundError:  # pragma: no cover - exercised only when optional wheel is missing locally.
+    orjson = None
+
 
 class AtomicSymbol(Enum):
     H = "H"
@@ -141,10 +146,23 @@ class Molecule:
         return cls(atoms=atoms, local_bonds=local_bonds, systems=systems)
 
     def to_json(self) -> str:
-        return json.dumps(self.to_dict(), indent=2)
+        payload = self.to_dict()
+        if orjson is not None:
+            return orjson.dumps(payload, option=orjson.OPT_INDENT_2 | orjson.OPT_SORT_KEYS).decode("utf-8")
+        return json.dumps(payload, indent=2, sort_keys=True)
+
+    def to_json_bytes(self) -> bytes:
+        payload = self.to_dict()
+        if orjson is not None:
+            return orjson.dumps(payload, option=orjson.OPT_SORT_KEYS)
+        return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
     @classmethod
-    def from_json(cls, payload: str) -> Molecule:
+    def from_json(cls, payload: str | bytes) -> Molecule:
+        if orjson is not None:
+            return cls.from_dict(orjson.loads(payload))
+        if isinstance(payload, bytes):
+            payload = payload.decode("utf-8")
         return cls.from_dict(json.loads(payload))
 
     def pretty(self) -> str:

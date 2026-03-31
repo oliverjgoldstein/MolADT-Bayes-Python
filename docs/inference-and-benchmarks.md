@@ -5,13 +5,23 @@ This repo owns the main benchmark run. It prepares the datasets, exports aligned
 ## Main Commands
 
 ```bash
-make model
+make timing
+make catboost-geom-model
+make catboost-geom-model-paper
 make benchmark-small
 make benchmark-paper
 ./.venv/bin/python -m scripts.run_all benchmark --include-moladt-predictive --extra-models catboost_uncertainty
 ./.venv/bin/python -m scripts.run_all benchmark --include-moladt-predictive --extra-models catboost_uncertainty --geom-model visnet
 ./.venv/bin/python -m scripts.run_all benchmark --include-moladt-predictive --extra-models catboost_uncertainty,visnet_ensemble --paper-mode
 ```
+
+`make timing` is the local timing-only command:
+
+- ZINC timing benchmark only
+- builds a matched local corpus under `data/processed/zinc_timing/...`
+- writes one MolADT JSON file per matched molecule plus one canonical SMILES corpus file
+- measures RDKit baseline parsing plus local MolADT SMILES parsing and local MolADT file parsing
+- writes results under `results/timing/run_<timestamp>/`
 
 `make benchmark-small` is the default benchmark:
 
@@ -45,8 +55,12 @@ The ZINC timing benchmark measures:
 - `raw_file_read`
 - `smiles_parse_sanitize`
 - `smiles_canonicalization`
-- `moladt_parse_render` when `--include-moladt` or `INCLUDE_MOLADT=1` is used
-  This stage now serializes RDKit molecules to MolBlock, parses them into MolADT via the SDF reader, then pretty-renders from the ADT.
+- `timing_library_prepare` when MolADT timing is enabled
+  This builds the matched local timing corpus: one MolADT JSON file per molecule and one canonical SMILES library with the same molecule count.
+- `smiles_library_parse` when MolADT timing is enabled
+  This parses each matched canonical SMILES entry with the local MolADT SMILES parser.
+- `moladt_file_parse` when MolADT timing is enabled
+  This reads each MolADT JSON file and parses it back into the local Molecule ADT.
 
 Current defaults from the code:
 
@@ -73,10 +87,7 @@ Reported representations are:
   The `moladt` branch is not a raw SDF descriptor path. Structure-backed molecules are parsed into the MolADT object first, then ADT-native descriptors are computed from that object.
 - `sdf_geom` and `moladt_geom` behind the optional geometry extras
 
-Optional dependency extras:
-
-- `pip install -e .[ml]`
-- `pip install -e .[geom]`
+The MolADT file parse stage uses `orjson` when it is present in the local environment because this is runtime data parsing, not source-code parsing.
 
 The Python side also exports the aligned matrices used by the Haskell baseline:
 
@@ -105,6 +116,8 @@ Each run writes a timestamped folder. The top level is intentionally small:
 - `details/model_coefficients.csv`
 - `details/training_curves.csv`
 - `details/model_artifacts.csv`
+- `details/zinc_timing_items.csv`
+- `details/zinc_timing_library_manifest.csv`
 - `literature_baselines.csv`
 - `literature_comparison.md`
 - `calibration.csv`
@@ -113,14 +126,18 @@ Each run writes a timestamped folder. The top level is intentionally small:
 - `figures/predicted_vs_actual_scatter.svg`
 - `figures/residual_vs_uncertainty.svg`
 - `figures/coverage_calibration.svg`
+- `figures/metric_comparisons/*.svg`
 - `details/zinc_timing.csv`
 - `details/stan_output/`
 
 For the paper-scale make run, outputs go under `results/paper/run_<timestamp>/`.
 
+The metric comparison pack writes one SVG per metric. Each chart compares the matched local `smiles` and `moladt` rows from a shared model family when available, plus a literature bar if the repo has a numeric paper-context value for that metric.
+
 ## Other Entrypoints
 
 ```bash
+make timing
 make benchmark-small
 make benchmark-paper
 make benchmark-bg
@@ -128,6 +145,7 @@ make benchmark-bg
 ```
 
 `make benchmark-bg` mirrors live output to the active results log while still running in the foreground.
-`make model` runs the predictive model suite only and writes a per-model browser under `results/models/...`.
+`make catboost-geom-model` runs the predictive model suite only on the default QM9 subset and writes a per-model browser under `results/models/...`.
+`make catboost-geom-model-paper` runs the predictive model suite only on the paper-sized QM9 split and writes under `results/models/paper/...`.
 
 For the Haskell consumer view, see [Haskell interop](haskell_interop.md).

@@ -6,7 +6,13 @@ import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
-from scripts.benchmark_zinc import _moladt_parse_render_from_rdkit_mol
+from scripts.benchmark_zinc import (
+    _measure_moladt_library_parse,
+    _measure_smiles_library_parse,
+    _moladt_parse_render_from_rdkit_mol,
+    _prepare_timing_library,
+    _read_timing_library_manifest,
+)
 from scripts.download_data import freesolv_raw_dir, qm9_raw_dir, zinc_archive_filename, zinc_normalized_source_name, zinc_raw_dir
 from scripts.features import canonicalize_smiles, compute_3d_descriptors, compute_base_descriptors, featurize_moladt_records, FeatureTable
 from scripts.process_freesolv import process_freesolv_dataset
@@ -115,6 +121,70 @@ def test_moladt_parse_render_supports_silicon_molecules() -> None:
     rendered = _moladt_parse_render_from_rdkit_mol(molecule)
 
     assert "Si" in rendered
+
+
+def test_prepare_timing_library_creates_matched_local_corpus(tmp_path, monkeypatch) -> None:
+    import scripts.benchmark_zinc as benchmark_zinc
+
+    processed_dir = tmp_path / "processed"
+    monkeypatch.setattr(benchmark_zinc, "PROCESSED_DATA_DIR", processed_dir)
+    molecules = [Chem.MolFromSmiles("CCO"), Chem.MolFromSmiles("c1ccccc1")]
+
+    library, stage = _prepare_timing_library(
+        molecules=molecules,
+        dataset_size="demo",
+        dataset_dimension="2D",
+        limit=2,
+        source_path=tmp_path / "zinc_demo.smi",
+        force=True,
+    )
+
+    manifest = _read_timing_library_manifest(library)
+
+    assert library.smiles_path.exists()
+    assert library.manifest_path.exists()
+    assert len(manifest) == 2
+    assert stage.stage == "timing_library_prepare"
+    assert stage.success_count == 2
+    assert (library.library_root / manifest.iloc[0]["moladt_relative_path"]).exists()
+
+
+def test_timing_library_parse_stages_succeed_on_matched_entries(tmp_path, monkeypatch) -> None:
+    import scripts.benchmark_zinc as benchmark_zinc
+
+    processed_dir = tmp_path / "processed"
+    monkeypatch.setattr(benchmark_zinc, "PROCESSED_DATA_DIR", processed_dir)
+    molecules = [Chem.MolFromSmiles("CCO"), Chem.MolFromSmiles("CCN")]
+
+    library, _ = _prepare_timing_library(
+        molecules=molecules,
+        dataset_size="demo",
+        dataset_dimension="2D",
+        limit=2,
+        source_path=tmp_path / "zinc_demo.smi",
+        force=True,
+    )
+    manifest = _read_timing_library_manifest(library)
+
+    smiles_items, smiles_stage = _measure_smiles_library_parse(
+        library,
+        manifest=manifest,
+        dataset_size="demo",
+        dataset_dimension="2D",
+    )
+    moladt_items, moladt_stage = _measure_moladt_library_parse(
+        library,
+        manifest=manifest,
+        dataset_size="demo",
+        dataset_dimension="2D",
+    )
+
+    assert smiles_stage.failure_count == 0
+    assert moladt_stage.failure_count == 0
+    assert len(smiles_items) == len(manifest)
+    assert len(moladt_items) == len(manifest)
+    assert all(item.success for item in smiles_items)
+    assert all(item.success for item in moladt_items)
 
 
 def test_process_freesolv_creates_processed_directory_before_writing(tmp_path, monkeypatch) -> None:

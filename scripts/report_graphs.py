@@ -21,6 +21,11 @@ MUTED = "#6b7280"
 GRID = "#d1d5db"
 LITERATURE = "#374151"
 TIMING = "#0f766e"
+SERIES_COLORS = {
+    "smiles": "#b45309",
+    "moladt": "#0f766e",
+    "paper": LITERATURE,
+}
 
 
 def write_review_rmse_overview(review_frame: pd.DataFrame, destination: Path) -> None:
@@ -119,7 +124,15 @@ def write_inference_sweep_overview(metrics: pd.DataFrame, destination: Path) -> 
 def write_timing_stage_overview(timing: pd.DataFrame, destination: Path) -> None:
     if timing.empty:
         return
-    stage_order = ["raw_file_read", "smiles_parse_sanitize", "smiles_canonicalization", "moladt_parse_render"]
+    stage_order = [
+        "raw_file_read",
+        "smiles_parse_sanitize",
+        "smiles_canonicalization",
+        "timing_library_prepare",
+        "smiles_library_parse",
+        "moladt_file_parse",
+        "moladt_parse_render",
+    ]
     order_index = {stage: index for index, stage in enumerate(stage_order)}
     rows = timing.copy()
     rows["_order"] = rows["stage"].map(order_index).fillna(len(stage_order)).astype(int)
@@ -320,6 +333,67 @@ def write_calibration_overview(calibration: pd.DataFrame, destination: Path) -> 
     destination.write_text("".join(parts), encoding="utf-8")
 
 
+def write_metric_comparison_overviews(comparison_frame: pd.DataFrame, destination_dir: Path) -> None:
+    if comparison_frame.empty:
+        return
+    ensure_directory(destination_dir)
+    for metric_key, metric_frame in comparison_frame.groupby("metric_key", sort=False):
+        rows = metric_frame.reset_index(drop=True)
+        datasets = [
+            (str(dataset), frame.reset_index(drop=True))
+            for dataset, frame in rows.groupby("dataset", sort=True)
+        ]
+        if not datasets:
+            continue
+        cols = 2 if len(datasets) > 1 else 1
+        card_width = 430
+        card_height = 286
+        gap = 24
+        margin = 24
+        header_height = 70
+        panel_rows = math.ceil(len(datasets) / cols)
+        total_width = margin * 2 + cols * card_width + (cols - 1) * gap
+        total_height = margin * 2 + header_height + panel_rows * card_height + (panel_rows - 1) * gap
+        value_min = float(rows["value"].min())
+        value_max = float(rows["value"].max())
+        if value_min == value_max:
+            value_min -= 1.0
+            value_max += 1.0
+        y_min = min(0.0, value_min * 1.05)
+        y_max = max(0.0, value_max * 1.15)
+        if y_min == y_max:
+            y_max = y_min + 1.0
+        metric_label = str(rows.iloc[0]["metric_label"])
+        parts = [_svg_header(total_width, total_height)]
+        parts.append(f'<rect width="{total_width}" height="{total_height}" fill="{BACKGROUND}" />')
+        parts.append(f'<text x="{margin}" y="{margin + 22}" font-size="22" font-family="Georgia, serif" fill="{TEXT}">{escape(metric_label)} comparison</text>')
+        parts.append(
+            f'<text x="{margin}" y="{margin + 42}" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">'
+            "Orange is SMILES, teal is MolADT, and gray is paper context when a numeric literature value is available."
+            "</text>"
+        )
+        for index, (dataset, frame) in enumerate(datasets):
+            grid_row = index // cols
+            grid_col = index % cols
+            x0 = margin + grid_col * (card_width + gap)
+            y0 = margin + header_height + grid_row * (card_height + gap)
+            parts.extend(
+                _metric_comparison_card_svg(
+                    frame,
+                    dataset=dataset,
+                    x0=x0,
+                    y0=y0,
+                    width=card_width,
+                    height=card_height,
+                    y_min=y_min,
+                    y_max=y_max,
+                )
+            )
+        parts.append("</svg>\n")
+        destination = destination_dir / f"{metric_key}_comparison.svg"
+        destination.write_text("".join(parts), encoding="utf-8")
+
+
 def _review_rmse_card_svg(row: pd.Series, *, x0: int, y0: int, width: int, height: int, y_max: float) -> list[str]:
     plot_x = x0 + 44
     plot_y = y0 + 86
@@ -505,5 +579,73 @@ def _calibration_card_svg(frame: pd.DataFrame, *, x0: int, y0: int, width: int, 
         parts.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="3.5" fill="#b45309" />')
         parts.append(
             f'<text x="{cx + 6:.1f}" y="{cy - 6:.1f}" font-size="10" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}">{float(row["nominal_coverage"]):.2f}</text>'
+        )
+    return parts
+
+
+def _metric_comparison_card_svg(
+    frame: pd.DataFrame,
+    *,
+    dataset: str,
+    x0: int,
+    y0: int,
+    width: int,
+    height: int,
+    y_min: float,
+    y_max: float,
+) -> list[str]:
+    plot_x = x0 + 48
+    plot_y = y0 + 92
+    plot_width = width - 76
+    plot_height = 120
+    zero_y = plot_y + plot_height - ((0.0 - y_min) / max(y_max - y_min, 1e-6)) * plot_height
+    bar_width = 58
+    bar_gap = 24
+    left_pad = 22
+    context = str(frame.iloc[0].get("comparison_context", ""))
+    paper_row = frame.loc[frame["series_key"] == "paper"]
+    paper_title = str(paper_row.iloc[0]["paper_source_title"]) if not paper_row.empty else "Paper context unavailable for this metric."
+    bars = []
+    for series_key in ("smiles", "moladt", "paper"):
+        series_rows = frame.loc[frame["series_key"] == series_key]
+        if series_rows.empty:
+            continue
+        row = series_rows.iloc[0]
+        bars.append((str(row["series_label"]), float(row["value"]), SERIES_COLORS[series_key]))
+    parts = [
+        f'<rect x="{x0}" y="{y0}" width="{width}" height="{height}" rx="18" fill="{CARD_FILL}" stroke="{CARD_STROKE}" />',
+        f'<text x="{x0 + 20}" y="{y0 + 28}" font-size="18" font-family="Georgia, serif" fill="{TEXT}">{escape(dataset)}</text>',
+        f'<text x="{x0 + 20}" y="{y0 + 48}" font-size="11" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">{escape(context)}</text>',
+        f'<text x="{x0 + 20}" y="{y0 + 64}" font-size="10" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">{escape(paper_title)}</text>',
+    ]
+    for step in range(5):
+        fraction = step / 4.0
+        y_value = y_min + (y_max - y_min) * fraction
+        y = plot_y + plot_height - plot_height * fraction
+        parts.append(f'<line x1="{plot_x}" y1="{y:.1f}" x2="{plot_x + plot_width}" y2="{y:.1f}" stroke="{GRID}" stroke-width="1" />')
+        parts.append(
+            f'<text x="{plot_x - 8}" y="{y + 4:.1f}" text-anchor="end" font-size="10" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">{y_value:.2f}</text>'
+        )
+    parts.append(f'<line x1="{plot_x}" y1="{zero_y:.1f}" x2="{plot_x + plot_width}" y2="{zero_y:.1f}" stroke="{TEXT}" stroke-width="1.4" />')
+    for index, (label, value, color) in enumerate(bars):
+        span = max(y_max - y_min, 1e-6)
+        bar_height = abs(value - 0.0) / span * plot_height
+        x = plot_x + left_pad + index * (bar_width + bar_gap)
+        if value >= 0.0:
+            y = zero_y - bar_height
+        else:
+            y = zero_y
+        parts.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_width}" height="{bar_height:.1f}" rx="8" fill="{color}" opacity="0.92" />')
+        parts.append(
+            f'<text x="{x + bar_width / 2:.1f}" y="{plot_y + plot_height + 20}" text-anchor="middle" font-size="11" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}">{escape(label)}</text>'
+        )
+        value_y = y - 8 if value >= 0.0 else y + bar_height + 14
+        parts.append(
+            f'<text x="{x + bar_width / 2:.1f}" y="{value_y:.1f}" text-anchor="middle" font-size="10" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}">{value:.3f}</text>'
+        )
+    note_lines = _wrap_text(str(paper_row.iloc[0]["paper_note"]) if not paper_row.empty else "No numeric literature value was attached for this metric.", 60)
+    for line_index, line in enumerate(note_lines[:3]):
+        parts.append(
+            f'<text x="{x0 + 20}" y="{y0 + 236 + line_index * 13}" font-size="10" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">{escape(line)}</text>'
         )
     return parts

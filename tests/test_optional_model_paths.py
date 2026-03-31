@@ -9,7 +9,9 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from scripts.features import FeatureTable, featurize_moladt_geometry_records
-from scripts.run_all import build_parser
+from scripts.model_errors import OptionalModelDependencyError
+from scripts.model_registry import RegisteredModel
+from scripts.run_all import _extend_with_property_results, build_parser
 from scripts.splits import export_geometric_splits, export_standardized_splits
 from scripts.tabular_runner import CATBOOST_METHOD, CATBOOST_MODEL, CatBoostRunConfig, run_catboost_uncertainty
 
@@ -141,3 +143,58 @@ def test_catboost_runner_outputs_expected_schema(tmp_path, monkeypatch) -> None:
     assert all(row["method"] == CATBOOST_METHOD for row in metrics_rows)
     assert {"actual", "predicted_mean", "predictive_sd", "data_uncertainty", "knowledge_uncertainty", "total_uncertainty"}.issubset(prediction_rows[0].keys())
     assert artifact_rows
+
+
+def test_extend_with_property_results_skips_missing_optional_geometry_dependency(monkeypatch) -> None:
+    import scripts.run_all as run_all
+
+    def failing_geometry_runner(*args, **kwargs):
+        raise OptionalModelDependencyError("Geometry extension stack is incomplete.")
+
+    monkeypatch.setattr(run_all, "write_stan_data_json", lambda *args, **kwargs: None)
+    monkeypatch.setitem(
+        run_all.GEOMETRIC_MODEL_REGISTRY,
+        "visnet_ensemble",
+        RegisteredModel(name="visnet_ensemble", input_kind="geometric", runner=failing_geometry_runner),
+    )
+    artifacts = SimpleNamespace(
+        smiles_export=SimpleNamespace(),
+        tabular_exports={"smiles": SimpleNamespace()},
+        geometric_exports={"moladt_geom": SimpleNamespace()},
+    )
+    args = SimpleNamespace(
+        methods="",
+        models="",
+        seed=7,
+        sample_chains=1,
+        sample_warmup=1,
+        sample_draws=1,
+        approximation_draws=1,
+        variational_iterations=1,
+        optimize_iterations=1,
+        pathfinder_paths=1,
+        predictive_draws=1,
+        verbose=False,
+        num_seeds=1,
+        paper_mode=False,
+    )
+    metrics_rows: list[dict[str, object]] = []
+    prediction_rows: list[dict[str, object]] = []
+    coefficient_rows: list[dict[str, object]] = []
+    training_curve_rows: list[dict[str, object]] = []
+    model_artifact_rows: list[dict[str, object]] = []
+
+    _extend_with_property_results(
+        artifacts,
+        metrics_rows,
+        prediction_rows,
+        coefficient_rows,
+        training_curve_rows,
+        model_artifact_rows,
+        ("visnet_ensemble",),
+        args,
+    )
+
+    assert metrics_rows == []
+    assert prediction_rows == []
+    assert training_curve_rows == []

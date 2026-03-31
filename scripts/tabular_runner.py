@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from .common import RESULTS_DIR, ensure_directory
+from .model_errors import OptionalModelDependencyError
 from .predictive_metrics import build_metric_row, build_prediction_rows
 from .splits import ExportedDataset
 
@@ -375,7 +376,7 @@ def _import_catboost() -> Any:
     try:
         return importlib.import_module("catboost")
     except ModuleNotFoundError as exc:
-        raise RuntimeError(
-            "CatBoost is not installed. Install the optional ML dependencies, for example "
-            "`pip install -e .[ml]`."
+        raise OptionalModelDependencyError(
+            "CatBoost is not installed in the local repo environment. Re-run `make python-setup` "
+            "to install the default model stack."
         ) from exc

@@ -21,9 +21,11 @@ Atoms keep explicit shell and orbital information. The pretty-printer exposes th
 The ZINC benchmark measures:
 
 - raw file read
-- SMILES parse and sanitize
-- SMILES canonicalization
-- optional MolADT parse and render from an RDKit MolBlock through the ADT
+- RDKit SMILES parse and sanitize
+- RDKit SMILES canonicalization
+- local timing-library build for matched MolADT JSON files plus canonical SMILES entries
+- MolADT SMILES parsing on the matched SMILES library
+- MolADT file parsing on the matched ADT library
 
 ## Model
 
@@ -35,7 +37,7 @@ The predictive benchmark fits two Stan models:
 The Python repo also writes aligned `data/processed/` exports. `X_train`, `X_valid`, and `X_test` are standardized from the training split only. `y` stays on the original scale.
 Reported representations are `smiles` and `moladt`: the `moladt` branch is built by parsing structure-backed molecules into the ADT and then extracting ADT-native descriptor features from that object.
 
-By default, `make python-setup` installs the CatBoost tabular stack and the PyTorch Geometric geometry stack needed for `make model`, and it does so inside the local repo environment.
+By default, `make python-setup` installs the CatBoost tabular stack and the full PyTorch Geometric geometry runtime needed for `make catboost-geom-model`, including `torch-cluster`, and it does so inside the local repo environment.
 
 Scientific framing:
 
@@ -47,7 +49,9 @@ Scientific framing:
 ```bash
 make python-setup
 make python-cmdstan-install
-make model
+make timing
+make catboost-geom-model
+make catboost-geom-model-paper
 make benchmark-small
 make benchmark-paper
 ```
@@ -55,9 +59,11 @@ make benchmark-paper
 `make benchmark-small` runs the default 2000-row QM9 subset with MolADT timing enabled.
 `make benchmark-paper` runs the paper-sized QM9 split counts `110462 / 10000 / 10000`, uses the paper inference preset, includes MolADT timing, and writes the long-run artifacts under `results/paper/run_<timestamp>/`.
 That QM9 paper-style split uses `130,462` molecules in total: `110,462` train, `10,000` validation, and `10,000` test. It is not `100k` in each split.
-`make model` runs the predictive model suite only, without the ZINC timing pass. It prepares FreeSolv and QM9, runs the configured predictive models, writes the run under `results/models/run_<timestamp>/` or `results/models/paper/run_<timestamp>/`, and then creates per-model folders under `models/` so you can open one model at a time and see its filtered metrics, predictions, and a short explanation of how to read that model against `smiles` and `MolADT`.
+`make timing` builds a local matched timing corpus under `data/processed/zinc_timing/...`: one `.moladt.json` file per molecule plus a canonical SMILES file with the same molecule count. It then times RDKit baseline parsing, local MolADT SMILES parsing, and local MolADT file parsing, and writes the run under `results/timing/run_<timestamp>/`.
+`make catboost-geom-model` runs the predictive model suite only, without the ZINC timing pass. It prepares FreeSolv and QM9, uses the default QM9 `2000`-row subset with `subset` split mode, runs the configured predictive models, writes the run under `results/models/run_<timestamp>/`, and then creates per-model folders under `models/` so you can open one model at a time and see its filtered metrics, predictions, and a short explanation of how to read that model against `smiles` and `MolADT`.
+`make catboost-geom-model-paper` runs the same predictive model suite on the paper-sized QM9 split counts `110462 / 10000 / 10000` and writes under `results/models/paper/run_<timestamp>/`.
 All of those paths are local to this repo directory: `.venv/`, `.cmdstan/`, `data/`, and `results/`.
-By default, `make model` runs the two Stan baselines plus the default extra-model set from the `models` subcommand: `catboost_uncertainty` and `visnet_ensemble`. So the default suite is:
+By default, both model-suite targets run the two Stan baselines plus the default extra-model set from the `models` subcommand: `catboost_uncertainty` and `visnet_ensemble`. So the default suite is:
 
 - Stan: `bayes_linear_student_t`
 - Stan: `bayes_hierarchical_shrinkage`
@@ -72,10 +78,10 @@ What each part is doing:
 
 Rough runtime guidance:
 
-- `make model` in the default preset is usually dominated by the Stan fits and is typically in the same general range as the normal benchmark without the ZINC pass: often tens of minutes rather than seconds on a laptop once CmdStan is built.
+- `make catboost-geom-model` is usually dominated by the Stan fits and is typically in the same general range as the normal benchmark without the ZINC pass: often tens of minutes rather than seconds on a laptop once CmdStan is built.
 - `catboost_uncertainty` adds a validation search plus one fitted model per seed for each tabular representation, so it is usually materially slower than the Stan smoke path but still much cheaper than the full paper run.
 - `visnet_ensemble` is usually the slowest optional branch because it trains a neural geometry model; in paper mode it can push the run into multi-hour territory.
-- `make benchmark-paper` remains the longest path because it combines the paper-sized QM9 split with the long inference preset and the timing benchmark.
+- `make catboost-geom-model-paper` is the long predictive-only run, and `make benchmark-paper` remains the longest overall path because it adds the timing benchmark on top of the paper-sized split and long inference preset.
 
 If you want to trim the suite, pass explicit extra-model flags such as `--extra-models catboost_uncertainty` or `--skip-geom`.
 Each run now lands in its own timestamped folder with a top-level `results.csv`, `rmse_train_test_vs_literature.svg`, `inference_sweep_overview.svg`, `timing_overview.svg`, and a `details/` subfolder for the raw CSVs and Stan output.
@@ -102,10 +108,23 @@ These runs extend the default Stan baseline instead of replacing it. Extra outpu
 - `figures/predicted_vs_actual_scatter.svg`
 - `figures/residual_vs_uncertainty.svg`
 - `figures/coverage_calibration.svg`
+- `figures/metric_comparisons/*.svg`
 - `model_artifacts/`
 - `models/<model_name>/README.md`
 - `models/<model_name>/predictive_metrics.csv`
 - `models/<model_name>/predictions.csv`
+
+The metric-comparison figure pack writes one simple chart per metric, using the matched local `smiles` and `moladt` rows from a shared model family when possible, plus a paper-context bar when there is a numeric literature value for that metric.
+
+Timing outputs now also include:
+
+- `details/zinc_timing.csv`
+- `details/zinc_timing_items.csv`
+- `details/zinc_timing_library_manifest.csv`
+
+The ADT file parse path uses `orjson` when available through the local environment, rather than a development tool such as Ruff, because this is runtime data parsing rather than Python source parsing.
+
+If a local environment is missing an optional model dependency from an older setup, the suite now skips just that optional family and still writes the remaining results instead of aborting the whole run. Re-run `make python-setup` to refresh the default local model stack.
 
 Model details: [jump to Model](#model).
 

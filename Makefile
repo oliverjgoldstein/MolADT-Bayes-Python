@@ -106,8 +106,9 @@ endif
 TOOLCHAIN_ENV := $(if $(DARWIN_SDKROOT),env CC="$(DARWIN_CLANG)" CXX="$(DARWIN_CLANGXX)" SDKROOT="$(DARWIN_SDKROOT)" CFLAGS="$${CFLAGS:+$$CFLAGS }-isysroot $(DARWIN_SDKROOT)" CXXFLAGS="$${CXXFLAGS:+$$CXXFLAGS }-isysroot $(DARWIN_SDKROOT)",)
 
 MODEL_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),models/paper/run_$(RUN_TIMESTAMP),models/run_$(RUN_TIMESTAMP))
+TIMING_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),timing/paper/run_$(RUN_TIMESTAMP),timing/run_$(RUN_TIMESTAMP))
 
-.PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-activate python-parse python-parse-smiles python-to-smiles python-pretty-example python-benchmark-smoke python-benchmark-qm9 python-benchmark-zinc benchmark benchmark-small benchmark-paper benchmark-bg model
+.PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-activate python-parse python-parse-smiles python-to-smiles python-pretty-example python-benchmark-smoke python-benchmark-qm9 python-benchmark-zinc benchmark benchmark-small benchmark-paper benchmark-bg timing catboost-geom-model catboost-geom-model-paper model
 
 help:
 	@printf "%s\n" \
@@ -125,7 +126,9 @@ help:
 		"  make benchmark-small        Run the default 2000-row QM9 subset benchmark with MolADT timing enabled" \
 		"  make benchmark-paper        Run the paper-sized QM9 split (110462/10000/10000) with MolADT timing enabled" \
 		"  make benchmark-bg           Run the benchmark in the foreground and mirror output to the active results directory" \
-		"  make model                  Run the predictive model suite and write per-model folders" \
+		"  make timing                 Build the local ZINC timing corpus and compare SMILES vs MolADT parse times" \
+		"  make catboost-geom-model    Run the predictive model suite on the default QM9 subset" \
+		"  make catboost-geom-model-paper Run the predictive model suite on the paper-sized QM9 split" \
 		"  full long run: make benchmark-paper" \
 		"  quieter run: BENCHMARK_VERBOSE=0 make benchmark" \
 		"" \
@@ -350,5 +353,14 @@ benchmark-bg:
 	"  details dir: $(RESULTS_ROOT)/details/"
 	@$(BASH) -o pipefail -c '$(MAKE) --no-print-directory benchmark 2>&1 | tee "$(BENCHMARK_LOG)"'
 
-model:
+timing:
+	MOLADT_RESULTS_DIR=results/$(TIMING_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all zinc-timing --dataset-size $(ZINC_DATASET_SIZE) --dataset-dimension $(ZINC_DATASET_DIMENSION) $(ZINC_LIMIT_TIMING_ARG) --include-moladt $(VERBOSE_ARG)
+
+catboost-geom-model:
 	MOLADT_RESULTS_DIR=results/$(MODEL_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all models $(QM9_LIMIT_BENCHMARK_ARG) --qm9-split-mode $(QM9_SPLIT_MODE) $(if $(filter paper,$(INFERENCE_PRESET)),--paper-mode,) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
+
+catboost-geom-model-paper:
+	@$(MAKE) --no-print-directory catboost-geom-model INFERENCE_PRESET=paper QM9_LIMIT= QM9_SPLIT_MODE=paper
+
+model:
+	@$(MAKE) --no-print-directory catboost-geom-model
