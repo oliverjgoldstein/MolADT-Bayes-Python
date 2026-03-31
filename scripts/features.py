@@ -10,6 +10,9 @@ import pandas as pd
 from rdkit import Chem, RDLogger
 from rdkit.Chem import Descriptors, Lipinski, rdMolDescriptors
 
+from moladt.inference import compute_descriptors as compute_moladt_descriptors
+from moladt.io.sdf import parse_sdf_record
+
 from .common import FailureRecord
 
 BASE_FEATURE_GROUPS: dict[str, str] = {
@@ -23,6 +26,12 @@ BASE_FEATURE_GROUPS: dict[str, str] = {
     "fraction_csp3": "topology_2d",
     "formal_charge": "charge_2d",
     "heavy_atom_count": "size_2d",
+}
+
+SDF_GEOMETRY_FEATURE_GROUPS: dict[str, str] = {
+    "z_mean": "geometry_atoms",
+    "z_max": "geometry_atoms",
+    "atom_count": "geometry_atoms",
 }
 
 THREED_FEATURE_GROUPS: dict[str, str] = {
@@ -40,12 +49,70 @@ THREED_FEATURE_GROUPS: dict[str, str] = {
     "distance_max": "distance_3d",
 }
 
+MOLADT_FEATURE_GROUPS: dict[str, str] = {
+    "weight": "adt_composition",
+    "polar": "adt_composition",
+    "surface": "adt_geometry_proxy",
+    "bond_order": "adt_topology",
+    "donor_count": "adt_polarity",
+    "acceptor_count": "adt_polarity",
+    "heavy_atoms": "adt_composition",
+    "halogens": "adt_composition",
+    "atom_count_c": "adt_elements",
+    "atom_count_n": "adt_elements",
+    "atom_count_o": "adt_elements",
+    "atom_count_f": "adt_elements",
+    "atom_count_p": "adt_elements",
+    "atom_count_s": "adt_elements",
+    "atom_count_cl": "adt_elements",
+    "atom_count_br": "adt_elements",
+    "atom_count_i": "adt_elements",
+    "atom_count_h": "adt_elements",
+    "formal_charge_sum": "adt_charge",
+    "abs_formal_charge_sum": "adt_charge",
+    "positive_charge_count": "adt_charge",
+    "negative_charge_count": "adt_charge",
+    "bonding_system_count": "adt_bonding",
+    "multicentre_system_count": "adt_bonding",
+    "pi_ring_system_count": "adt_bonding",
+    "zero_electron_system_count": "adt_bonding",
+    "sigma_edge_count": "adt_bonding",
+    "effective_bond_order_sum": "adt_bonding",
+    "effective_bond_order_mean": "adt_bonding",
+    "effective_bond_order_max": "adt_bonding",
+    "aromatic_rings": "adt_topology",
+    "aromatic_atom_count": "adt_topology",
+    "aromatic_atom_fraction": "adt_topology",
+    "ring_edge_fraction": "adt_topology",
+    "rotatable_bonds": "adt_topology",
+    "heavy_atom_degree_mean": "adt_topology",
+    "heavy_atom_degree_max": "adt_topology",
+    "radius_of_gyration": "adt_geometry",
+    "distance_mean": "adt_geometry",
+    "distance_std": "adt_geometry",
+    "distance_max": "adt_geometry",
+    "inertia_eigenvalue_min": "adt_geometry",
+    "inertia_eigenvalue_mid": "adt_geometry",
+    "inertia_eigenvalue_max": "adt_geometry",
+}
+
 
 @dataclass(frozen=True, slots=True)
 class FeatureTable:
     rows: pd.DataFrame
     feature_names: tuple[str, ...]
     feature_groups: dict[str, str]
+    failures: tuple[FailureRecord, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class GeometricFeatureTable:
+    rows: pd.DataFrame
+    atomic_numbers: tuple[np.ndarray, ...]
+    coordinates: tuple[np.ndarray, ...]
+    global_feature_names: tuple[str, ...]
+    global_feature_groups: dict[str, str]
+    global_features: np.ndarray | None
     failures: tuple[FailureRecord, ...]
 
 
@@ -124,6 +191,180 @@ def featurize_sdf_records(
     return FeatureTable(rows=pd.DataFrame(rows), feature_names=feature_names, feature_groups=feature_groups, failures=tuple(failures))
 
 
+def featurize_moladt_records(
+    dataframe: pd.DataFrame,
+    *,
+    dataset_name: str,
+    mol_id_column: str,
+    mol_column: str,
+    target_column: str,
+    record_index_column: str | None = None,
+) -> FeatureTable:
+    rows: list[dict[str, Any]] = []
+    failures: list[FailureRecord] = []
+    for record in dataframe.itertuples(index=False):
+        mol_id = str(getattr(record, mol_id_column))
+        target = float(getattr(record, target_column))
+        raw_molecule = getattr(record, mol_column)
+        try:
+            canonical = canonical_smiles_from_mol(raw_molecule)
+            moladt_record = rdkit_mol_to_moladt_record(raw_molecule)
+            features = compute_moladt_descriptors(moladt_record.molecule).to_dict()
+        except Exception as exc:
+            failures.append(FailureRecord(dataset=dataset_name, mol_id=mol_id, stage="moladt_featurize", error=str(exc)))
+            continue
+        row: dict[str, Any] = {"mol_id": mol_id, "smiles": canonical, target_column: target}
+        if record_index_column is not None:
+            row[record_index_column] = int(getattr(record, record_index_column))
+        row.update(features)
+        rows.append(row)
+    feature_names = tuple(MOLADT_FEATURE_GROUPS)
+    return FeatureTable(rows=pd.DataFrame(rows), feature_names=feature_names, feature_groups=dict(MOLADT_FEATURE_GROUPS), failures=tuple(failures))
+
+
+def featurize_moladt_smiles_dataframe(
+    dataframe: pd.DataFrame,
+    *,
+    dataset_name: str,
+    mol_id_column: str,
+    smiles_column: str,
+    target_column: str,
+) -> FeatureTable:
+    from moladt.io.smiles import parse_smiles
+
+    rows: list[dict[str, Any]] = []
+    failures: list[FailureRecord] = []
+    for record in dataframe.itertuples(index=False):
+        mol_id = str(getattr(record, mol_id_column))
+        smiles = str(getattr(record, smiles_column))
+        target = float(getattr(record, target_column))
+        try:
+            canonical = canonicalize_smiles(smiles)
+            moladt_molecule = parse_smiles(canonical)
+            features = compute_moladt_descriptors(moladt_molecule).to_dict()
+        except Exception as exc:
+            failures.append(FailureRecord(dataset=dataset_name, mol_id=mol_id, stage="moladt_smiles_featurize", error=str(exc)))
+            continue
+        row: dict[str, Any] = {"mol_id": mol_id, "smiles": canonical, target_column: target}
+        row.update(features)
+        rows.append(row)
+    feature_names = tuple(MOLADT_FEATURE_GROUPS)
+    return FeatureTable(rows=pd.DataFrame(rows), feature_names=feature_names, feature_groups=dict(MOLADT_FEATURE_GROUPS), failures=tuple(failures))
+
+
+def featurize_sdf_geometry_records(
+    dataframe: pd.DataFrame,
+    *,
+    dataset_name: str,
+    mol_id_column: str,
+    mol_column: str,
+    target_column: str,
+    record_index_column: str | None = None,
+) -> GeometricFeatureTable:
+    rows: list[dict[str, Any]] = []
+    atomic_numbers: list[np.ndarray] = []
+    coordinates: list[np.ndarray] = []
+    global_rows: list[dict[str, float]] = []
+    failures: list[FailureRecord] = []
+    feature_names = tuple(SDF_GEOMETRY_FEATURE_GROUPS)
+    for record in dataframe.itertuples(index=False):
+        mol_id = str(getattr(record, mol_id_column))
+        target = float(getattr(record, target_column))
+        raw_molecule = getattr(record, mol_column)
+        try:
+            molecule = Chem.Mol(raw_molecule)
+            with _suppress_rdkit_logs("rdApp.error", "rdApp.warning"):
+                Chem.SanitizeMol(molecule)
+            if molecule.GetNumConformers() == 0:
+                raise ValueError("Molecule has no conformer coordinates")
+            conformer = molecule.GetConformer()
+            z = np.asarray([atom.GetAtomicNum() for atom in molecule.GetAtoms()], dtype=np.int64)
+            pos = np.asarray(conformer.GetPositions(), dtype=float)
+            canonical = Chem.MolToSmiles(molecule, canonical=True, isomericSmiles=True)
+            if pos.shape != (len(z), 3):
+                raise ValueError(f"Expected coordinates with shape ({len(z)}, 3) but found {pos.shape}")
+        except Exception as exc:
+            failures.append(FailureRecord(dataset=dataset_name, mol_id=mol_id, stage="sdf_geometry_featurize", error=str(exc)))
+            continue
+        row: dict[str, Any] = {"mol_id": mol_id, "smiles": canonical, target_column: target}
+        if record_index_column is not None:
+            row[record_index_column] = int(getattr(record, record_index_column))
+        rows.append(row)
+        atomic_numbers.append(z)
+        coordinates.append(pos)
+        global_rows.append(
+            {
+                "z_mean": float(np.mean(z)) if len(z) else 0.0,
+                "z_max": float(np.max(z)) if len(z) else 0.0,
+                "atom_count": float(len(z)),
+            }
+        )
+    return GeometricFeatureTable(
+        rows=pd.DataFrame(rows),
+        atomic_numbers=tuple(atomic_numbers),
+        coordinates=tuple(coordinates),
+        global_feature_names=feature_names,
+        global_feature_groups=dict(SDF_GEOMETRY_FEATURE_GROUPS),
+        global_features=np.asarray([[row[name] for name in feature_names] for row in global_rows], dtype=float) if global_rows else None,
+        failures=tuple(failures),
+    )
+
+
+def featurize_moladt_geometry_records(
+    dataframe: pd.DataFrame,
+    *,
+    dataset_name: str,
+    mol_id_column: str,
+    mol_column: str,
+    target_column: str,
+    record_index_column: str | None = None,
+) -> GeometricFeatureTable:
+    rows: list[dict[str, Any]] = []
+    atomic_numbers: list[np.ndarray] = []
+    coordinates: list[np.ndarray] = []
+    global_rows: list[dict[str, float]] = []
+    failures: list[FailureRecord] = []
+    feature_names = tuple(MOLADT_FEATURE_GROUPS)
+    for record in dataframe.itertuples(index=False):
+        mol_id = str(getattr(record, mol_id_column))
+        target = float(getattr(record, target_column))
+        raw_molecule = getattr(record, mol_column)
+        try:
+            canonical = canonical_smiles_from_mol(raw_molecule)
+            moladt_record = rdkit_mol_to_moladt_record(raw_molecule)
+            descriptor_dict = compute_moladt_descriptors(moladt_record.molecule).to_dict()
+            ordered_atoms = [moladt_record.molecule.atoms[atom_id] for atom_id in sorted(moladt_record.molecule.atoms)]
+            z = np.asarray([atom.attributes.atomic_number for atom in ordered_atoms], dtype=np.int64)
+            pos = np.asarray(
+                [
+                    [atom.coordinate.x.value, atom.coordinate.y.value, atom.coordinate.z.value]
+                    for atom in ordered_atoms
+                ],
+                dtype=float,
+            )
+            if pos.shape != (len(z), 3):
+                raise ValueError(f"Expected MolADT coordinates with shape ({len(z)}, 3) but found {pos.shape}")
+        except Exception as exc:
+            failures.append(FailureRecord(dataset=dataset_name, mol_id=mol_id, stage="moladt_geometry_featurize", error=str(exc)))
+            continue
+        row: dict[str, Any] = {"mol_id": mol_id, "smiles": canonical, target_column: target}
+        if record_index_column is not None:
+            row[record_index_column] = int(getattr(record, record_index_column))
+        rows.append(row)
+        atomic_numbers.append(z)
+        coordinates.append(pos)
+        global_rows.append(descriptor_dict)
+    return GeometricFeatureTable(
+        rows=pd.DataFrame(rows),
+        atomic_numbers=tuple(atomic_numbers),
+        coordinates=tuple(coordinates),
+        global_feature_names=feature_names,
+        global_feature_groups=dict(MOLADT_FEATURE_GROUPS),
+        global_features=np.asarray([[row[name] for name in feature_names] for row in global_rows], dtype=float) if global_rows else None,
+        failures=tuple(failures),
+    )
+
+
 def load_rdkit_sdf_records(sdf_path: Path) -> list[Chem.Mol | None]:
     supplier = Chem.SDMolSupplier(str(sdf_path), removeHs=False, sanitize=False)
     return [molecule for molecule in supplier]
@@ -199,3 +440,11 @@ def _sanitize_rdkit_mol(molecule: Chem.Mol) -> Chem.Mol:
         without_hydrogens = Chem.RemoveHs(working, remove_hs)
         Chem.SanitizeMol(without_hydrogens)
     return without_hydrogens
+
+
+def rdkit_mol_to_moladt_record(molecule: Chem.Mol):
+    working = Chem.Mol(molecule)
+    with _suppress_rdkit_logs("rdApp.error", "rdApp.warning"):
+        Chem.SanitizeMol(working)
+    mol_block = Chem.MolToMolBlock(working)
+    return parse_sdf_record(f"{mol_block}\n$$$$\n")

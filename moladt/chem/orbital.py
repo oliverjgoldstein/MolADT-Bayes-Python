@@ -255,6 +255,11 @@ PHOSPHORUS: Shells = (
     _shell(2, s_counts=(2,), p_counts=(2, 2, 2)),
     _shell(3, s_counts=(2,), p_counts=(1, 1, 1)),
 )
+SILICON: Shells = (
+    _shell(1, s_counts=(2,)),
+    _shell(2, s_counts=(2,), p_counts=(2, 2, 2)),
+    _shell(3, s_counts=(2,), p_counts=(1, 1, 0)),
+)
 SULFUR: Shells = (
     _shell(1, s_counts=(2,)),
     _shell(2, s_counts=(2,), p_counts=(2, 2, 2)),

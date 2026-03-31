@@ -8,7 +8,7 @@ The shared contract lives under `data/processed/`. The goal is to let Haskell co
 
 ## What Python Writes
 
-For each exported dataset prefix such as `freesolv_smiles` or `qm9_sdf`, Python writes:
+For each exported dataset prefix such as `freesolv_smiles` or `qm9_moladt`, Python writes:
 
 - `*_X_train.csv`, `*_X_valid.csv`, `*_X_test.csv`
 - `*_y_train.csv`, `*_y_valid.csv`, `*_y_test.csv`
@@ -18,7 +18,7 @@ For each exported dataset prefix such as `freesolv_smiles` or `qm9_sdf`, Python 
 Examples already used by the Haskell side include:
 
 - `data/processed/freesolv_smiles_X_train.csv`
-- `data/processed/qm9_sdf_X_train.csv`
+- `data/processed/qm9_moladt_X_train.csv`
 
 ## Standardization Contract
 
@@ -27,6 +27,7 @@ The alignment rules are simple and explicit:
 - `X_train`, `X_valid`, and `X_test` are standardized using the train-split mean and standard deviation only.
 - `y_train`, `y_valid`, and `y_test` stay on the original target scale.
 - split indices and split `mol_id` lists are written into the metadata JSON.
+- the metadata also records `split_scheme`, `source_row_count`, and `used_row_count`.
 - zero-variance features are left with a safe scale of `1.0` and recorded in metadata.
 
 This is the contract the Haskell baseline consumes today.
@@ -69,7 +70,7 @@ Shared modeling assumptions that matter for interop:
 
    ```bash
    ./.venv/bin/python -m scripts.run_all smoke-test
-   ./.venv/bin/python -m scripts.run_all qm9 --limit 2000
+   ./.venv/bin/python -m scripts.run_all qm9 --limit 2000 --split-mode subset
    ```
 
 2. In the Haskell repo, point the consumer at the processed directory:
@@ -78,10 +79,10 @@ Shared modeling assumptions that matter for interop:
    MOLADT_PROCESSED_DATA_DIR=../MolADT-Bayes-Python/data/processed stack run moladtbayes -- infer-benchmark freesolv_smiles lwis
    ```
 
-3. For an SDF-backed structural benchmark:
+3. For an ADT-backed structural benchmark:
 
    ```bash
-   MOLADT_PROCESSED_DATA_DIR=../MolADT-Bayes-Python/data/processed stack run moladtbayes -- infer-benchmark qm9_sdf mh:0.9 256
+   MOLADT_PROCESSED_DATA_DIR=../MolADT-Bayes-Python/data/processed stack run moladtbayes -- infer-benchmark qm9_moladt mh:0.9 256
    ```
 
 ## Source Files

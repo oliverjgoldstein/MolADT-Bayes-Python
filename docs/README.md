@@ -17,11 +17,11 @@ The timing story lives in the ZINC benchmark:
 - `raw_file_read`
 - `smiles_parse_sanitize`
 - `smiles_canonicalization`
-- `moladt_parse_render` when MolADT timing is enabled
+- `moladt_parse_render` when MolADT timing is enabled, using RDKit MolBlock -> MolADT parse -> MolADT pretty render
 
 ## Model
 
-The predictive benchmark fits the Stan models, writes a timestamped results bundle with one top-level `results.csv` plus two SVG graphs, and exports aligned matrices under `data/processed/` for the Haskell repo.
+The predictive benchmark fits the Stan models, writes a timestamped results bundle with one top-level `results.csv` plus three SVG graphs, and exports aligned matrices under `data/processed/` for the Haskell repo.
 
 Core model files:
 
@@ -33,10 +33,12 @@ Core model files:
 ```bash
 make python-setup
 make python-cmdstan-install
-make benchmark INFERENCE_PRESET=paper INCLUDE_MOLADT=1
+make benchmark-small
+make benchmark-paper
 ```
 
-That is the full hours-long run and it keeps the benchmark output visible in the terminal.
+`make benchmark-small` is the default 2000-row QM9 subset run.
+`make benchmark-paper` is the paper-sized QM9 count-matched run.
 
 ## Pages
 

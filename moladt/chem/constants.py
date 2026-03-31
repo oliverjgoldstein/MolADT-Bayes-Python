@@ -83,6 +83,7 @@ _NOMINAL_VALENCE: dict[AtomicSymbol, tuple[int, int]] = {
     AtomicSymbol.O: (4, 4),
     AtomicSymbol.F: (2, 2),
     AtomicSymbol.P: (6, 10),
+    AtomicSymbol.Si: (8, 8),
     AtomicSymbol.S: (4, 12),
     AtomicSymbol.Cl: (2, 2),
     AtomicSymbol.Br: (2, 2),
@@ -105,6 +106,7 @@ _ELEMENT_ATTRIBUTES: dict[AtomicSymbol, ElementAttributes] = {
     AtomicSymbol.S: ElementAttributes(AtomicSymbol.S, 16, 32.065),
     AtomicSymbol.Br: ElementAttributes(AtomicSymbol.Br, 35, 79.904),
     AtomicSymbol.P: ElementAttributes(AtomicSymbol.P, 15, 30.974),
+    AtomicSymbol.Si: ElementAttributes(AtomicSymbol.Si, 14, 28.085),
     AtomicSymbol.I: ElementAttributes(AtomicSymbol.I, 53, 126.904),
     AtomicSymbol.Na: ElementAttributes(AtomicSymbol.Na, 11, 22.990),
 }
@@ -122,6 +124,7 @@ _ELEMENT_SHELLS = {
     AtomicSymbol.S: orbital.SULFUR,
     AtomicSymbol.Br: orbital.BROMINE,
     AtomicSymbol.P: orbital.PHOSPHORUS,
+    AtomicSymbol.Si: orbital.SILICON,
     AtomicSymbol.I: orbital.IODINE,
     AtomicSymbol.Na: orbital.SODIUM,
 }

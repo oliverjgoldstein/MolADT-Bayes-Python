@@ -18,6 +18,7 @@ AUTO_APPROVE_FIXES ?= 0
 
 INFERENCE_PRESET ?= default
 QM9_LIMIT ?= 2000
+QM9_SPLIT_MODE ?= subset
 ZINC_DATASET_SIZE ?= 250K
 ZINC_DATASET_DIMENSION ?= 2D
 ZINC_LIMIT ?=
@@ -49,7 +50,7 @@ VARIATIONAL_ITERATIONS_DEFAULT := 15000
 OPTIMIZE_ITERATIONS_DEFAULT := 5000
 PATHFINDER_PATHS_DEFAULT := 8
 PREDICTIVE_DRAWS_DEFAULT := 2000
-RUNTIME_HINT := often 3-6 hours on an M1 Pro, with QM9_LIMIT=5000 and the full ZINC 250K timing pass
+RUNTIME_HINT := often several hours on an M1 Pro, with the paper-sized QM9 split (110462/10000/10000) and the full ZINC 250K timing pass
 else
 METHODS_DEFAULT := sample,variational,pathfinder,optimize,laplace
 SAMPLE_CHAINS_DEFAULT := 2
@@ -86,6 +87,8 @@ PATHFINDER_PATHS ?= $(PATHFINDER_PATHS_DEFAULT)
 PREDICTIVE_DRAWS ?= $(PREDICTIVE_DRAWS_DEFAULT)
 
 BENCHMARK_ARGS := --methods $(METHODS) --models $(MODELS) --sample-chains $(SAMPLE_CHAINS) --sample-warmup $(SAMPLE_WARMUP) --sample-draws $(SAMPLE_DRAWS) --approximation-draws $(APPROXIMATION_DRAWS) --variational-iterations $(VARIATIONAL_ITERATIONS) --optimize-iterations $(OPTIMIZE_ITERATIONS) --pathfinder-paths $(PATHFINDER_PATHS) --predictive-draws $(PREDICTIVE_DRAWS)
+QM9_LIMIT_QM9_ARG := $(if $(QM9_LIMIT),--limit $(QM9_LIMIT),)
+QM9_LIMIT_BENCHMARK_ARG := $(if $(QM9_LIMIT),--qm9-limit $(QM9_LIMIT),)
 ZINC_LIMIT_BENCHMARK_ARG := $(if $(ZINC_LIMIT),--zinc-limit $(ZINC_LIMIT),)
 ZINC_LIMIT_TIMING_ARG := $(if $(ZINC_LIMIT),--limit $(ZINC_LIMIT),)
 INCLUDE_MOLADT_ARG := $(if $(filter 1 true yes TRUE YES,$(INCLUDE_MOLADT)),--include-moladt,)
@@ -101,7 +104,9 @@ endif
 
 TOOLCHAIN_ENV := $(if $(DARWIN_SDKROOT),env CC="$(DARWIN_CLANG)" CXX="$(DARWIN_CLANGXX)" SDKROOT="$(DARWIN_SDKROOT)" CFLAGS="$${CFLAGS:+$$CFLAGS }-isysroot $(DARWIN_SDKROOT)" CXXFLAGS="$${CXXFLAGS:+$$CXXFLAGS }-isysroot $(DARWIN_SDKROOT)",)
 
-.PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-activate python-parse python-parse-smiles python-to-smiles python-pretty-example python-benchmark-smoke python-benchmark-qm9 python-benchmark-zinc benchmark benchmark-bg
+MODEL_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),models/paper/run_$(RUN_TIMESTAMP),models/run_$(RUN_TIMESTAMP))
+
+.PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-activate python-parse python-parse-smiles python-to-smiles python-pretty-example python-benchmark-smoke python-benchmark-qm9 python-benchmark-zinc benchmark benchmark-small benchmark-paper benchmark-bg model
 
 help:
 	@printf "%s\n" \
@@ -114,16 +119,21 @@ help:
 	"  make python-parse           Parse molecules/benzene.sdf" \
 	"  make python-parse-smiles    Parse c1ccccc1" \
 	"  make python-to-smiles       Render molecules/benzene.sdf to SMILES" \
-	"  make python-pretty-example  Render EXAMPLE=ferrocene or EXAMPLE=diborane" \
-	"  make benchmark              Run FreeSolv, QM9, and ZINC benchmark flows" \
-	"  make benchmark-bg           Run the benchmark in the foreground and mirror output to the active results directory" \
-	"  full long run: make benchmark INFERENCE_PRESET=paper INCLUDE_MOLADT=1" \
-	"  quieter run: BENCHMARK_VERBOSE=0 make benchmark" \
-	"" \
-	"Current inference configuration:" \
-	"  preset=$(INFERENCE_PRESET)" \
-	"  results_root=$(RESULTS_ROOT)" \
-	"  include_moladt=$(INCLUDE_MOLADT)" \
+		"  make python-pretty-example  Render EXAMPLE=ferrocene or EXAMPLE=diborane" \
+		"  make benchmark              Run FreeSolv, QM9, and ZINC benchmark flows" \
+		"  make benchmark-small        Run the default 2000-row QM9 subset benchmark with MolADT timing enabled" \
+		"  make benchmark-paper        Run the paper-sized QM9 split (110462/10000/10000) with MolADT timing enabled" \
+		"  make benchmark-bg           Run the benchmark in the foreground and mirror output to the active results directory" \
+		"  make model                  Run the predictive model suite and write per-model folders" \
+		"  full long run: make benchmark-paper" \
+		"  quieter run: BENCHMARK_VERBOSE=0 make benchmark" \
+		"" \
+		"Current inference configuration:" \
+		"  preset=$(INFERENCE_PRESET)" \
+		"  results_root=$(RESULTS_ROOT)" \
+		"  qm9_split_mode=$(QM9_SPLIT_MODE)" \
+		"  qm9_limit=$(if $(QM9_LIMIT),$(QM9_LIMIT),full-local-download)" \
+		"  include_moladt=$(INCLUDE_MOLADT)" \
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
 	"  toolchain_env=$(if $(DARWIN_SDKROOT),apple-xcrun,default)" \
 	"  methods=$(METHODS)" \
@@ -315,13 +325,19 @@ python-benchmark-smoke:
 	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all smoke-test $(VERBOSE_ARG) $(BENCHMARK_ARGS)
 
 python-benchmark-qm9:
-	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 --limit $(QM9_LIMIT) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
+	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 $(QM9_LIMIT_QM9_ARG) --split-mode $(QM9_SPLIT_MODE) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
 
 python-benchmark-zinc:
 	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all zinc-timing --dataset-size $(ZINC_DATASET_SIZE) --dataset-dimension $(ZINC_DATASET_DIMENSION) $(ZINC_LIMIT_TIMING_ARG) $(INCLUDE_MOLADT_ARG) $(VERBOSE_ARG)
 
 benchmark:
-	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all benchmark --qm9-limit $(QM9_LIMIT) --zinc-dataset-size $(ZINC_DATASET_SIZE) --zinc-dataset-dimension $(ZINC_DATASET_DIMENSION) $(ZINC_LIMIT_BENCHMARK_ARG) $(INCLUDE_MOLADT_ARG) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
+	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all benchmark $(QM9_LIMIT_BENCHMARK_ARG) --qm9-split-mode $(QM9_SPLIT_MODE) --zinc-dataset-size $(ZINC_DATASET_SIZE) --zinc-dataset-dimension $(ZINC_DATASET_DIMENSION) $(ZINC_LIMIT_BENCHMARK_ARG) $(INCLUDE_MOLADT_ARG) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
+
+benchmark-small:
+	@$(MAKE) --no-print-directory benchmark QM9_LIMIT=2000 QM9_SPLIT_MODE=subset INCLUDE_MOLADT=1
+
+benchmark-paper:
+	@$(MAKE) --no-print-directory benchmark INFERENCE_PRESET=paper QM9_LIMIT= QM9_SPLIT_MODE=paper INCLUDE_MOLADT=1
 
 benchmark-bg:
 	@mkdir -p $(dir $(BENCHMARK_LOG))
@@ -331,3 +347,6 @@ benchmark-bg:
 	"  summary csv: $(RESULTS_ROOT)/results.csv" \
 	"  details dir: $(RESULTS_ROOT)/details/"
 	@$(BASH) -o pipefail -c '$(MAKE) --no-print-directory benchmark 2>&1 | tee "$(BENCHMARK_LOG)"'
+
+model:
+	MOLADT_RESULTS_DIR=results/$(MODEL_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all models $(QM9_LIMIT_BENCHMARK_ARG) --qm9-split-mode $(QM9_SPLIT_MODE) $(if $(filter paper,$(INFERENCE_PRESET)),--paper-mode,) $(VERBOSE_ARG) $(BENCHMARK_ARGS)

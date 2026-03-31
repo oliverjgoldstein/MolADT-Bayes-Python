@@ -2,27 +2,41 @@
 
 This repo owns the main benchmark run. It prepares the datasets, exports aligned matrices, fits the Stan models, writes a compact CSV-first result bundle, and runs the timing pass.
 
-## The One Big Command
+## Main Commands
 
 ```bash
-make benchmark INFERENCE_PRESET=paper INCLUDE_MOLADT=1
+make model
+make benchmark-small
+make benchmark-paper
+./.venv/bin/python -m scripts.run_all benchmark --include-moladt-predictive --extra-models catboost_uncertainty
+./.venv/bin/python -m scripts.run_all benchmark --include-moladt-predictive --extra-models catboost_uncertainty --geom-model visnet
+./.venv/bin/python -m scripts.run_all benchmark --include-moladt-predictive --extra-models catboost_uncertainty,visnet_ensemble --paper-mode
 ```
 
-This is the full run:
+`make benchmark-small` is the default benchmark:
+
+- FreeSolv predictive benchmark
+- QM9 `mu` benchmark on the deterministic 2000-row subset configuration
+- ZINC timing benchmark
+- MolADT timing included
+- results written under `results/run_<timestamp>/`
+
+`make benchmark-paper` is the full long run:
 
 - FreeSolv predictive benchmark
 - QM9 dipole benchmark for `mu`
 - ZINC timing benchmark
 - MolADT timing included
 - paper-scale inference budget
+- deterministic local split counts matching the paper-sized QM9 setup: `110462 / 10000 / 10000`
 - results written under `results/paper/run_<timestamp>/`
 - live Stan and timing output shown in the terminal by default
 
-It is the hours-long benchmark command.
+That paper-style QM9 split uses `130,462` molecules in total: `110,462` train, `10,000` validation, and `10,000` test. It is not `100k` per split.
+
+It is the hours-long benchmark command. If you want a quieter run, use `BENCHMARK_VERBOSE=0 make benchmark-paper`.
 
 Model details: [jump to Model](#model).
-
-If you want a quieter run, use `BENCHMARK_VERBOSE=0 make benchmark ...`.
 
 ## Timing
 
@@ -32,12 +46,14 @@ The ZINC timing benchmark measures:
 - `smiles_parse_sanitize`
 - `smiles_canonicalization`
 - `moladt_parse_render` when `--include-moladt` or `INCLUDE_MOLADT=1` is used
+  This stage now serializes RDKit molecules to MolBlock, parses them into MolADT via the SDF reader, then pretty-renders from the ADT.
 
 Current defaults from the code:
 
 - dataset size: `250K`
 - dataset dimension: `2D`
-- QM9 limit: `2000`
+- QM9 small-run mode: `QM9_LIMIT=2000`, `QM9_SPLIT_MODE=subset`
+- QM9 paper-run mode: `QM9_LIMIT=` with `QM9_SPLIT_MODE=paper`
 - inference methods: `sample,variational,pathfinder,optimize,laplace`
 - models: `bayes_linear_student_t,bayes_hierarchical_shrinkage`
 
@@ -47,6 +63,20 @@ The predictive benchmark fits:
 
 - [`bayes_linear_student_t`](../stan/bayes_linear_student_t.stan)
 - [`bayes_hierarchical_shrinkage`](../stan/bayes_hierarchical_shrinkage.stan)
+- optional `catboost_uncertainty` for fair tabular representation comparisons
+- optional `visnet_ensemble` or `dimenetpp_ensemble` for geometry-aware rows
+
+Reported representations are:
+
+- `smiles`
+- `moladt`
+  The `moladt` branch is not a raw SDF descriptor path. Structure-backed molecules are parsed into the MolADT object first, then ADT-native descriptors are computed from that object.
+- `sdf_geom` and `moladt_geom` behind the optional geometry extras
+
+Optional dependency extras:
+
+- `pip install -e .[ml]`
+- `pip install -e .[geom]`
 
 The Python side also exports the aligned matrices used by the Haskell baseline:
 
@@ -62,16 +92,27 @@ Each run writes a timestamped folder. The top level is intentionally small:
 
 - `results.csv`
 - `rmse_train_test_vs_literature.svg`
+- `inference_sweep_overview.svg`
 - `timing_overview.svg` when timing ran
 - `details/`
 
 `details/` holds the raw CSVs and Stan outputs:
 
 - `details/predictive_metrics.csv`
+- `details/aggregated_predictive_metrics.csv`
 - `details/generalization_metrics.csv`
 - `details/predictions.csv`
 - `details/model_coefficients.csv`
-- `details/literature_context.csv`
+- `details/training_curves.csv`
+- `details/model_artifacts.csv`
+- `literature_baselines.csv`
+- `literature_comparison.md`
+- `calibration.csv`
+- `models/README.md`
+- `models/<model_name>/README.md`
+- `figures/predicted_vs_actual_scatter.svg`
+- `figures/residual_vs_uncertainty.svg`
+- `figures/coverage_calibration.svg`
 - `details/zinc_timing.csv`
 - `details/stan_output/`
 
@@ -80,11 +121,13 @@ For the paper-scale make run, outputs go under `results/paper/run_<timestamp>/`.
 ## Other Entrypoints
 
 ```bash
-make benchmark
+make benchmark-small
+make benchmark-paper
 make benchmark-bg
 ./.venv/bin/python -m scripts.run_all --help
 ```
 
 `make benchmark-bg` mirrors live output to the active results log while still running in the foreground.
+`make model` runs the predictive model suite only and writes a per-model browser under `results/models/...`.
 
 For the Haskell consumer view, see [Haskell interop](haskell_interop.md).

@@ -6,12 +6,13 @@ import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
+from scripts.benchmark_zinc import _moladt_parse_render_from_rdkit_mol
 from scripts.download_data import freesolv_raw_dir, qm9_raw_dir, zinc_archive_filename, zinc_normalized_source_name, zinc_raw_dir
-from scripts.features import canonicalize_smiles, compute_3d_descriptors, compute_base_descriptors, FeatureTable
+from scripts.features import canonicalize_smiles, compute_3d_descriptors, compute_base_descriptors, featurize_moladt_records, FeatureTable
 from scripts.process_freesolv import process_freesolv_dataset
 from scripts.process_qm9 import process_qm9_dataset
 from scripts.run_all import build_parser
-from scripts.splits import deterministic_split_indices, export_standardized_splits
+from scripts.splits import deterministic_split_indices, deterministic_split_partition, export_standardized_splits
 from scripts.stan_runner import build_stan_data, write_stan_data_json
 
 
@@ -42,6 +43,16 @@ def test_split_indices_are_reproducible() -> None:
     first = deterministic_split_indices(20, seed=7)
     second = deterministic_split_indices(20, seed=7)
     assert all((left == right).all() for left, right in zip(first, second, strict=True))
+
+
+def test_exact_split_partition_preserves_unused_rows() -> None:
+    partition = deterministic_split_partition(25, seed=3, train_size=10, valid_size=5, test_size=5, scheme="paper:10/5/5")
+
+    assert len(partition.train_indices) == 10
+    assert len(partition.valid_indices) == 5
+    assert len(partition.test_indices) == 5
+    assert len(partition.unused_indices) == 5
+    assert partition.scheme == "paper:10/5/5"
 
 
 def test_run_all_parser_accepts_verbose_for_benchmark() -> None:
@@ -75,6 +86,35 @@ def test_stan_data_serialization_round_trip(tmp_path, monkeypatch) -> None:
     assert payload["group_id"] == [1, 2]
     assert isinstance(payload["y_mean"], float)
     assert payload["y_scale"] > 0.0
+
+
+def test_featurize_moladt_records_uses_adt_descriptors() -> None:
+    molecule = Chem.AddHs(Chem.MolFromSmiles("CCO"))
+    AllChem.EmbedMolecule(molecule, randomSeed=1)
+    frame = pd.DataFrame([{"mol_id": "mol_1", "mu": 1.25, "sdf_record_index": 0, "rdkit_mol": molecule}])
+
+    table = featurize_moladt_records(
+        frame,
+        dataset_name="demo_moladt",
+        mol_id_column="mol_id",
+        mol_column="rdkit_mol",
+        target_column="mu",
+        record_index_column="sdf_record_index",
+    )
+
+    assert not table.rows.empty
+    assert table.failures == ()
+    assert "weight" in table.feature_names
+    assert "radius_of_gyration" in table.feature_names
+    assert float(table.rows.iloc[0]["weight"]) > 0.0
+
+
+def test_moladt_parse_render_supports_silicon_molecules() -> None:
+    molecule = Chem.MolFromSmiles("C[Si](C)(C)C", sanitize=True)
+
+    rendered = _moladt_parse_render_from_rdkit_mol(molecule)
+
+    assert "Si" in rendered
 
 
 def test_process_freesolv_creates_processed_directory_before_writing(tmp_path, monkeypatch) -> None:
@@ -126,7 +166,7 @@ def test_process_freesolv_creates_processed_directory_before_writing(tmp_path, m
 
     monkeypatch.setattr(process_freesolv, "export_standardized_splits", fake_export_standardized_splits)
 
-    artifacts = process_freesolv_dataset(include_sdf=False)
+    artifacts = process_freesolv_dataset(include_moladt=False)
 
     assert processed_dir.is_dir()
     assert artifacts.processed_csv_path.exists()
@@ -169,7 +209,7 @@ def test_process_qm9_creates_processed_directory_before_writing(tmp_path, monkey
     )
     monkeypatch.setattr(
         process_qm9,
-        "featurize_sdf_records",
+        "featurize_moladt_records",
         lambda *args, **kwargs: FeatureTable(
             rows=pd.DataFrame(
                 [
@@ -189,7 +229,7 @@ def test_process_qm9_creates_processed_directory_before_writing(tmp_path, monkey
 
     monkeypatch.setattr(process_qm9, "export_standardized_splits", fake_export_standardized_splits)
 
-    artifacts = process_qm9_dataset(limit=12)
+    artifacts = process_qm9_dataset(limit=12, split_mode="subset")
 
     assert processed_dir.is_dir()
     assert artifacts.processed_csv_path.exists()

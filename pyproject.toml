@@ -27,6 +27,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+ml = [
+  "catboost>=1.2",
+]
+geom = [
+  "torch>=2.4",
+  "torch-geometric>=2.5",
+]
 dev = [
   "mypy>=1.10",
   "pytest>=8.0",

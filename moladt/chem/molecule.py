@@ -19,6 +19,7 @@ class AtomicSymbol(Enum):
     O = "O"
     S = "S"
     P = "P"
+    Si = "Si"
     F = "F"
     Cl = "Cl"
     Br = "Br"

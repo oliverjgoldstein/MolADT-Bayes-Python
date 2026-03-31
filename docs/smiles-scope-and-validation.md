@@ -49,7 +49,9 @@ That is why:
 
 ## Benchmarking Boundary
 
-The predictive benchmarks use canonicalized classical SMILES or SDF-derived features. The ZINC timing benchmark measures RDKit parsing/canonicalization, and optionally MolADT parse/render, only within the conservative supported subset.
+The predictive benchmarks use canonicalized classical SMILES or MolADT-derived features. The structural branch is not reported as a raw SDF descriptor path: structure-backed molecules are parsed into the MolADT object first and then featurized from that ADT.
+
+The ZINC timing benchmark measures RDKit parsing/canonicalization, and optionally a MolADT ingest/render stage driven by RDKit MolBlock -> MolADT SDF parse -> MolADT pretty render. That avoids the old failure-prone dependence on the conservative SMILES renderer for timing runs.
 
 ## Related Files
 

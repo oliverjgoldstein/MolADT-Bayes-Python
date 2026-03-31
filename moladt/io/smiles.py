@@ -22,6 +22,7 @@ _TWO_CHAR_SYMBOLS: dict[str, AtomicSymbol] = {
     "Cl": AtomicSymbol.Cl,
     "Fe": AtomicSymbol.Fe,
     "Na": AtomicSymbol.Na,
+    "Si": AtomicSymbol.Si,
 }
 
 _ONE_CHAR_SYMBOLS: dict[str, AtomicSymbol] = {

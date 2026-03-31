@@ -12,10 +12,11 @@ import pandas as pd
 import psutil
 from rdkit import Chem
 
-from moladt.io.smiles import molecule_to_smiles, parse_smiles
+from moladt.chem.pretty import pretty_text
 
 from .common import RESULTS_DIR, display_path, ensure_directory, log
 from .download_data import download_zinc
+from .features import rdkit_mol_to_moladt_record
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +24,7 @@ class TimingStageResult:
     dataset_size: str
     dataset_dimension: str
     stage: str
+    description: str
     source_path: str
     molecule_count: int
     success_count: int
@@ -59,6 +61,7 @@ def run_zinc_benchmark(
         smiles_strings,
         lambda smiles: Chem.MolFromSmiles(smiles, sanitize=True),
         stage_name="smiles_parse_sanitize",
+        stage_description="RDKit parses each SMILES string and sanitizes the molecular graph.",
         dataset_size=dataset_size,
         dataset_dimension=dataset_dimension,
         source_path=downloads.source_path,
@@ -70,6 +73,7 @@ def run_zinc_benchmark(
         [molecule for molecule in parsed_molecules if molecule is not None],
         lambda molecule: Chem.MolToSmiles(molecule, canonical=True, isomericSmiles=True),
         stage_name="smiles_canonicalization",
+        stage_description="RDKit re-renders each parsed molecule as a canonical isomeric SMILES string.",
         dataset_size=dataset_size,
         dataset_dimension=dataset_dimension,
         source_path=downloads.source_path,
@@ -80,9 +84,10 @@ def run_zinc_benchmark(
     stages = [raw_stage, parse_stage, canonical_stage]
     if include_moladt:
         _, moladt_stage = _measure_stage(
-            [smiles for smiles in canonical_smiles if smiles is not None],
-            lambda smiles: molecule_to_smiles(parse_smiles(smiles)),
+            [molecule for molecule in parsed_molecules if molecule is not None],
+            _moladt_parse_render_from_rdkit_mol,
             stage_name="moladt_parse_render",
+            stage_description="RDKit molecules are serialized to MolBlock, parsed into MolADT through the SDF reader, then pretty-rendered from the ADT.",
             dataset_size=dataset_size,
             dataset_dimension=dataset_dimension,
             source_path=downloads.source_path,
@@ -143,6 +148,7 @@ def _load_smiles_with_timing(
         dataset_size=dataset_size,
         dataset_dimension=dataset_dimension,
         stage="raw_file_read",
+        description="Read SMILES strings from the normalized ZINC source file without chemistry work.",
         source_path=str(source_path),
         molecule_count=len(smiles_strings),
         success_count=len(smiles_strings),
@@ -161,6 +167,7 @@ def _measure_stage(
     function: Any,
     *,
     stage_name: str,
+    stage_description: str,
     dataset_size: str,
     dataset_dimension: str,
     source_path: Path,
@@ -193,6 +200,7 @@ def _measure_stage(
         dataset_size=dataset_size,
         dataset_dimension=dataset_dimension,
         stage=stage_name,
+        description=stage_description,
         source_path=str(source_path),
         molecule_count=len(items),
         success_count=success_count,
@@ -204,6 +212,10 @@ def _measure_stage(
         peak_rss_mb=peak_rss / (1024.0 * 1024.0),
     )
     return outputs, stage
+
+
+def _moladt_parse_render_from_rdkit_mol(molecule: Chem.Mol) -> str:
+    return pretty_text(rdkit_mol_to_moladt_record(molecule).molecule)
 
 
 def _detect_smiles_column(fieldnames: tuple[str, ...]) -> str:

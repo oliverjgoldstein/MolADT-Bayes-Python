@@ -255,6 +255,9 @@ def _evaluate_fit(
         runtime_seconds=runtime_seconds,
         feature_count=len(bundle.feature_names),
         n_train=len(bundle.y_train),
+        split_scheme=bundle.split_scheme,
+        source_row_count=bundle.source_row_count,
+        used_row_count=bundle.used_row_count,
         seed=config.seed + 11,
         predictive_draws=config.predictive_draws,
     )
@@ -274,6 +277,9 @@ def _evaluate_fit(
         runtime_seconds=runtime_seconds,
         feature_count=len(bundle.feature_names),
         n_train=len(bundle.y_train),
+        split_scheme=bundle.split_scheme,
+        source_row_count=bundle.source_row_count,
+        used_row_count=bundle.used_row_count,
         seed=config.seed + 17,
         predictive_draws=config.predictive_draws,
     )
@@ -293,6 +299,9 @@ def _evaluate_fit(
         runtime_seconds=runtime_seconds,
         feature_count=len(bundle.feature_names),
         n_train=len(bundle.y_train),
+        split_scheme=bundle.split_scheme,
+        source_row_count=bundle.source_row_count,
+        used_row_count=bundle.used_row_count,
         seed=config.seed + 29,
         predictive_draws=config.predictive_draws,
     )
@@ -327,6 +336,9 @@ def _evaluate_split(
     runtime_seconds: float,
     feature_count: int,
     n_train: int,
+    split_scheme: str,
+    source_row_count: int,
+    used_row_count: int,
     seed: int,
     predictive_draws: int,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -366,11 +378,15 @@ def _evaluate_split(
         "model": model_name,
         "method": method,
         "split": split_name,
+        "split_scheme": split_scheme,
+        "source_row_count": source_row_count,
+        "used_row_count": used_row_count,
         "n_train": n_train,
         "n_eval": int(len(y)),
         "feature_count": feature_count,
         "draw_count": int(alpha.shape[0]),
         "runtime_seconds": runtime_seconds,
+        "seed": seed,
         "rmse": rmse,
         "mae": mae,
         "r2": r2,
@@ -390,6 +406,7 @@ def _evaluate_split(
             "actual": float(actual),
             "predicted_mean": float(mean),
             "predictive_sd": float(sd),
+            "seed": seed,
         }
         for mol_id, actual, mean, sd in zip(mol_ids, y, predictive_mean, predictive_sd, strict=True)
     ]

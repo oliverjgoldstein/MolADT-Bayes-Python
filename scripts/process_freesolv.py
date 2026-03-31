@@ -9,16 +9,26 @@ from rdkit import Chem
 
 from .common import DEFAULT_SEED, FailureRecord, PROCESSED_DATA_DIR, ensure_directory, find_files, write_failure_csv
 from .download_data import FreeSolvDownloads, download_freesolv
-from .features import canonical_smiles_from_mol, canonicalize_smiles, featurize_sdf_records, featurize_smiles_dataframe
-from .splits import ExportedDataset, export_standardized_splits
+from .features import (
+    canonical_smiles_from_mol,
+    canonicalize_smiles,
+    featurize_moladt_geometry_records,
+    featurize_moladt_records,
+    featurize_moladt_smiles_dataframe,
+    featurize_sdf_geometry_records,
+    featurize_smiles_dataframe,
+)
+from .splits import ExportedDataset, GeometricDatasetSpec, export_geometric_splits, export_standardized_splits
 
 
 @dataclass(frozen=True, slots=True)
 class FreeSolvArtifacts:
     processed_csv_path: Path
-    sdf_index_path: Path | None
+    moladt_index_path: Path | None
+    tabular_exports: dict[str, ExportedDataset]
+    geometric_exports: dict[str, GeometricDatasetSpec]
     smiles_export: ExportedDataset
-    sdf_export: ExportedDataset | None
+    moladt_export: ExportedDataset | None
     failure_csv_paths: tuple[Path, ...]
 
 
@@ -26,7 +36,7 @@ def process_freesolv_dataset(
     *,
     seed: int = DEFAULT_SEED,
     force: bool = False,
-    include_sdf: bool = True,
+    include_moladt: bool = True,
 ) -> FreeSolvArtifacts:
     downloads = download_freesolv(force=force)
     ensure_directory(PROCESSED_DATA_DIR)
@@ -49,34 +59,103 @@ def process_freesolv_dataset(
     write_failure_csv(smiles_feature_failure_path, smiles_table.failures)
     failure_paths.append(smiles_feature_failure_path)
     smiles_export = export_standardized_splits(smiles_table, dataset_name="freesolv", representation="smiles", target_name="expt", seed=seed)
+    tabular_exports: dict[str, ExportedDataset] = {"smiles": smiles_export}
+    geometric_exports: dict[str, GeometricDatasetSpec] = {}
 
-    sdf_index_path: Path | None = None
-    sdf_export: ExportedDataset | None = None
-    if include_sdf:
+    moladt_index_path: Path | None = None
+    moladt_export: ExportedDataset | None = None
+    if include_moladt:
         sdf_frame, sdf_failures = _align_freesolv_sdf(downloads, processed_frame)
         sdf_failure_path = PROCESSED_DATA_DIR / "freesolv_sdf_alignment_failures.csv"
         write_failure_csv(sdf_failure_path, sdf_failures)
         failure_paths.append(sdf_failure_path)
         if not sdf_frame.empty:
-            sdf_index_path = PROCESSED_DATA_DIR / "freesolv_sdf_index.csv"
-            sdf_frame.drop(columns=["rdkit_mol"]).to_csv(sdf_index_path, index=False)
-            sdf_table = featurize_sdf_records(
+            moladt_index_path = PROCESSED_DATA_DIR / "freesolv_moladt_index.csv"
+            sdf_frame.drop(columns=["rdkit_mol"]).to_csv(moladt_index_path, index=False)
+            moladt_table = featurize_moladt_records(
                 sdf_frame,
-                dataset_name="freesolv_sdf",
+                dataset_name="freesolv_moladt",
                 mol_id_column="mol_id",
                 mol_column="rdkit_mol",
                 target_column="expt",
                 record_index_column="sdf_record_index",
             )
-            sdf_feature_failure_path = PROCESSED_DATA_DIR / "freesolv_sdf_feature_failures.csv"
-            write_failure_csv(sdf_feature_failure_path, sdf_table.failures)
-            failure_paths.append(sdf_feature_failure_path)
-            sdf_export = export_standardized_splits(sdf_table, dataset_name="freesolv", representation="sdf", target_name="expt", seed=seed)
+            moladt_feature_failure_path = PROCESSED_DATA_DIR / "freesolv_moladt_feature_failures.csv"
+            write_failure_csv(moladt_feature_failure_path, moladt_table.failures)
+            failure_paths.append(moladt_feature_failure_path)
+            moladt_export = export_standardized_splits(
+                moladt_table,
+                dataset_name="freesolv",
+                representation="moladt",
+                target_name="expt",
+                seed=seed,
+            )
+            tabular_exports["moladt"] = moladt_export
+            sdf_geom_table = featurize_sdf_geometry_records(
+                sdf_frame,
+                dataset_name="freesolv_sdf_geom",
+                mol_id_column="mol_id",
+                mol_column="rdkit_mol",
+                target_column="expt",
+                record_index_column="sdf_record_index",
+            )
+            sdf_geom_failure_path = PROCESSED_DATA_DIR / "freesolv_sdf_geometry_failures.csv"
+            write_failure_csv(sdf_geom_failure_path, sdf_geom_table.failures)
+            failure_paths.append(sdf_geom_failure_path)
+            if not sdf_geom_table.rows.empty:
+                geometric_exports["sdf_geom"] = export_geometric_splits(
+                    sdf_geom_table,
+                    dataset_name="freesolv",
+                    representation="sdf_geom",
+                    target_name="expt",
+                    seed=seed,
+                )
+            moladt_geom_table = featurize_moladt_geometry_records(
+                sdf_frame,
+                dataset_name="freesolv_moladt_geom",
+                mol_id_column="mol_id",
+                mol_column="rdkit_mol",
+                target_column="expt",
+                record_index_column="sdf_record_index",
+            )
+            moladt_geom_failure_path = PROCESSED_DATA_DIR / "freesolv_moladt_geometry_failures.csv"
+            write_failure_csv(moladt_geom_failure_path, moladt_geom_table.failures)
+            failure_paths.append(moladt_geom_failure_path)
+            if not moladt_geom_table.rows.empty:
+                geometric_exports["moladt_geom"] = export_geometric_splits(
+                    moladt_geom_table,
+                    dataset_name="freesolv",
+                    representation="moladt_geom",
+                    target_name="expt",
+                    seed=seed,
+                )
+        else:
+            moladt_table = featurize_moladt_smiles_dataframe(
+                processed_frame,
+                dataset_name="freesolv_moladt_smiles_fallback",
+                mol_id_column="mol_id",
+                smiles_column="smiles",
+                target_column="expt",
+            )
+            moladt_feature_failure_path = PROCESSED_DATA_DIR / "freesolv_moladt_feature_failures.csv"
+            write_failure_csv(moladt_feature_failure_path, moladt_table.failures)
+            failure_paths.append(moladt_feature_failure_path)
+            if not moladt_table.rows.empty:
+                moladt_export = export_standardized_splits(
+                    moladt_table,
+                    dataset_name="freesolv",
+                    representation="moladt",
+                    target_name="expt",
+                    seed=seed,
+                )
+                tabular_exports["moladt"] = moladt_export
     return FreeSolvArtifacts(
         processed_csv_path=processed_csv_path,
-        sdf_index_path=sdf_index_path,
+        moladt_index_path=moladt_index_path,
+        tabular_exports=tabular_exports,
+        geometric_exports=geometric_exports,
         smiles_export=smiles_export,
-        sdf_export=sdf_export,
+        moladt_export=moladt_export,
         failure_csv_paths=tuple(failure_paths),
     )
 
@@ -144,16 +223,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m scripts.process_freesolv")
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("--force", action="store_true")
-    parser.add_argument("--skip-sdf", action="store_true")
+    parser.add_argument("--skip-moladt", dest="skip_moladt", action="store_true")
+    parser.add_argument("--skip-sdf", dest="skip_moladt", action="store_true", help=argparse.SUPPRESS)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    artifacts = process_freesolv_dataset(seed=args.seed, force=args.force, include_sdf=not args.skip_sdf)
+    artifacts = process_freesolv_dataset(seed=args.seed, force=args.force, include_moladt=not args.skip_moladt)
     print(artifacts.processed_csv_path)
-    if artifacts.sdf_index_path is not None:
-        print(artifacts.sdf_index_path)
+    if artifacts.moladt_index_path is not None:
+        print(artifacts.moladt_index_path)
     return 0
 
 

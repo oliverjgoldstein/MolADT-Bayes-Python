@@ -63,6 +63,8 @@ def test_makefile_benchmark_defaults_to_verbose_output(tmp_path: Path) -> None:
     )
 
     assert "./.venv/bin/python -m scripts.run_all benchmark" in result.stdout
+    assert "--qm9-limit 2000" in result.stdout
+    assert "--qm9-split-mode subset" in result.stdout
     assert "--verbose" in result.stdout
 
 
@@ -101,6 +103,49 @@ def test_makefile_paper_benchmark_uses_timestamped_paper_subdirectory(tmp_path: 
     )
 
     assert "MOLADT_RESULTS_DIR=results/paper/run_20260330_170000" in result.stdout
+
+
+def test_makefile_benchmark_small_target_enables_moladt_subset_mode(tmp_path: Path) -> None:
+    _copy_makefile(tmp_path)
+    _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
+
+    result = subprocess.run(
+        ["make", "-C", str(tmp_path), "-n", "benchmark-small", "SYSTEM_PYTHON=python3"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "benchmark QM9_LIMIT=2000 QM9_SPLIT_MODE=subset INCLUDE_MOLADT=1" in result.stdout
+
+
+def test_makefile_benchmark_paper_target_enables_paper_split(tmp_path: Path) -> None:
+    _copy_makefile(tmp_path)
+    _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
+
+    result = subprocess.run(
+        ["make", "-C", str(tmp_path), "-n", "benchmark-paper", "SYSTEM_PYTHON=python3"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "benchmark INFERENCE_PRESET=paper QM9_LIMIT= QM9_SPLIT_MODE=paper INCLUDE_MOLADT=1" in result.stdout
+
+
+def test_makefile_model_target_writes_model_results_subdirectory(tmp_path: Path) -> None:
+    _copy_makefile(tmp_path)
+    _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
+
+    result = subprocess.run(
+        ["make", "-C", str(tmp_path), "-n", "model", "SYSTEM_PYTHON=python3", "RUN_TIMESTAMP=20260331_090000"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "MOLADT_RESULTS_DIR=results/models/run_20260331_090000" in result.stdout
+    assert "./.venv/bin/python -m scripts.run_all models" in result.stdout
 
 
 def test_makefile_benchmark_uses_xcrun_toolchain_on_darwin(tmp_path: Path) -> None:
