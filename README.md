@@ -33,10 +33,7 @@ The predictive benchmark fits two Stan models:
 The Python repo also writes aligned `data/processed/` exports. `X_train`, `X_valid`, and `X_test` are standardized from the training split only. `y` stays on the original scale.
 Reported representations are `smiles` and `moladt`: the `moladt` branch is built by parsing structure-backed molecules into the ADT and then extracting ADT-native descriptor features from that object.
 
-Optional extra model families are available behind extras:
-
-- `pip install -e .[ml]` for `catboost_uncertainty`
-- `pip install -e .[geom]` for `visnet_ensemble` and `dimenetpp_ensemble`
+By default, `make python-setup` installs the CatBoost tabular stack and the PyTorch Geometric geometry stack needed for `make model`.
 
 Scientific framing:
 
@@ -56,7 +53,28 @@ make benchmark-paper
 `make benchmark-small` runs the default 2000-row QM9 subset with MolADT timing enabled.
 `make benchmark-paper` runs the paper-sized QM9 split counts `110462 / 10000 / 10000`, uses the paper inference preset, includes MolADT timing, and writes the long-run artifacts under `results/paper/run_<timestamp>/`.
 That QM9 paper-style split uses `130,462` molecules in total: `110,462` train, `10,000` validation, and `10,000` test. It is not `100k` in each split.
-`make model` runs the predictive suite only and writes the run under `results/models/run_<timestamp>/` or `results/models/paper/run_<timestamp>/`.
+`make model` runs the predictive model suite only, without the ZINC timing pass. It prepares FreeSolv and QM9, runs the configured predictive models, writes the run under `results/models/run_<timestamp>/` or `results/models/paper/run_<timestamp>/`, and then creates per-model folders under `models/` so you can open one model at a time and see its filtered metrics, predictions, and a short explanation of how to read that model against `smiles` and `MolADT`.
+By default, `make model` runs the two Stan baselines plus the default extra-model set from the `models` subcommand: `catboost_uncertainty` and `visnet_ensemble`. So the default suite is:
+
+- Stan: `bayes_linear_student_t`
+- Stan: `bayes_hierarchical_shrinkage`
+- Tabular extra model: `catboost_uncertainty`
+- Geometry extra model: `visnet_ensemble`
+
+What each part is doing:
+
+- The Stan models fit Bayesian linear baselines on standardized tabular features for `smiles` and `moladt`.
+- CatBoost fits the same `smiles` and `moladt` tabular exports under one shared non-linear learner, so this is the main fair representation comparison.
+- ViSNet fits the coordinate-aware geometric exports such as `sdf_geom` and `moladt_geom`, so it answers a different question: what changes when the model can use 3D coordinates.
+
+Rough runtime guidance:
+
+- `make model` in the default preset is usually dominated by the Stan fits and is typically in the same general range as the normal benchmark without the ZINC pass: often tens of minutes rather than seconds on a laptop once CmdStan is built.
+- `catboost_uncertainty` adds a validation search plus one fitted model per seed for each tabular representation, so it is usually materially slower than the Stan smoke path but still much cheaper than the full paper run.
+- `visnet_ensemble` is usually the slowest optional branch because it trains a neural geometry model; in paper mode it can push the run into multi-hour territory.
+- `make benchmark-paper` remains the longest path because it combines the paper-sized QM9 split with the long inference preset and the timing benchmark.
+
+If you want to trim the suite, pass explicit extra-model flags such as `--extra-models catboost_uncertainty` or `--skip-geom`.
 Each run now lands in its own timestamped folder with a top-level `results.csv`, `rmse_train_test_vs_literature.svg`, `inference_sweep_overview.svg`, `timing_overview.svg`, and a `details/` subfolder for the raw CSVs and Stan output.
 
 In brief, the reported results come from three model layers:

@@ -26,6 +26,7 @@ INCLUDE_MOLADT ?= 0
 BENCHMARK_VERBOSE ?= 1
 EXAMPLE ?= ferrocene
 MODELS ?= bayes_linear_student_t,bayes_hierarchical_shrinkage
+PYTHON_EXTRAS ?= dev,ml,geom
 RESULTS_SUBDIR ?=
 RUN_TIMESTAMP ?= $(shell date +%Y%m%d_%H%M%S)
 
@@ -111,7 +112,7 @@ MODEL_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),models/paper/ru
 help:
 	@printf "%s\n" \
 	"Python repo targets:" \
-	"  make python-setup           Create .venv and install the package plus benchmark deps" \
+	"  make python-setup           Create .venv and install the package plus model deps" \
 	"  make python-cmdstan-install Install CmdStan into .cmdstan" \
 	"  make python-test            Run the pytest suite" \
 	"  make python-typecheck       Run mypy on the package" \
@@ -133,8 +134,9 @@ help:
 		"  results_root=$(RESULTS_ROOT)" \
 		"  qm9_split_mode=$(QM9_SPLIT_MODE)" \
 		"  qm9_limit=$(if $(QM9_LIMIT),$(QM9_LIMIT),full-local-download)" \
-		"  include_moladt=$(INCLUDE_MOLADT)" \
+	"  include_moladt=$(INCLUDE_MOLADT)" \
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
+	"  python_extras=$(PYTHON_EXTRAS)" \
 	"  toolchain_env=$(if $(DARWIN_SDKROOT),apple-xcrun,default)" \
 	"  methods=$(METHODS)" \
 	"  models=$(MODELS)" \
@@ -277,7 +279,7 @@ python-setup:
 		exit 1; \
 	fi; \
 	"$$venv_python" -m pip install -U pip setuptools wheel; \
-	"$$venv_python" -m pip install -U -e ".[dev]"
+	"$$venv_python" -m pip install -U -e ".[${PYTHON_EXTRAS}]"
 
 python-cmdstan-install:
 	$(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.install_cmdstan
