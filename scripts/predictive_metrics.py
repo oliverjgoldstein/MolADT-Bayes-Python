@@ -210,7 +210,14 @@ def aggregate_seed_metrics(metrics: pd.DataFrame) -> pd.DataFrame:
         "coverage_90",
         "predictive_sd_mean",
     ]
-    subset = metrics.loc[metrics["seed"].astype(str) != "aggregate"].copy()
+    subset = metrics.copy()
+    for column in group_columns:
+        if column not in subset.columns:
+            subset[column] = pd.NA
+    for column in numeric_targets:
+        if column not in subset.columns:
+            subset[column] = pd.NA
+    subset = subset.loc[subset["seed"].astype(str) != "aggregate"].copy()
     if subset.empty:
         return pd.DataFrame()
     aggregated = subset.groupby(group_columns, dropna=False, as_index=False)[numeric_targets].agg(["mean", "std"])

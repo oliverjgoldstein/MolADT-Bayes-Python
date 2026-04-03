@@ -1039,7 +1039,8 @@ def _write_model_report(
     training_curves_frame: pd.DataFrame,
 ) -> None:
     lines = ["# Model Report", ""]
-    if not coefficients_frame.empty:
+    coefficient_columns = {"dataset_name", "representation", "method", "parameter_type", "parameter_name", "median"}
+    if not coefficients_frame.empty and coefficient_columns.issubset(coefficients_frame.columns):
         lines.append("## Stan Coefficients")
         lines.append("")
         top_rows = coefficients_frame.sort_values(["dataset_name", "representation", "method", "parameter_type", "parameter_name"]).head(20)
