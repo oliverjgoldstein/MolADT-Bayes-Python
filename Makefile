@@ -288,7 +288,47 @@ python-setup:
 		exit 1; \
 	fi; \
 	"$$venv_python" -m pip install -U pip setuptools wheel; \
-	"$$venv_python" -m pip install -U -e ".[${PYTHON_EXTRAS}]"
+	python_extras_raw="$(PYTHON_EXTRAS)"; \
+	install_geom=0; \
+	editable_extras=""; \
+	old_ifs="$$IFS"; \
+	IFS=','; \
+	for extra in $$python_extras_raw; do \
+		extra="$$(printf "%s" "$$extra" | tr -d '[:space:]')"; \
+		if [ -z "$$extra" ]; then \
+			continue; \
+		fi; \
+		if [ "$$extra" = "geom" ]; then \
+			install_geom=1; \
+			continue; \
+		fi; \
+		if [ -n "$$editable_extras" ]; then \
+			editable_extras="$$editable_extras,$$extra"; \
+		else \
+			editable_extras="$$extra"; \
+		fi; \
+	done; \
+	IFS="$$old_ifs"; \
+	if [ -n "$$editable_extras" ]; then \
+		"$$venv_python" -m pip install -U -e ".[$$editable_extras]"; \
+	else \
+		"$$venv_python" -m pip install -U -e .; \
+	fi; \
+	if [ "$$install_geom" = "1" ]; then \
+		printf "%s\n" "Installing geometry stack in a second phase so torch-dependent build hooks can see PyTorch."; \
+		"$$venv_python" -m pip install -U torch; \
+		torch_tag="$$( "$$venv_python" -c 'import torch; version = torch.__version__.split("+")[0].split("."); print(f"{version[0]}.{version[1]}.0")' )"; \
+		cuda_tag="$$( "$$venv_python" -c 'import torch; cuda = torch.version.cuda; print("cpu" if not cuda else "cu" + cuda.replace(".", ""))' )"; \
+		pyg_wheel_url="https://data.pyg.org/whl/torch-$${torch_tag}+$${cuda_tag}.html"; \
+		if ! "$$venv_python" -m pip install -U torch-cluster -f "$$pyg_wheel_url"; then \
+			printf "%s\n" \
+				"" \
+				"Falling back to a local torch-cluster build without build isolation." \
+				"This is slower, but it lets the build backend import the already-installed torch package."; \
+			"$$venv_python" -m pip install -U --no-build-isolation torch-cluster; \
+		fi; \
+		"$$venv_python" -m pip install -U torch-geometric; \
+	fi
 
 python-cmdstan-install:
 	$(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.install_cmdstan
