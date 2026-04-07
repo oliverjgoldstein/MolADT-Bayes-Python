@@ -444,10 +444,9 @@ def _best_test_row(test_rows: pd.DataFrame, *, dataset: str, metric: str) -> dic
 def _selected_run_keys(metrics: pd.DataFrame) -> pd.DataFrame:
     test_rows = metrics.loc[metrics["split"] == "test"].copy()
     selected = _select_reviewer_rows(test_rows)
-    columns = ["dataset", "representation", "model", "method"]
-    if "seed" in selected.columns:
-        columns.append("seed")
-    return selected.loc[:, columns].drop_duplicates().reset_index(drop=True)
+    # `seed` is not a stable run identifier here because the benchmark records
+    # different split-level predictive seeds for train/valid/test rows.
+    return selected.loc[:, ["dataset", "representation", "model", "method"]].drop_duplicates().reset_index(drop=True)
 
 
 def _build_generalization_frame(metrics: pd.DataFrame) -> pd.DataFrame:
@@ -462,12 +461,13 @@ def _build_generalization_frame(metrics: pd.DataFrame) -> pd.DataFrame:
             & (metrics["model"] == key_row["model"])
             & (metrics["method"] == key_row["method"])
         )
-        if "seed" in key_row and "seed" in metrics.columns:
-            mask &= metrics["seed"] == key_row["seed"]
         subset = metrics.loc[mask].copy()
         split_rows: dict[str, pd.Series] = {}
         for split_name in ("train", "valid", "test"):
-            split_subset = subset.loc[subset["split"] == split_name]
+            split_subset = subset.loc[subset["split"] == split_name].sort_values(
+                ["rmse", "mae", "runtime_seconds"],
+                kind="stable",
+            )
             if split_subset.empty:
                 break
             split_rows[split_name] = split_subset.iloc[0]

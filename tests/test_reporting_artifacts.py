@@ -55,6 +55,73 @@ def test_build_generalization_frame_selects_lowest_test_rmse_per_representation(
     assert moladt_row["used_row_count"] == 20
 
 
+def test_build_generalization_frame_keeps_split_bundle_when_split_seeds_differ() -> None:
+    metrics = pd.DataFrame(
+        [
+            {
+                "dataset": "demo",
+                "representation": "smiles",
+                "model": "m1",
+                "method": "optimize",
+                "split": "train",
+                "seed": 12,
+                "n_eval": 8,
+                "rmse": 0.8,
+                "mae": 0.6,
+                "r2": 0.9,
+                "mean_log_predictive_density": -1.0,
+                "runtime_seconds": 1.0,
+                "split_scheme": "subset:fractional_0.8/0.1/0.1",
+                "source_row_count": 20,
+                "used_row_count": 20,
+            },
+            {
+                "dataset": "demo",
+                "representation": "smiles",
+                "model": "m1",
+                "method": "optimize",
+                "split": "valid",
+                "seed": 18,
+                "n_eval": 2,
+                "rmse": 1.0,
+                "mae": 0.8,
+                "r2": 0.7,
+                "mean_log_predictive_density": -1.1,
+                "runtime_seconds": 1.0,
+                "split_scheme": "subset:fractional_0.8/0.1/0.1",
+                "source_row_count": 20,
+                "used_row_count": 20,
+            },
+            {
+                "dataset": "demo",
+                "representation": "smiles",
+                "model": "m1",
+                "method": "optimize",
+                "split": "test",
+                "seed": 30,
+                "n_eval": 2,
+                "rmse": 1.2,
+                "mae": 0.9,
+                "r2": 0.6,
+                "mean_log_predictive_density": -1.2,
+                "runtime_seconds": 1.0,
+                "split_scheme": "subset:fractional_0.8/0.1/0.1",
+                "source_row_count": 20,
+                "used_row_count": 20,
+            },
+        ]
+    )
+
+    generalization = _build_generalization_frame(metrics)
+
+    assert len(generalization) == 1
+    row = generalization.iloc[0]
+    assert row["method"] == "optimize"
+    assert row["train_rmse"] == pytest.approx(0.8)
+    assert row["test_rmse"] == pytest.approx(1.2)
+    assert row["test_minus_train_rmse"] == pytest.approx(0.4)
+
+
 def test_build_simple_review_frame_keeps_qm9_as_partial_context() -> None:
     generalization = pd.DataFrame(
         [

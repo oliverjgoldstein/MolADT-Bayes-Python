@@ -5,16 +5,27 @@ from dataclasses import dataclass
 from enum import Enum
 from math import sqrt
 from types import MappingProxyType
-from typing import Any, Mapping, TypeAlias
+from typing import Any, Mapping, Protocol, TypeAlias, cast
 
 from .coordinate import Angstrom, Coordinate, mk_angstrom
 from .dietz import AtomId, BondingSystem, Edge, SystemId, mk_edge
 from .orbital import Shells
 
+class _OrjsonModule(Protocol):
+    OPT_INDENT_2: int
+    OPT_SORT_KEYS: int
+
+    def dumps(self, obj: Any, /, *, option: int = 0) -> bytes: ...
+
+    def loads(self, obj: str | bytes | bytearray | memoryview, /) -> Any: ...
+
+
 try:
-    import orjson
+    import orjson as _orjson  # type: ignore[import-not-found]
 except ModuleNotFoundError:  # pragma: no cover - exercised only when optional wheel is missing locally.
-    orjson = None
+    orjson: _OrjsonModule | None = None
+else:
+    orjson = cast(_OrjsonModule, _orjson)
 
 
 class AtomicSymbol(Enum):
