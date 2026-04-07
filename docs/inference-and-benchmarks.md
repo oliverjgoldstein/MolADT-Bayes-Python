@@ -85,7 +85,9 @@ Reported representations are:
 - `smiles`
 - `moladt`
   The `moladt` branch is not a raw SDF descriptor path. Structure-backed molecules are parsed into the MolADT object first, then ADT-native descriptors are computed from that object.
-- `sdf_geom` and `moladt_geom` behind the optional geometry extras
+- `moladt_typed`
+  This richer ADT branch is shown in the reports as `MolADT+`. It keeps the same model families but extends the feature table with typed pair-interaction channels, radial distance channels, and bonding-system summaries computed from the parsed SDF-backed ADT.
+- `sdf_geom`, `moladt_geom`, and `moladt_typed_geom` behind the optional geometry extras
 
 The MolADT file parse stage uses `orjson` when it is present in the local environment because this is runtime data parsing, not source-code parsing.
 
@@ -132,7 +134,7 @@ Each run writes a timestamped folder. The top level is intentionally small:
 
 For the paper-scale make run, outputs go under `results/paper/run_<timestamp>/`.
 
-The metric comparison pack writes one SVG per metric. Each chart compares the matched local `smiles` and `moladt` rows from a shared model family when available, plus a literature bar if the repo has a numeric paper-context value for that metric.
+The metric comparison pack writes one SVG per metric. Each chart now compares four bars when available: paper context, `smiles`, baseline `moladt`, and richer `moladt_typed` shown as `MolADT+`.
 
 ## Other Entrypoints
 

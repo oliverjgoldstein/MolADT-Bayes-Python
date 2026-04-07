@@ -24,6 +24,7 @@ TIMING = "#0f766e"
 SERIES_COLORS = {
     "smiles": "#b45309",
     "moladt": "#0f766e",
+    "moladt_typed": "#0369a1",
     "paper": LITERATURE,
 }
 
@@ -369,7 +370,7 @@ def write_metric_comparison_overviews(comparison_frame: pd.DataFrame, destinatio
         parts.append(f'<text x="{margin}" y="{margin + 22}" font-size="22" font-family="Georgia, serif" fill="{TEXT}">{escape(metric_label)} comparison</text>')
         parts.append(
             f'<text x="{margin}" y="{margin + 42}" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">'
-            "Orange is SMILES, teal is MolADT, and gray is paper context when a numeric literature value is available."
+            "Gray is paper context, orange is SMILES, teal is MolADT, and blue is the richer MolADT+ feature model when it is available."
             "</text>"
         )
         for index, (dataset, frame) in enumerate(datasets):
@@ -599,14 +600,14 @@ def _metric_comparison_card_svg(
     plot_width = width - 76
     plot_height = 120
     zero_y = plot_y + plot_height - ((0.0 - y_min) / max(y_max - y_min, 1e-6)) * plot_height
-    bar_width = 58
-    bar_gap = 24
-    left_pad = 22
+    bar_width = 54
+    bar_gap = 16
+    left_pad = 10
     context = str(frame.iloc[0].get("comparison_context", ""))
     paper_row = frame.loc[frame["series_key"] == "paper"]
     paper_title = str(paper_row.iloc[0]["paper_source_title"]) if not paper_row.empty else "Paper context unavailable for this metric."
     bars = []
-    for series_key in ("smiles", "moladt", "paper"):
+    for series_key in ("paper", "smiles", "moladt", "moladt_typed"):
         series_rows = frame.loc[frame["series_key"] == series_key]
         if series_rows.empty:
             continue

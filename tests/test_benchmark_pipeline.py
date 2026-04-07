@@ -14,7 +14,14 @@ from scripts.benchmark_zinc import (
     _read_timing_library_manifest,
 )
 from scripts.download_data import freesolv_raw_dir, qm9_raw_dir, zinc_archive_filename, zinc_normalized_source_name, zinc_raw_dir
-from scripts.features import canonicalize_smiles, compute_3d_descriptors, compute_base_descriptors, featurize_moladt_records, FeatureTable
+from scripts.features import (
+    FeatureTable,
+    canonicalize_smiles,
+    compute_3d_descriptors,
+    compute_base_descriptors,
+    featurize_moladt_records,
+    featurize_moladt_typed_records,
+)
 from scripts.process_freesolv import process_freesolv_dataset
 from scripts.process_qm9 import process_qm9_dataset
 from scripts.run_all import build_parser
@@ -113,6 +120,29 @@ def test_featurize_moladt_records_uses_adt_descriptors() -> None:
     assert "weight" in table.feature_names
     assert "radius_of_gyration" in table.feature_names
     assert float(table.rows.iloc[0]["weight"]) > 0.0
+
+
+def test_featurize_moladt_typed_records_adds_pair_and_radial_features() -> None:
+    molecule = Chem.AddHs(Chem.MolFromSmiles("CCO"))
+    AllChem.EmbedMolecule(molecule, randomSeed=1)
+    frame = pd.DataFrame([{"mol_id": "mol_1", "mu": 1.25, "sdf_record_index": 0, "rdkit_mol": molecule}])
+
+    table = featurize_moladt_typed_records(
+        frame,
+        dataset_name="demo_moladt_typed",
+        mol_id_column="mol_id",
+        mol_column="rdkit_mol",
+        target_column="mu",
+        record_index_column="sdf_record_index",
+    )
+
+    assert not table.rows.empty
+    assert table.failures == ()
+    assert "pair_count_c_o" in table.feature_names
+    assert "pair_interaction_c_o" in table.feature_names
+    assert "aprdf_all_1p5a" in table.feature_names
+    assert "system_shared_electrons_sum" in table.feature_names
+    assert float(table.rows.iloc[0]["pair_count_c_o"]) >= 1.0
 
 
 def test_moladt_parse_render_supports_silicon_molecules() -> None:

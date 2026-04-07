@@ -329,10 +329,13 @@ def test_metric_comparison_frame_prefers_shared_catboost_rows_and_attaches_paper
         [
             {"dataset": "freesolv", "representation": "smiles", "model": "catboost_uncertainty", "method": "native_uncertainty", "split": "test", "rmse": 1.20, "mae": 0.92, "r2": 0.72, "coverage_90": 0.80, "runtime_seconds": 2.0},
             {"dataset": "freesolv", "representation": "moladt", "model": "catboost_uncertainty", "method": "native_uncertainty", "split": "test", "rmse": 1.02, "mae": 0.81, "r2": 0.79, "coverage_90": 0.84, "runtime_seconds": 2.1},
+            {"dataset": "freesolv", "representation": "moladt_typed", "model": "catboost_uncertainty", "method": "native_uncertainty", "split": "test", "rmse": 0.94, "mae": 0.74, "r2": 0.83, "coverage_90": 0.86, "runtime_seconds": 2.2},
             {"dataset": "freesolv", "representation": "smiles", "model": "bayes_linear_student_t", "method": "sample", "split": "test", "rmse": 1.35, "mae": 1.01, "r2": 0.66, "coverage_90": 0.77, "runtime_seconds": 10.0},
             {"dataset": "freesolv", "representation": "moladt", "model": "bayes_linear_student_t", "method": "sample", "split": "test", "rmse": 1.10, "mae": 0.88, "r2": 0.75, "coverage_90": 0.81, "runtime_seconds": 10.2},
+            {"dataset": "freesolv", "representation": "moladt_typed", "model": "bayes_linear_student_t", "method": "sample", "split": "test", "rmse": 1.03, "mae": 0.82, "r2": 0.78, "coverage_90": 0.83, "runtime_seconds": 10.5},
             {"dataset": "qm9", "representation": "smiles", "model": "catboost_uncertainty", "method": "native_uncertainty", "split": "test", "rmse": 0.12, "mae": 0.041, "r2": 0.91, "coverage_90": 0.78, "runtime_seconds": 5.0},
             {"dataset": "qm9", "representation": "moladt", "model": "catboost_uncertainty", "method": "native_uncertainty", "split": "test", "rmse": 0.10, "mae": 0.033, "r2": 0.94, "coverage_90": 0.82, "runtime_seconds": 5.1},
+            {"dataset": "qm9", "representation": "moladt_typed", "model": "catboost_uncertainty", "method": "native_uncertainty", "split": "test", "rmse": 0.09, "mae": 0.028, "r2": 0.95, "coverage_90": 0.84, "runtime_seconds": 5.3},
         ]
     )
 
@@ -340,21 +343,24 @@ def test_metric_comparison_frame_prefers_shared_catboost_rows_and_attaches_paper
 
     freesolv_rmse = comparison.loc[(comparison["dataset"] == "freesolv") & (comparison["metric_key"] == "rmse")]
     qm9_mae = comparison.loc[(comparison["dataset"] == "qm9") & (comparison["metric_key"] == "mae")]
-    assert set(freesolv_rmse["series_key"]) == {"smiles", "moladt", "paper"}
+    assert set(freesolv_rmse["series_key"]) == {"smiles", "moladt", "moladt_typed", "paper"}
     assert "catboost_uncertainty / native_uncertainty" in freesolv_rmse.iloc[0]["comparison_context"]
-    assert set(qm9_mae["series_key"]) == {"smiles", "moladt", "paper"}
+    assert set(qm9_mae["series_key"]) == {"smiles", "moladt", "moladt_typed", "paper"}
     assert "PaiNN" in qm9_mae["series_label"].tolist()
+    assert "moladt+" in freesolv_rmse["series_label"].tolist()
 
 
 def test_metric_comparison_overviews_write_svg_files(tmp_path) -> None:
     comparison = pd.DataFrame(
         [
+            {"dataset": "freesolv", "metric_key": "rmse", "metric_label": "Test RMSE", "series_key": "paper", "series_label": "MPNN", "value": 1.15, "comparison_context": "Local shared family: catboost_uncertainty / native_uncertainty", "paper_source_title": "MoleculeNet: a benchmark for molecular machine learning", "paper_note": "Useful external context only."},
             {"dataset": "freesolv", "metric_key": "rmse", "metric_label": "Test RMSE", "series_key": "smiles", "series_label": "smiles", "value": 1.20, "comparison_context": "Local shared family: catboost_uncertainty / native_uncertainty", "paper_source_title": "", "paper_note": ""},
             {"dataset": "freesolv", "metric_key": "rmse", "metric_label": "Test RMSE", "series_key": "moladt", "series_label": "moladt", "value": 1.02, "comparison_context": "Local shared family: catboost_uncertainty / native_uncertainty", "paper_source_title": "", "paper_note": ""},
-            {"dataset": "freesolv", "metric_key": "rmse", "metric_label": "Test RMSE", "series_key": "paper", "series_label": "MPNN", "value": 1.15, "comparison_context": "Local shared family: catboost_uncertainty / native_uncertainty", "paper_source_title": "MoleculeNet: a benchmark for molecular machine learning", "paper_note": "Useful external context only."},
+            {"dataset": "freesolv", "metric_key": "rmse", "metric_label": "Test RMSE", "series_key": "moladt_typed", "series_label": "moladt+", "value": 0.94, "comparison_context": "Local shared family: catboost_uncertainty / native_uncertainty", "paper_source_title": "", "paper_note": ""},
+            {"dataset": "qm9", "metric_key": "mae", "metric_label": "Test MAE", "series_key": "paper", "series_label": "PaiNN", "value": 0.012, "comparison_context": "Local shared family: catboost_uncertainty / native_uncertainty", "paper_source_title": "Equivariant message passing for the prediction of tensorial properties and molecular spectra", "paper_note": "ICML 2021 equivariant message-passing baseline."},
             {"dataset": "qm9", "metric_key": "mae", "metric_label": "Test MAE", "series_key": "smiles", "series_label": "smiles", "value": 0.041, "comparison_context": "Local shared family: catboost_uncertainty / native_uncertainty", "paper_source_title": "", "paper_note": ""},
             {"dataset": "qm9", "metric_key": "mae", "metric_label": "Test MAE", "series_key": "moladt", "series_label": "moladt", "value": 0.033, "comparison_context": "Local shared family: catboost_uncertainty / native_uncertainty", "paper_source_title": "", "paper_note": ""},
-            {"dataset": "qm9", "metric_key": "mae", "metric_label": "Test MAE", "series_key": "paper", "series_label": "PaiNN", "value": 0.012, "comparison_context": "Local shared family: catboost_uncertainty / native_uncertainty", "paper_source_title": "Equivariant message passing for the prediction of tensorial properties and molecular spectra", "paper_note": "ICML 2021 equivariant message-passing baseline."},
+            {"dataset": "qm9", "metric_key": "mae", "metric_label": "Test MAE", "series_key": "moladt_typed", "series_label": "moladt+", "value": 0.028, "comparison_context": "Local shared family: catboost_uncertainty / native_uncertainty", "paper_source_title": "", "paper_note": ""},
         ]
     )
 
@@ -366,6 +372,7 @@ def test_metric_comparison_overviews_write_svg_files(tmp_path) -> None:
     assert "MoleculeNet: a benchmark for molecular machine learning" in rmse_svg
     assert "smiles" in rmse_svg
     assert "moladt" in rmse_svg
+    assert "moladt+" in rmse_svg
     assert "PaiNN" in mae_svg
     assert "Test MAE comparison" in mae_svg
 

@@ -35,14 +35,17 @@ The predictive benchmark fits two Stan models:
 - [`bayes_hierarchical_shrinkage`](stan/bayes_hierarchical_shrinkage.stan)
 
 The Python repo also writes aligned `data/processed/` exports. `X_train`, `X_valid`, and `X_test` are standardized from the training split only. `y` stays on the original scale.
-Reported representations are `smiles` and `moladt`: the `moladt` branch is built by parsing structure-backed molecules into the ADT and then extracting ADT-native descriptor features from that object.
+Reported tabular representations are `smiles`, `moladt`, and `moladt_typed`.
+- `moladt` is the baseline ADT descriptor branch: parse the structure-backed molecule into the ADT, then compute the compact ADT-native descriptor table.
+- `moladt_typed` is the richer ADT branch, shown in the charts as `MolADT+`: it keeps the same fitted model families but extends the feature table with typed pair-interaction channels, radial distance channels, and bonding-system summaries from the parsed SDF-backed ADT.
 
 By default, `make python-setup` installs the CatBoost tabular stack and the full PyTorch Geometric geometry runtime needed for `make catboost-geom-model`, including `torch-cluster`, and it does so inside the local repo environment.
 
 Scientific framing:
 
-- `catboost_uncertainty` answers the fair tabular question: same learner, same split, different representation (`smiles` vs `moladt`, and any other tabular export).
+- `catboost_uncertainty` answers the fair tabular question: same learner, same split, different representation (`smiles` vs `moladt` vs `moladt_typed`).
 - `visnet_ensemble` or `dimenetpp_ensemble` answers the geometry question: what changes when the model family can use coordinates and optional MolADT global descriptors.
+- `moladt_typed` follows the structure of older descriptor literature rather than introducing a new learner: typed pair channels are inspired by Bag of Bonds and the radial channels are inspired by bond-type-restricted AP-RDF style descriptors.
 
 ## Run Everything
 
@@ -60,7 +63,7 @@ make benchmark-paper
 `make benchmark-paper` runs the paper-sized QM9 split counts `110462 / 10000 / 10000`, uses the paper inference preset, includes MolADT timing, and writes the long-run artifacts under `results/paper/run_<timestamp>/`.
 That QM9 paper-style split uses `130,462` molecules in total: `110,462` train, `10,000` validation, and `10,000` test. It is not `100k` in each split.
 `make timing` builds a local matched timing corpus under `data/processed/zinc_timing/...`: one `.moladt.json` file per molecule plus a canonical SMILES file with the same molecule count. It then times RDKit baseline parsing, local MolADT SMILES parsing, and local MolADT file parsing, and writes the run under `results/timing/run_<timestamp>/`.
-`make catboost-geom-model` runs the predictive model suite only, without the ZINC timing pass. It prepares FreeSolv and QM9, uses the default QM9 `2000`-row subset with `subset` split mode, runs the configured predictive models, writes the run under `results/models/run_<timestamp>/`, and then creates per-model folders under `models/` so you can open one model at a time and see its filtered metrics, predictions, and a short explanation of how to read that model against `smiles` and `MolADT`.
+`make catboost-geom-model` runs the predictive model suite only, without the ZINC timing pass. It prepares FreeSolv and QM9, uses the default QM9 `2000`-row subset with `subset` split mode, runs the configured predictive models, writes the run under `results/models/run_<timestamp>/`, and then creates per-model folders under `models/` so you can open one model at a time and see its filtered metrics, predictions, and a short explanation of how to read that model against `smiles`, baseline `MolADT`, and richer `MolADT+`.
 `make catboost-geom-model-paper` runs the same predictive model suite on the paper-sized QM9 split counts `110462 / 10000 / 10000` and writes under `results/models/paper/run_<timestamp>/`.
 All of those paths are local to this repo directory: `.venv/`, `.cmdstan/`, `data/`, and `results/`.
 By default, both model-suite targets run the two Stan baselines plus the default extra-model set from the `models` subcommand: `catboost_uncertainty` and `visnet_ensemble`. So the default suite is:
@@ -72,9 +75,9 @@ By default, both model-suite targets run the two Stan baselines plus the default
 
 What each part is doing:
 
-- The Stan models fit Bayesian linear baselines on standardized tabular features for `smiles` and `moladt`.
-- CatBoost fits the same `smiles` and `moladt` tabular exports under one shared non-linear learner, so this is the main fair representation comparison.
-- ViSNet fits the coordinate-aware geometric exports such as `sdf_geom` and `moladt_geom`, so it answers a different question: what changes when the model can use 3D coordinates.
+- The Stan models fit Bayesian linear baselines on standardized tabular features for `smiles`, baseline `moladt`, and richer `moladt_typed`.
+- CatBoost fits the same `smiles`, `moladt`, and `moladt_typed` tabular exports under one shared non-linear learner, so this is the main fair representation comparison.
+- ViSNet fits the coordinate-aware geometric exports such as `sdf_geom`, `moladt_geom`, and `moladt_typed_geom`, so it answers a different question: what changes when the model can use 3D coordinates.
 
 Rough runtime guidance:
 
@@ -88,9 +91,9 @@ Each run now lands in its own timestamped folder with a top-level `results.csv`,
 
 In brief, the reported results come from three model layers:
 
-- Stan: `bayes_linear_student_t` and `bayes_hierarchical_shrinkage` are the descriptor-based Bayesian baselines run on standardized `smiles` and `moladt` feature tables.
-- CatBoost: `catboost_uncertainty` is the fair non-linear tabular comparison, so it is the main `smiles` vs `MolADT` representation test under one shared learner.
-- Geometry models: `visnet_ensemble` or `dimenetpp_ensemble` are only for coordinate-aware rows such as `sdf_geom` and `moladt_geom`, so they answer a different question from the tabular comparison.
+- Stan: `bayes_linear_student_t` and `bayes_hierarchical_shrinkage` are the descriptor-based Bayesian baselines run on standardized `smiles`, `moladt`, and `moladt_typed` feature tables.
+- CatBoost: `catboost_uncertainty` is the fair non-linear tabular comparison, so it is the main `smiles` vs `MolADT` vs `MolADT+` representation test under one shared learner.
+- Geometry models: `visnet_ensemble` or `dimenetpp_ensemble` are only for coordinate-aware rows such as `sdf_geom`, `moladt_geom`, and `moladt_typed_geom`, so they answer a different question from the tabular comparison.
 
 Optional comparison commands:
 
@@ -114,7 +117,7 @@ These runs extend the default Stan baseline instead of replacing it. Extra outpu
 - `models/<model_name>/predictive_metrics.csv`
 - `models/<model_name>/predictions.csv`
 
-The metric-comparison figure pack writes one simple chart per metric, using the matched local `smiles` and `moladt` rows from a shared model family when possible, plus a paper-context bar when there is a numeric literature value for that metric.
+The metric-comparison figure pack writes one simple chart per metric. Each dataset card now shows four bars when available: paper context, `smiles`, baseline `moladt`, and richer `moladt_typed` shown as `MolADT+`.
 
 Timing outputs now also include:
 

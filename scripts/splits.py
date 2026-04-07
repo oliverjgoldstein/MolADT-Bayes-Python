@@ -294,9 +294,13 @@ def export_geometric_splits(
         std = raw_global[train_indices].std(axis=0)
         std_safe = np.where(std == 0.0, 1.0, std)
         global_features = (raw_global - mean) / std_safe
-        feature_frame = rows.loc[:, ["mol_id", target_name]].copy()
-        for feature_index, feature_name in enumerate(geometric_table.global_feature_names):
-            feature_frame[feature_name] = global_features[:, feature_index]
+        feature_frame = pd.concat(
+            [
+                rows.loc[:, ["mol_id", target_name]].reset_index(drop=True),
+                pd.DataFrame(global_features, columns=list(geometric_table.global_feature_names)),
+            ],
+            axis=1,
+        )
         ensure_directory(PROCESSED_DATA_DIR)
         feature_csv_path = PROCESSED_DATA_DIR / f"{dataset_name}_{representation}_global_features.csv"
         feature_frame.to_csv(feature_csv_path, index=False)

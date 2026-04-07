@@ -7,13 +7,15 @@ from pathlib import Path
 import pandas as pd
 from rdkit import Chem
 
-from .common import DEFAULT_SEED, FailureRecord, PROCESSED_DATA_DIR, ensure_directory, find_files, write_failure_csv
+from .common import DEFAULT_SEED, FailureRecord, PROCESSED_DATA_DIR, ensure_directory, extract_archive, find_files, write_failure_csv
 from .download_data import FreeSolvDownloads, download_freesolv
 from .features import (
     canonical_smiles_from_mol,
     canonicalize_smiles,
     featurize_moladt_geometry_records,
     featurize_moladt_records,
+    featurize_moladt_typed_geometry_records,
+    featurize_moladt_typed_records,
     featurize_moladt_smiles_dataframe,
     featurize_sdf_geometry_records,
     featurize_smiles_dataframe,
@@ -91,6 +93,25 @@ def process_freesolv_dataset(
                 seed=seed,
             )
             tabular_exports["moladt"] = moladt_export
+            moladt_typed_table = featurize_moladt_typed_records(
+                sdf_frame,
+                dataset_name="freesolv_moladt_typed",
+                mol_id_column="mol_id",
+                mol_column="rdkit_mol",
+                target_column="expt",
+                record_index_column="sdf_record_index",
+            )
+            moladt_typed_failure_path = PROCESSED_DATA_DIR / "freesolv_moladt_typed_feature_failures.csv"
+            write_failure_csv(moladt_typed_failure_path, moladt_typed_table.failures)
+            failure_paths.append(moladt_typed_failure_path)
+            if not moladt_typed_table.rows.empty:
+                tabular_exports["moladt_typed"] = export_standardized_splits(
+                    moladt_typed_table,
+                    dataset_name="freesolv",
+                    representation="moladt_typed",
+                    target_name="expt",
+                    seed=seed,
+                )
             sdf_geom_table = featurize_sdf_geometry_records(
                 sdf_frame,
                 dataset_name="freesolv_sdf_geom",
@@ -126,6 +147,25 @@ def process_freesolv_dataset(
                     moladt_geom_table,
                     dataset_name="freesolv",
                     representation="moladt_geom",
+                    target_name="expt",
+                    seed=seed,
+                )
+            moladt_typed_geom_table = featurize_moladt_typed_geometry_records(
+                sdf_frame,
+                dataset_name="freesolv_moladt_typed_geom",
+                mol_id_column="mol_id",
+                mol_column="rdkit_mol",
+                target_column="expt",
+                record_index_column="sdf_record_index",
+            )
+            moladt_typed_geom_failure_path = PROCESSED_DATA_DIR / "freesolv_moladt_typed_geometry_failures.csv"
+            write_failure_csv(moladt_typed_geom_failure_path, moladt_typed_geom_table.failures)
+            failure_paths.append(moladt_typed_geom_failure_path)
+            if not moladt_typed_geom_table.rows.empty:
+                geometric_exports["moladt_typed_geom"] = export_geometric_splits(
+                    moladt_typed_geom_table,
+                    dataset_name="freesolv",
+                    representation="moladt_typed_geom",
                     target_name="expt",
                     seed=seed,
                 )
@@ -179,6 +219,14 @@ def _canonicalize_freesolv_csv(downloads: FreeSolvDownloads) -> tuple[pd.DataFra
 
 def _align_freesolv_sdf(downloads: FreeSolvDownloads, processed_frame: pd.DataFrame) -> tuple[pd.DataFrame, list[FailureRecord]]:
     sdf_paths = find_files(downloads.repo_extract_dir, ("*.sdf",))
+    if not sdf_paths:
+        sdf_archives = find_files(downloads.repo_extract_dir, ("sdffiles*.tar.gz", "*sdffiles*.tgz"))
+        for archive_path in sdf_archives:
+            extracted_dir = extract_archive(
+                archive_path,
+                archive_path.parent / archive_path.name.removesuffix(".tar.gz").removesuffix(".tgz"),
+            )
+            sdf_paths.extend(find_files(extracted_dir, ("*.sdf",)))
     if not sdf_paths:
         return pd.DataFrame(), []
     by_smiles: dict[str, list[dict[str, object]]] = {}

@@ -633,7 +633,12 @@ _METRIC_COMPARISON_SPECS: tuple[dict[str, str], ...] = (
     {"metric_key": "r2", "column": "r2", "label": "Test R2", "baseline_metric": ""},
     {"metric_key": "coverage_90", "column": "coverage_90", "label": "90% Interval Coverage", "baseline_metric": ""},
 )
-_LOCAL_COMPARISON_REPRESENTATIONS = ("smiles", "moladt")
+_LOCAL_COMPARISON_REPRESENTATIONS = ("smiles", "moladt", "moladt_typed")
+_LOCAL_COMPARISON_LABELS = {
+    "smiles": "smiles",
+    "moladt": "moladt",
+    "moladt_typed": "moladt+",
+}
 _LOCAL_MODEL_PREFERENCE = (
     "catboost_uncertainty",
     "bayes_hierarchical_shrinkage",
@@ -669,7 +674,7 @@ def _build_metric_comparison_frame(metrics: pd.DataFrame, *, baselines_frame: pd
                         "metric_key": metric_key,
                         "metric_label": metric_label,
                         "series_key": representation,
-                        "series_label": representation,
+                        "series_label": _LOCAL_COMPARISON_LABELS.get(representation, representation),
                         "value": float(representation_row.iloc[0][column]),
                         "comparison_context": local_context,
                         "paper_source_title": "",
@@ -708,7 +713,7 @@ def _selected_local_comparison_rows(metrics: pd.DataFrame) -> pd.DataFrame:
             if set(independent_rows["representation"].astype(str)) != set(_LOCAL_COMPARISON_REPRESENTATIONS):
                 continue
             independent_rows["comparison_context"] = (
-                "Local rows chosen independently because no shared smiles/MolADT model family was present."
+                "Local rows chosen independently because no shared smiles/MolADT/MolADT+ model family was present."
             )
             rows.append(independent_rows)
             continue
@@ -948,6 +953,11 @@ def _freesolv_context_note(representation: str, *, baseline_note: str = "") -> s
             "Partial context only: the gray bar is MoleculeNet's neural baseline, while the local MolADT bar "
             "uses descriptor features computed after an RDKit SDF record is parsed into the ADT."
         )
+    elif representation == "moladt_typed":
+        contextual = (
+            "Partial context only: the gray bar is MoleculeNet's neural baseline, while the local MolADT+ bar "
+            "uses richer ADT pairwise and bonding-system features computed from the parsed SDF-backed ADT."
+        )
     else:
         contextual = "Partial context only: MoleculeNet uses its own random split; this repo uses the local deterministic split."
     if baseline_note:
@@ -1075,7 +1085,7 @@ def _write_model_folders(
     if metrics_frame.empty:
         return
     models_dir = ensure_directory(RESULTS_DIR / "models")
-    index_lines = ["# Models", "", "Each folder contains rows filtered to one model family plus a short explanation of how to read that model against `smiles` and `MolADT`.", ""]
+    index_lines = ["# Models", "", "Each folder contains rows filtered to one model family plus a short explanation of how to read that model against `smiles`, baseline `MolADT`, and richer `MolADT+` where present.", ""]
     model_names = sorted(metrics_frame["model"].dropna().astype(str).unique().tolist())
     for model_name in model_names:
         model_dir = ensure_directory(models_dir / model_name)
@@ -1134,22 +1144,22 @@ def _model_explanation_lines(model_name: str) -> list[str]:
         return [
             "These are the Stan descriptor baselines.",
             "",
-            "They compare `smiles` and `MolADT` fairly because both branches use standardized tabular feature matrices under the same model family.",
-            "Use these folders to answer whether the ADT-derived feature table helps before introducing a different learner.",
+            "They compare `smiles`, baseline `MolADT`, and richer `MolADT+` fairly because each branch uses a standardized tabular feature matrix under the same model family.",
+            "Use these folders to answer whether the ADT-derived feature tables help before introducing a different learner.",
         ]
     if model_name == "catboost_uncertainty":
         return [
             "This is the shared non-linear tabular comparison model.",
             "",
-            "It is the fairest `smiles` vs `MolADT` comparison in the repo because the learner is held fixed and only the representation changes.",
-            "If `MolADT` beats `smiles` here, that is evidence about the representation rather than about a model-family switch.",
+            "It is the fairest `smiles` vs `MolADT` vs `MolADT+` comparison in the repo because the learner is held fixed and only the representation changes.",
+            "If `MolADT+` beats both `MolADT` and `smiles` here, that is evidence about the richer ADT feature design rather than about a model-family switch.",
         ]
     if model_name in {"visnet_ensemble", "dimenetpp_ensemble"}:
         return [
             "This is a geometry-aware model family.",
             "",
-            "These rows should be read against `sdf_geom` and `moladt_geom`, not against plain `smiles`.",
-            "They answer a different question from the tabular models: what happens when the model can use coordinates and optional MolADT global descriptors.",
+            "These rows should be read against `sdf_geom`, `moladt_geom`, and `moladt_typed_geom`, not against plain `smiles`.",
+            "They answer a different question from the tabular models: what happens when the model can use coordinates plus optional MolADT global descriptors.",
         ]
     return [
         "Model-specific explanation unavailable.",

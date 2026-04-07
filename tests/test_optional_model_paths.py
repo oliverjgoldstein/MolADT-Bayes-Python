@@ -8,7 +8,7 @@ import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
-from scripts.features import FeatureTable, featurize_moladt_geometry_records
+from scripts.features import FeatureTable, featurize_moladt_geometry_records, featurize_moladt_typed_geometry_records
 from scripts.model_errors import OptionalModelDependencyError
 from scripts.model_registry import RegisteredModel
 from scripts.run_all import _extend_with_property_results, build_parser
@@ -80,6 +80,42 @@ def test_moladt_geometry_export_creation(tmp_path, monkeypatch) -> None:
     assert exported.global_features is not None
     assert "weight" in exported.global_feature_names
     assert len(exported.train_indices) > 0
+    assert exported.metadata_path.exists()
+
+
+def test_moladt_typed_geometry_export_creation(tmp_path, monkeypatch) -> None:
+    import scripts.splits as splits
+
+    monkeypatch.setattr(splits, "PROCESSED_DATA_DIR", tmp_path)
+    molecule = Chem.AddHs(Chem.MolFromSmiles("CCO"))
+    AllChem.EmbedMolecule(molecule, randomSeed=1)
+    frame = pd.DataFrame(
+        [
+            {"mol_id": f"mol_{index}", "mu": float(index), "sdf_record_index": index, "rdkit_mol": molecule}
+            for index in range(12)
+        ]
+    )
+
+    geometry_table = featurize_moladt_typed_geometry_records(
+        frame,
+        dataset_name="demo_geom_typed",
+        mol_id_column="mol_id",
+        mol_column="rdkit_mol",
+        target_column="mu",
+        record_index_column="sdf_record_index",
+    )
+    exported = export_geometric_splits(
+        geometry_table,
+        dataset_name="demo",
+        representation="moladt_typed_geom",
+        target_name="mu",
+        seed=7,
+    )
+
+    assert exported.representation == "moladt_typed_geom"
+    assert exported.global_features is not None
+    assert "pair_count_c_o" in exported.global_feature_names
+    assert "aprdf_all_1p5a" in exported.global_feature_names
     assert exported.metadata_path.exists()
 
 

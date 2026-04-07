@@ -14,6 +14,8 @@ from .features import (
     canonical_smiles_from_mol,
     featurize_moladt_geometry_records,
     featurize_moladt_records,
+    featurize_moladt_typed_geometry_records,
+    featurize_moladt_typed_records,
     featurize_sdf_geometry_records,
     featurize_smiles_dataframe,
 )
@@ -113,6 +115,27 @@ def process_qm9_dataset(
         split_partition=split_partition,
     )
     tabular_exports["moladt"] = moladt_export
+    with _block_rdkit_logs():
+        moladt_typed_table = featurize_moladt_typed_records(
+            combined_frame,
+            dataset_name="qm9_moladt_typed",
+            mol_id_column="mol_id",
+            mol_column="rdkit_mol",
+            target_column="mu",
+            record_index_column="sdf_record_index",
+        )
+    moladt_typed_feature_failure_path = PROCESSED_DATA_DIR / "qm9_moladt_typed_feature_failures.csv"
+    write_failure_csv(moladt_typed_feature_failure_path, moladt_typed_table.failures)
+    failure_paths.append(moladt_typed_feature_failure_path)
+    if not moladt_typed_table.rows.empty:
+        tabular_exports["moladt_typed"] = export_standardized_splits(
+            moladt_typed_table,
+            dataset_name="qm9",
+            representation="moladt_typed",
+            target_name="mu",
+            seed=seed,
+            split_partition=split_partition,
+        )
 
     with _block_rdkit_logs():
         sdf_geom_table = featurize_sdf_geometry_records(
@@ -138,6 +161,18 @@ def process_qm9_dataset(
     moladt_geom_failure_path = PROCESSED_DATA_DIR / "qm9_moladt_geometry_failures.csv"
     write_failure_csv(moladt_geom_failure_path, moladt_geom_table.failures)
     failure_paths.append(moladt_geom_failure_path)
+    with _block_rdkit_logs():
+        moladt_typed_geom_table = featurize_moladt_typed_geometry_records(
+            combined_frame,
+            dataset_name="qm9_moladt_typed_geom",
+            mol_id_column="mol_id",
+            mol_column="rdkit_mol",
+            target_column="mu",
+            record_index_column="sdf_record_index",
+        )
+    moladt_typed_geom_failure_path = PROCESSED_DATA_DIR / "qm9_moladt_typed_geometry_failures.csv"
+    write_failure_csv(moladt_typed_geom_failure_path, moladt_typed_geom_table.failures)
+    failure_paths.append(moladt_typed_geom_failure_path)
     geometric_exports: dict[str, GeometricDatasetSpec] = {}
     if not sdf_geom_table.rows.empty:
         geometric_exports["sdf_geom"] = export_geometric_splits(
@@ -153,6 +188,15 @@ def process_qm9_dataset(
             moladt_geom_table,
             dataset_name="qm9",
             representation="moladt_geom",
+            target_name="mu",
+            seed=seed,
+            split_partition=split_partition,
+        )
+    if not moladt_typed_geom_table.rows.empty:
+        geometric_exports["moladt_typed_geom"] = export_geometric_splits(
+            moladt_typed_geom_table,
+            dataset_name="qm9",
+            representation="moladt_typed_geom",
             target_name="mu",
             seed=seed,
             split_partition=split_partition,
