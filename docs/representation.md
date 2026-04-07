@@ -24,6 +24,44 @@ SMILES is useful as an interchange string, but it is not a good scientific worki
 
 MolADT starts from the chemistry object first and treats SMILES as one possible boundary format, not the center of the system.
 
+## Concrete Example
+
+Take the built-in diborane example.
+
+In a SMILES-first view, this is awkward immediately:
+
+```text
+Diborane has two bridging hydrogens with 3c-2e bonding.
+There is no clean conservative SMILES string in this repo that says that directly.
+Any SMILES-style encoding would have to hide, approximate, or flatten the bridge systems.
+```
+
+In MolADT, the structure is stated directly:
+
+```text
+Diborane (B2H6)
+Dietz-style ADT with two explicit 3c-2e bridging hydrogen bonding systems.
+
+Molecule with 8 atoms, 5 sigma bonds, 2 bonding systems
+
+Bonding systems (2):
+  System 1 [bridge_h3_3c2e]: 2 shared electrons
+    Atoms: B#1, B#2, H#3
+    Edges (+0.50 to bond order each):
+      B#1 <-> H#3
+      B#2 <-> H#3
+
+  System 2 [bridge_h4_3c2e]: 2 shared electrons
+    Atoms: B#1, B#2, H#4
+    Edges (+0.50 to bond order each):
+      B#1 <-> H#4
+      B#2 <-> H#4
+```
+
+That is the point of the representation. The unusual bonding is not an edge case bolted onto a string format later; it is part of the molecule object itself.
+
+Ferrocene makes the same point even more strongly: the built-in `pretty-example ferrocene` output can show two cyclopentadienyl `pi` systems plus an Fe back-donation-style pool, while the current conservative SMILES path intentionally refuses to pretend that this is just an ordinary localized graph.
+
 ## Benchmark Views
 
 The benchmark uses three MolADT-facing representation branches:
