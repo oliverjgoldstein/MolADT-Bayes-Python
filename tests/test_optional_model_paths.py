@@ -11,7 +11,7 @@ from rdkit.Chem import AllChem
 from scripts.features import FeatureTable, featurize_moladt_geometry_records, featurize_moladt_typed_geometry_records
 from scripts.model_errors import OptionalModelDependencyError
 from scripts.model_registry import RegisteredModel
-from scripts.run_all import _extend_with_property_results, build_parser
+from scripts.run_all import _extend_with_property_results, _parse_extra_models, build_parser
 from scripts.splits import export_geometric_splits, export_standardized_splits
 from scripts.tabular_runner import CATBOOST_METHOD, CATBOOST_MODEL, CatBoostRunConfig, run_catboost_uncertainty
 
@@ -45,6 +45,12 @@ def test_run_all_models_parser_defaults_to_models_command() -> None:
 
     assert args.command == "models"
     assert args.include_moladt_predictive is True
+
+
+def test_models_command_defaults_include_both_geometry_families() -> None:
+    args = build_parser().parse_args(["models"])
+
+    assert _parse_extra_models(args) == ("catboost_uncertainty", "visnet_ensemble", "dimenetpp_ensemble")
 
 
 def test_moladt_geometry_export_creation(tmp_path, monkeypatch) -> None:
@@ -116,6 +122,8 @@ def test_moladt_typed_geometry_export_creation(tmp_path, monkeypatch) -> None:
     assert exported.global_features is not None
     assert "pair_count_c_o" in exported.global_feature_names
     assert "aprdf_all_1p5a" in exported.global_feature_names
+    assert "bond_angle_all_120d" in exported.global_feature_names
+    assert "torsion_all_180d" in exported.global_feature_names
     assert exported.metadata_path.exists()
 
 

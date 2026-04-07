@@ -35,7 +35,7 @@ make python-setup
 
 If your distro uses a versioned package name instead, install the package that matches `python3 --version`, for example `python3.10-venv` or `python3.12-venv`.
 
-## 2. Install CmdStan
+## 2. Install CmdStan If You Want The Stan Baselines
 
 From the repo root:
 
@@ -43,7 +43,7 @@ From the repo root:
 make python-cmdstan-install
 ```
 
-The local install target writes CmdStan under `.cmdstan/`.
+The focused front-page commands do not need this step. The local install target writes CmdStan under `.cmdstan/`.
 
 ## 3. Verify the Install
 
@@ -80,22 +80,25 @@ The first command reads an SDF record, validates it, prints the record title, an
 
 ## 5. First Successful Benchmark Run
 
-For a lighter first pass, start with the FreeSolv smoke benchmark instead of the full default benchmark:
+The focused user-facing commands are:
 
 ```bash
-./.venv/bin/python -m scripts.run_all smoke-test --methods optimize --models bayes_linear_student_t
+make freesolv
+make qm9
+make timing
 ```
 
-After that works, the default full benchmark entrypoint is:
+Use them in that order the first time through.
+
+- `make freesolv` is the lightest predictive path and the best first end-to-end check.
+- `make qm9` is the focused dipole benchmark on the default local QM9 subset.
+- `make timing` is the timing-only path that builds the matched ADT/SMILES corpus first.
+
+The older broad benchmark wrappers still exist, but they are no longer the shortest recommended path:
 
 ```bash
 make benchmark
-```
-
-If you want the timing-only path that builds the local matched ADT/SMILES corpus first, run:
-
-```bash
-make timing
+make benchmark-paper
 ```
 
 ## Verify and Troubleshoot
@@ -111,7 +114,7 @@ Use these checks when something looks wrong:
 - Missing CmdStan:
   `scripts.run_all` will fail before fitting Stan models; run `make python-cmdstan-install` or point CmdStanPy at an existing install.
 - Benchmark outputs not where you expect:
-  default runs now write to `results/run_<timestamp>/`; `INFERENCE_PRESET=paper` writes to `results/paper/run_<timestamp>/`; `MOLADT_RESULTS_DIR` overrides the root entirely. Each run keeps the top level small with `results.csv`, `rmse_train_test_vs_literature.svg`, `timing_overview.svg`, and a `details/` folder.
+  focused runs now write to `results/freesolv/run_<timestamp>/`, `results/qm9/run_<timestamp>/`, or `results/timing/run_<timestamp>/`; the older broad wrappers still use `results/run_<timestamp>/` and `results/paper/run_<timestamp>/`; `MOLADT_RESULTS_DIR` overrides the root entirely.
 - Unsupported SMILES:
   the parser and renderer only support the conservative subset documented in [SMILES scope and validation](smiles-scope-and-validation.md).
 

@@ -122,7 +122,7 @@ def test_featurize_moladt_records_uses_adt_descriptors() -> None:
     assert float(table.rows.iloc[0]["weight"]) > 0.0
 
 
-def test_featurize_moladt_typed_records_adds_pair_and_radial_features() -> None:
+def test_featurize_moladt_typed_records_adds_pair_angle_and_torsion_features() -> None:
     molecule = Chem.AddHs(Chem.MolFromSmiles("CCO"))
     AllChem.EmbedMolecule(molecule, randomSeed=1)
     frame = pd.DataFrame([{"mol_id": "mol_1", "mu": 1.25, "sdf_record_index": 0, "rdkit_mol": molecule}])
@@ -141,8 +141,13 @@ def test_featurize_moladt_typed_records_adds_pair_and_radial_features() -> None:
     assert "pair_count_c_o" in table.feature_names
     assert "pair_interaction_c_o" in table.feature_names
     assert "aprdf_all_1p5a" in table.feature_names
+    assert "bond_angle_all_120d" in table.feature_names
+    assert "torsion_all_180d" in table.feature_names
     assert "system_shared_electrons_sum" in table.feature_names
     assert float(table.rows.iloc[0]["pair_count_c_o"]) >= 1.0
+    assert float(table.rows.iloc[0]["bond_angle_all_120d"]) > 0.0
+    torsion_columns = [name for name in table.feature_names if name.startswith("torsion_all_")]
+    assert sum(float(table.rows.iloc[0][name]) for name in torsion_columns) > 0.0
 
 
 def test_moladt_parse_render_supports_silicon_molecules() -> None:

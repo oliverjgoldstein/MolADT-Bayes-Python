@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
+import math
 from pathlib import Path
 from typing import Any
 
@@ -101,6 +102,10 @@ _PAIR_SYMBOLS: tuple[str, ...] = tuple(symbol.value for symbol in AtomicSymbol)
 _PAIR_SYMBOL_ORDER = {symbol: index for index, symbol in enumerate(_PAIR_SYMBOLS)}
 _PAIR_RADIAL_CENTERS: tuple[float, ...] = (1.5, 2.5, 3.5, 4.5)
 _PAIR_RADIAL_SIGMA = 0.75
+_ANGLE_CENTERS_DEGREES: tuple[float, ...] = (60.0, 90.0, 120.0, 180.0)
+_ANGLE_SIGMA_DEGREES = 18.0
+_DIHEDRAL_CENTERS_DEGREES: tuple[float, ...] = (0.0, 60.0, 120.0, 180.0)
+_DIHEDRAL_SIGMA_DEGREES = 20.0
 
 
 def _pair_feature_token(symbol: str) -> str:
@@ -115,6 +120,10 @@ def _pair_feature_name(prefix: str, left_symbol: str, right_symbol: str) -> str:
 
 def _radial_feature_name(prefix: str, center: float) -> str:
     return f"{prefix}_{center:.1f}a".replace(".", "p")
+
+
+def _angular_feature_name(prefix: str, center: float) -> str:
+    return f"{prefix}_{int(center)}d"
 
 
 _TYPED_PAIR_COUNT_FEATURES: dict[str, str] = {
@@ -147,6 +156,16 @@ _TYPED_RADIAL_FEATURES: dict[str, str] = {
     **{_radial_feature_name("aprdf_edge_order", center): "adt_typed_radial" for center in _PAIR_RADIAL_CENTERS},
     **{_radial_feature_name("aprdf_system_edge", center): "adt_typed_radial" for center in _PAIR_RADIAL_CENTERS},
 }
+_TYPED_ANGLE_FEATURES: dict[str, str] = {
+    **{_angular_feature_name("bond_angle_all", center): "adt_typed_angles" for center in _ANGLE_CENTERS_DEGREES},
+    **{_angular_feature_name("bond_angle_distance_weighted", center): "adt_typed_angles" for center in _ANGLE_CENTERS_DEGREES},
+    **{_angular_feature_name("bond_angle_order_weighted", center): "adt_typed_angles" for center in _ANGLE_CENTERS_DEGREES},
+}
+_TYPED_DIHEDRAL_FEATURES: dict[str, str] = {
+    **{_angular_feature_name("torsion_all", center): "adt_typed_torsions" for center in _DIHEDRAL_CENTERS_DEGREES},
+    **{_angular_feature_name("torsion_distance_weighted", center): "adt_typed_torsions" for center in _DIHEDRAL_CENTERS_DEGREES},
+    **{_angular_feature_name("torsion_order_weighted", center): "adt_typed_torsions" for center in _DIHEDRAL_CENTERS_DEGREES},
+}
 
 MOLADT_TYPED_FEATURE_GROUPS: dict[str, str] = {
     **MOLADT_FEATURE_GROUPS,
@@ -155,6 +174,8 @@ MOLADT_TYPED_FEATURE_GROUPS: dict[str, str] = {
     **_TYPED_SYSTEM_FEATURES,
     **_TYPED_EDGE_BUCKET_FEATURES,
     **_TYPED_RADIAL_FEATURES,
+    **_TYPED_ANGLE_FEATURES,
+    **_TYPED_DIHEDRAL_FEATURES,
 }
 
 
@@ -605,12 +626,16 @@ def rdkit_mol_to_moladt_record(molecule: Chem.Mol):
 def compute_moladt_typed_descriptors(molecule: Molecule) -> dict[str, float]:
     # This richer ADT table keeps the learner fixed while adding
     # literature-inspired typed pair and radial channels on top of the
-    # compact global MolADT descriptor set.
+    # compact global MolADT descriptor set. Bond-angle and torsion
+    # channels keep more of the SDF-backed local geometry instead of
+    # collapsing everything into pairwise distance summaries alone.
     descriptors = compute_moladt_descriptors(molecule).to_dict()
     descriptors.update(_typed_pair_features(molecule))
     descriptors.update(_typed_system_features(molecule))
     descriptors.update(_typed_edge_order_bucket_features(molecule))
     descriptors.update(_typed_radial_features(molecule))
+    descriptors.update(_typed_angle_features(molecule))
+    descriptors.update(_typed_torsion_features(molecule))
     return descriptors
 
 
@@ -623,6 +648,47 @@ def _unique_moladt_edges(molecule: Molecule):
     for _, system in molecule.systems:
         edges.update(system.member_edges)
     return tuple(sorted(edges))
+
+
+def _coordinate_vector(atom: Any) -> np.ndarray:
+    return np.asarray(
+        [atom.coordinate.x.value, atom.coordinate.y.value, atom.coordinate.z.value],
+        dtype=float,
+    )
+
+
+def _moladt_coordinate_map(molecule: Molecule) -> dict[Any, np.ndarray]:
+    return {
+        atom_id: _coordinate_vector(atom)
+        for atom_id, atom in molecule.atoms.items()
+    }
+
+
+def _moladt_atomic_numbers(molecule: Molecule) -> dict[Any, float]:
+    return {
+        atom_id: float(atom.attributes.atomic_number)
+        for atom_id, atom in molecule.atoms.items()
+    }
+
+
+def _moladt_edge_orders(molecule: Molecule) -> dict[tuple[Any, Any], float]:
+    edge_orders: dict[tuple[Any, Any], float] = {}
+    for edge in _unique_moladt_edges(molecule):
+        order = float(effective_order(molecule, edge))
+        edge_orders[(edge.a, edge.b)] = order
+        edge_orders[(edge.b, edge.a)] = order
+    return edge_orders
+
+
+def _moladt_adjacency(molecule: Molecule) -> dict[Any, tuple[Any, ...]]:
+    adjacency = {atom_id: set() for atom_id in molecule.atoms}
+    for edge in _unique_moladt_edges(molecule):
+        adjacency[edge.a].add(edge.b)
+        adjacency[edge.b].add(edge.a)
+    return {
+        atom_id: tuple(sorted(neighbors))
+        for atom_id, neighbors in adjacency.items()
+    }
 
 
 def _typed_pair_features(molecule: Molecule) -> dict[str, float]:
@@ -737,3 +803,105 @@ def _typed_radial_features(molecule: Molecule) -> dict[str, float]:
             system_edge_channel = np.exp(-((system_edge_distances_arr - center) ** 2) / (2.0 * (_PAIR_RADIAL_SIGMA ** 2)))
             features[_radial_feature_name("aprdf_system_edge", center)] = float(np.sum(system_edge_weights_arr * system_edge_channel))
     return features
+
+
+def _typed_angle_features(molecule: Molecule) -> dict[str, float]:
+    features = {name: 0.0 for name in _TYPED_ANGLE_FEATURES}
+    adjacency = _moladt_adjacency(molecule)
+    coordinates = _moladt_coordinate_map(molecule)
+    atomic_numbers = _moladt_atomic_numbers(molecule)
+    edge_orders = _moladt_edge_orders(molecule)
+    for center_id, neighbors in adjacency.items():
+        if len(neighbors) < 2:
+            continue
+        center = coordinates[center_id]
+        for left_index, left_id in enumerate(neighbors):
+            for right_id in neighbors[left_index + 1 :]:
+                left_vector = coordinates[left_id] - center
+                right_vector = coordinates[right_id] - center
+                left_distance = float(np.linalg.norm(left_vector))
+                right_distance = float(np.linalg.norm(right_vector))
+                if left_distance <= 1e-6 or right_distance <= 1e-6:
+                    continue
+                cosine = float(np.dot(left_vector, right_vector) / (left_distance * right_distance))
+                angle_degrees = float(np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0))))
+                distance_weight = float(
+                    (atomic_numbers[left_id] * atomic_numbers[right_id]) / max(left_distance * right_distance, 1e-6)
+                )
+                order_weight = float(
+                    0.5 * (edge_orders[(center_id, left_id)] + edge_orders[(center_id, right_id)])
+                )
+                for radial_center in _ANGLE_CENTERS_DEGREES:
+                    channel = math.exp(-((angle_degrees - radial_center) ** 2) / (2.0 * (_ANGLE_SIGMA_DEGREES ** 2)))
+                    features[_angular_feature_name("bond_angle_all", radial_center)] += float(channel)
+                    features[_angular_feature_name("bond_angle_distance_weighted", radial_center)] += float(
+                        distance_weight * channel
+                    )
+                    features[_angular_feature_name("bond_angle_order_weighted", radial_center)] += float(
+                        order_weight * channel
+                    )
+    return features
+
+
+def _typed_torsion_features(molecule: Molecule) -> dict[str, float]:
+    features = {name: 0.0 for name in _TYPED_DIHEDRAL_FEATURES}
+    adjacency = _moladt_adjacency(molecule)
+    coordinates = _moladt_coordinate_map(molecule)
+    atomic_numbers = _moladt_atomic_numbers(molecule)
+    edge_orders = _moladt_edge_orders(molecule)
+    for edge in _unique_moladt_edges(molecule):
+        left_neighbors = [atom_id for atom_id in adjacency[edge.a] if atom_id != edge.b]
+        right_neighbors = [atom_id for atom_id in adjacency[edge.b] if atom_id != edge.a]
+        if not left_neighbors or not right_neighbors:
+            continue
+        central_order = float(edge_orders[(edge.a, edge.b)])
+        for terminal_left in left_neighbors:
+            for terminal_right in right_neighbors:
+                if terminal_left == terminal_right:
+                    continue
+                dihedral_degrees = _absolute_dihedral_degrees(
+                    coordinates[terminal_left],
+                    coordinates[edge.a],
+                    coordinates[edge.b],
+                    coordinates[terminal_right],
+                )
+                left_distance = float(np.linalg.norm(coordinates[terminal_left] - coordinates[edge.a]))
+                right_distance = float(np.linalg.norm(coordinates[terminal_right] - coordinates[edge.b]))
+                if left_distance <= 1e-6 or right_distance <= 1e-6:
+                    continue
+                distance_weight = float(
+                    (atomic_numbers[terminal_left] * atomic_numbers[terminal_right]) / max(left_distance * right_distance, 1e-6)
+                )
+                for radial_center in _DIHEDRAL_CENTERS_DEGREES:
+                    channel = math.exp(
+                        -((dihedral_degrees - radial_center) ** 2) / (2.0 * (_DIHEDRAL_SIGMA_DEGREES ** 2))
+                    )
+                    features[_angular_feature_name("torsion_all", radial_center)] += float(channel)
+                    features[_angular_feature_name("torsion_distance_weighted", radial_center)] += float(
+                        distance_weight * channel
+                    )
+                    features[_angular_feature_name("torsion_order_weighted", radial_center)] += float(
+                        central_order * channel
+                    )
+    return features
+
+
+def _absolute_dihedral_degrees(point_a: np.ndarray, point_b: np.ndarray, point_c: np.ndarray, point_d: np.ndarray) -> float:
+    bond_ab = point_a - point_b
+    bond_bc = point_c - point_b
+    bond_cd = point_d - point_c
+    norm_bc = float(np.linalg.norm(bond_bc))
+    if norm_bc <= 1e-6:
+        return 0.0
+    bc_unit = bond_bc / norm_bc
+    normal_left = bond_ab - np.dot(bond_ab, bc_unit) * bc_unit
+    normal_right = bond_cd - np.dot(bond_cd, bc_unit) * bc_unit
+    left_norm = float(np.linalg.norm(normal_left))
+    right_norm = float(np.linalg.norm(normal_right))
+    if left_norm <= 1e-6 or right_norm <= 1e-6:
+        return 0.0
+    normal_left /= left_norm
+    normal_right /= right_norm
+    x = float(np.dot(normal_left, normal_right))
+    y = float(np.dot(np.cross(bc_unit, normal_left), normal_right))
+    return abs(float(np.degrees(np.arctan2(y, x))))

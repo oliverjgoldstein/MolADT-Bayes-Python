@@ -633,48 +633,95 @@ _METRIC_COMPARISON_SPECS: tuple[dict[str, str], ...] = (
     {"metric_key": "r2", "column": "r2", "label": "Test R2", "baseline_metric": ""},
     {"metric_key": "coverage_90", "column": "coverage_90", "label": "90% Interval Coverage", "baseline_metric": ""},
 )
-_LOCAL_COMPARISON_REPRESENTATIONS = ("smiles", "moladt", "moladt_typed")
-_LOCAL_COMPARISON_LABELS = {
+_TABULAR_COMPARISON_REPRESENTATIONS = ("smiles", "moladt", "moladt_typed")
+_FRONTIER_COMPARISON_REPRESENTATIONS = ("smiles", "moladt", "moladt_typed", "moladt_typed_geom")
+_COMPARISON_LABELS = {
     "smiles": "smiles",
     "moladt": "moladt",
     "moladt_typed": "moladt+",
+    "moladt_typed_geom": "moladt+ 3D",
 }
-_LOCAL_MODEL_PREFERENCE = (
+_COMPARISON_SERIES_ORDER = {
+    "paper": 0,
+    "smiles": 1,
+    "moladt": 2,
+    "moladt_typed": 3,
+    "moladt_typed_geom": 4,
+}
+_TABULAR_MODEL_PREFERENCE = (
     "catboost_uncertainty",
     "bayes_hierarchical_shrinkage",
     "bayes_linear_student_t",
     "visnet_ensemble",
     "dimenetpp_ensemble",
 )
+_TABULAR_COMPARISON_SUBTITLE = (
+    "Gray is paper context, orange is SMILES, teal is MolADT, and blue is the richer MolADT+ feature model when it is available."
+)
+_FRONTIER_COMPARISON_SUBTITLE = (
+    "This mixed-family frontier adds the rose MolADT+ 3D row. It intentionally compares the best local row per representation even when that switches from tabular to geometry models."
+)
 
 
 def _build_metric_comparison_frame(metrics: pd.DataFrame, *, baselines_frame: pd.DataFrame) -> pd.DataFrame:
     if metrics.empty:
         return pd.DataFrame()
-    local_rows = _selected_local_comparison_rows(metrics)
+    frames = [
+        _build_metric_comparison_rows(
+            _selected_local_comparison_rows(metrics),
+            baselines_frame=baselines_frame,
+            comparison_key="tabular",
+            representations=_TABULAR_COMPARISON_REPRESENTATIONS,
+            comparison_subtitle=_TABULAR_COMPARISON_SUBTITLE,
+        ),
+        _build_metric_comparison_rows(
+            _selected_frontier_comparison_rows(metrics),
+            baselines_frame=baselines_frame,
+            comparison_key="frontier",
+            representations=_FRONTIER_COMPARISON_REPRESENTATIONS,
+            comparison_subtitle=_FRONTIER_COMPARISON_SUBTITLE,
+        ),
+    ]
+    frames = [frame for frame in frames if not frame.empty]
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True)
+
+
+def _build_metric_comparison_rows(
+    local_rows: pd.DataFrame,
+    *,
+    baselines_frame: pd.DataFrame,
+    comparison_key: str,
+    representations: tuple[str, ...],
+    comparison_subtitle: str,
+) -> pd.DataFrame:
     if local_rows.empty:
         return pd.DataFrame()
     rows: list[dict[str, Any]] = []
-    for _, spec in enumerate(_METRIC_COMPARISON_SPECS):
+    for spec in _METRIC_COMPARISON_SPECS:
         metric_key = spec["metric_key"]
         column = spec["column"]
         metric_label = spec["label"]
         baseline_metric = spec["baseline_metric"]
         for dataset, dataset_frame in local_rows.groupby("dataset", sort=True):
-            if set(dataset_frame["representation"].astype(str)) != set(_LOCAL_COMPARISON_REPRESENTATIONS):
+            if set(dataset_frame["representation"].astype(str)) != set(representations):
                 continue
             local_context = str(dataset_frame.iloc[0]["comparison_context"])
-            for representation in _LOCAL_COMPARISON_REPRESENTATIONS:
+            for representation in representations:
                 representation_row = dataset_frame.loc[dataset_frame["representation"] == representation]
                 if representation_row.empty or pd.isna(representation_row.iloc[0].get(column, pd.NA)):
                     continue
                 rows.append(
                     {
+                        "comparison_key": comparison_key,
+                        "comparison_subtitle": comparison_subtitle,
                         "dataset": str(dataset),
                         "metric_key": metric_key,
                         "metric_label": metric_label,
                         "series_key": representation,
-                        "series_label": _LOCAL_COMPARISON_LABELS.get(representation, representation),
+                        "series_label": _COMPARISON_LABELS.get(representation, representation),
+                        "series_order": _COMPARISON_SERIES_ORDER.get(representation, len(_COMPARISON_SERIES_ORDER)),
                         "value": float(representation_row.iloc[0][column]),
                         "comparison_context": local_context,
                         "paper_source_title": "",
@@ -685,11 +732,14 @@ def _build_metric_comparison_frame(metrics: pd.DataFrame, *, baselines_frame: pd
             if baseline is not None:
                 rows.append(
                     {
+                        "comparison_key": comparison_key,
+                        "comparison_subtitle": comparison_subtitle,
                         "dataset": str(dataset),
                         "metric_key": metric_key,
                         "metric_label": metric_label,
                         "series_key": "paper",
                         "series_label": str(baseline["model_name"]),
+                        "series_order": _COMPARISON_SERIES_ORDER["paper"],
                         "value": float(baseline["metric_value"]),
                         "comparison_context": local_context,
                         "paper_source_title": str(baseline["source_title"]),
@@ -701,7 +751,7 @@ def _build_metric_comparison_frame(metrics: pd.DataFrame, *, baselines_frame: pd
 
 def _selected_local_comparison_rows(metrics: pd.DataFrame) -> pd.DataFrame:
     test_rows = metrics.loc[
-        (metrics["split"] == "test") & metrics["representation"].isin(_LOCAL_COMPARISON_REPRESENTATIONS)
+        (metrics["split"] == "test") & metrics["representation"].isin(_TABULAR_COMPARISON_REPRESENTATIONS)
     ].copy()
     if test_rows.empty:
         return pd.DataFrame()
@@ -710,7 +760,7 @@ def _selected_local_comparison_rows(metrics: pd.DataFrame) -> pd.DataFrame:
         shared_rows = _best_shared_local_rows(dataset_frame)
         if shared_rows.empty:
             independent_rows = _select_reviewer_rows(dataset_frame).copy()
-            if set(independent_rows["representation"].astype(str)) != set(_LOCAL_COMPARISON_REPRESENTATIONS):
+            if set(independent_rows["representation"].astype(str)) != set(_TABULAR_COMPARISON_REPRESENTATIONS):
                 continue
             independent_rows["comparison_context"] = (
                 "Local rows chosen independently because no shared smiles/MolADT/MolADT+ model family was present."
@@ -732,14 +782,14 @@ def _best_shared_local_rows(test_rows: pd.DataFrame) -> pd.DataFrame:
             .head(1)
             .copy()
         )
-        if set(chosen["representation"].astype(str)) != set(_LOCAL_COMPARISON_REPRESENTATIONS):
+        if set(chosen["representation"].astype(str)) != set(_TABULAR_COMPARISON_REPRESENTATIONS):
             continue
         model_name = str(chosen.iloc[0]["model"])
         method_name = str(chosen.iloc[0]["method"])
         chosen["comparison_context"] = f"Local shared family: {model_name} / {method_name}"
         candidates.append(
             (
-                _LOCAL_MODEL_PREFERENCE.index(model_name) if model_name in _LOCAL_MODEL_PREFERENCE else len(_LOCAL_MODEL_PREFERENCE),
+                _TABULAR_MODEL_PREFERENCE.index(model_name) if model_name in _TABULAR_MODEL_PREFERENCE else len(_TABULAR_MODEL_PREFERENCE),
                 float(chosen["rmse"].mean()),
                 float(chosen["runtime_seconds"].mean()),
                 chosen,
@@ -749,6 +799,68 @@ def _best_shared_local_rows(test_rows: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame()
     candidates.sort(key=lambda item: (item[0], item[1], item[2]))
     return candidates[0][3].reset_index(drop=True)
+
+
+def _selected_frontier_comparison_rows(metrics: pd.DataFrame) -> pd.DataFrame:
+    test_rows = metrics.loc[
+        (metrics["split"] == "test") & metrics["representation"].isin(_FRONTIER_COMPARISON_REPRESENTATIONS)
+    ].copy()
+    if test_rows.empty:
+        return pd.DataFrame()
+    rows: list[pd.DataFrame] = []
+    for dataset, dataset_frame in test_rows.groupby("dataset", sort=True):
+        chosen_rows: list[dict[str, Any]] = []
+        for representation in _FRONTIER_COMPARISON_REPRESENTATIONS:
+            representation_rows = dataset_frame.loc[dataset_frame["representation"] == representation].copy()
+            if representation_rows.empty:
+                chosen_rows = []
+                break
+            chosen_rows.append(
+                _best_frontier_representation_row(
+                    representation_rows,
+                    dataset=str(dataset),
+                    representation=representation,
+                )
+            )
+        if not chosen_rows:
+            continue
+        chosen_frame = pd.DataFrame(chosen_rows)
+        chosen_frame["comparison_context"] = _frontier_comparison_context(str(dataset))
+        rows.append(chosen_frame)
+    if not rows:
+        return pd.DataFrame()
+    return pd.concat(rows, ignore_index=True)
+
+
+def _best_frontier_representation_row(
+    representation_rows: pd.DataFrame,
+    *,
+    dataset: str,
+    representation: str,
+) -> dict[str, Any]:
+    preference = _frontier_model_preference(dataset=dataset, representation=representation)
+    ranked = representation_rows.copy()
+    ranked["_model_rank"] = ranked["model"].map(
+        lambda model_name: preference.index(str(model_name)) if str(model_name) in preference else len(preference)
+    )
+    ranked = ranked.sort_values(["_model_rank", "rmse", "mae", "runtime_seconds", "model", "method"])
+    return ranked.iloc[0].drop(labels="_model_rank").to_dict()
+
+
+def _frontier_model_preference(*, dataset: str, representation: str) -> tuple[str, ...]:
+    if representation == "moladt_typed_geom":
+        if dataset == "qm9":
+            return ("visnet_ensemble", "dimenetpp_ensemble")
+        return ("dimenetpp_ensemble", "visnet_ensemble")
+    return ("catboost_uncertainty", "bayes_hierarchical_shrinkage", "bayes_linear_student_t")
+
+
+def _frontier_comparison_context(dataset: str) -> str:
+    if dataset == "qm9":
+        return "Mixed-family frontier: QM9 keeps tabular baselines for smiles/MolADT/MolADT+ and ranks MolADT+ 3D with ViSNet first, then DimeNet++."
+    if dataset == "freesolv":
+        return "Mixed-family frontier: FreeSolv keeps tabular baselines for smiles/MolADT/MolADT+ and ranks MolADT+ 3D with DimeNet++ first, then ViSNet."
+    return "Mixed-family frontier: rows are chosen independently so geometry-aware representations can use geometry-aware model families."
 
 
 def _select_metric_baseline(baselines_frame: pd.DataFrame, *, dataset: str, metric_name: str) -> pd.Series | None:
@@ -1000,7 +1112,7 @@ def _qm9_review_note(
 def _parse_extra_models(args: argparse.Namespace) -> tuple[str, ...]:
     models = [item.strip() for item in str(getattr(args, "extra_models", "")).split(",") if item.strip()]
     if not models and getattr(args, "command", "") == "models":
-        models = ["catboost_uncertainty", "visnet_ensemble"]
+        models = ["catboost_uncertainty", "visnet_ensemble", "dimenetpp_ensemble"]
     geom_model = getattr(args, "geom_model", None)
     if geom_model is not None:
         models.append(f"{geom_model}_ensemble")

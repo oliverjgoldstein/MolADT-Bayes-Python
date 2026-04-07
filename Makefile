@@ -107,8 +107,12 @@ TOOLCHAIN_ENV := $(if $(DARWIN_SDKROOT),env CC="$(DARWIN_CLANG)" CXX="$(DARWIN_C
 
 MODEL_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),models/paper/run_$(RUN_TIMESTAMP),models/run_$(RUN_TIMESTAMP))
 TIMING_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),timing/paper/run_$(RUN_TIMESTAMP),timing/run_$(RUN_TIMESTAMP))
+FREESOLV_RESULTS_SUBDIR := freesolv/run_$(RUN_TIMESTAMP)
+QM9_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),qm9/paper/run_$(RUN_TIMESTAMP),qm9/run_$(RUN_TIMESTAMP))
+BEST_FREESOLV_EXTRA_MODELS := catboost_uncertainty,dimenetpp_ensemble
+BEST_QM9_EXTRA_MODELS := catboost_uncertainty,visnet_ensemble
 
-.PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-activate python-parse python-parse-smiles python-to-smiles python-pretty-example python-benchmark-smoke python-benchmark-qm9 python-benchmark-zinc benchmark benchmark-small benchmark-paper benchmark-bg timing catboost-geom-model catboost-geom-model-paper model
+.PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-activate python-parse python-parse-smiles python-to-smiles python-pretty-example python-benchmark-smoke python-benchmark-qm9 python-benchmark-zinc freesolv qm9 benchmark benchmark-small benchmark-paper benchmark-bg timing catboost-geom-model catboost-geom-model-paper model
 
 help:
 	@printf "%s\n" \
@@ -122,6 +126,8 @@ help:
 	"  make python-parse-smiles    Parse c1ccccc1" \
 	"  make python-to-smiles       Render molecules/benzene.sdf to SMILES" \
 		"  make python-pretty-example  Render EXAMPLE=ferrocene or EXAMPLE=diborane" \
+		"  make freesolv              Run the focused FreeSolv benchmark with CatBoost + DimeNet++" \
+		"  make qm9                   Run the focused QM9 benchmark with CatBoost + ViSNet" \
 		"  make benchmark              Run FreeSolv, QM9, and ZINC benchmark flows" \
 		"  make benchmark-small        Run the default 2000-row QM9 subset benchmark with MolADT timing enabled" \
 		"  make benchmark-paper        Run the paper-sized QM9 split (110462/10000/10000) with MolADT timing enabled" \
@@ -334,6 +340,12 @@ python-benchmark-qm9:
 
 python-benchmark-zinc:
 	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all zinc-timing --dataset-size $(ZINC_DATASET_SIZE) --dataset-dimension $(ZINC_DATASET_DIMENSION) $(ZINC_LIMIT_TIMING_ARG) $(INCLUDE_MOLADT_ARG) $(VERBOSE_ARG)
+
+freesolv:
+	MOLADT_RESULTS_DIR=results/$(FREESOLV_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all smoke-test --include-moladt-predictive --models "" --extra-models $(BEST_FREESOLV_EXTRA_MODELS) $(VERBOSE_ARG)
+
+qm9:
+	MOLADT_RESULTS_DIR=results/$(QM9_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 $(QM9_LIMIT_QM9_ARG) --split-mode $(QM9_SPLIT_MODE) $(if $(filter paper,$(INFERENCE_PRESET)),--paper-mode,) --include-moladt-predictive --models "" --extra-models $(BEST_QM9_EXTRA_MODELS) $(VERBOSE_ARG)
 
 benchmark:
 	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all benchmark $(QM9_LIMIT_BENCHMARK_ARG) --qm9-split-mode $(QM9_SPLIT_MODE) --zinc-dataset-size $(ZINC_DATASET_SIZE) --zinc-dataset-dimension $(ZINC_DATASET_DIMENSION) $(ZINC_LIMIT_BENCHMARK_ARG) $(INCLUDE_MOLADT_ARG) $(VERBOSE_ARG) $(BENCHMARK_ARGS)

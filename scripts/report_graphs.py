@@ -25,6 +25,7 @@ SERIES_COLORS = {
     "smiles": "#b45309",
     "moladt": "#0f766e",
     "moladt_typed": "#0369a1",
+    "moladt_typed_geom": "#be123c",
     "paper": LITERATURE,
 }
 
@@ -338,7 +339,14 @@ def write_metric_comparison_overviews(comparison_frame: pd.DataFrame, destinatio
     if comparison_frame.empty:
         return
     ensure_directory(destination_dir)
-    for metric_key, metric_frame in comparison_frame.groupby("metric_key", sort=False):
+    rows = comparison_frame.copy()
+    if "comparison_key" not in rows.columns:
+        rows["comparison_key"] = "tabular"
+    if "comparison_subtitle" not in rows.columns:
+        rows["comparison_subtitle"] = rows["comparison_key"].map(_default_metric_comparison_subtitle)
+    if "series_order" not in rows.columns:
+        rows["series_order"] = rows["series_key"].map(lambda key: _series_order_for_key(str(key)))
+    for (comparison_key, metric_key), metric_frame in rows.groupby(["comparison_key", "metric_key"], sort=False):
         rows = metric_frame.reset_index(drop=True)
         datasets = [
             (str(dataset), frame.reset_index(drop=True))
@@ -348,7 +356,7 @@ def write_metric_comparison_overviews(comparison_frame: pd.DataFrame, destinatio
             continue
         cols = 2 if len(datasets) > 1 else 1
         card_width = 430
-        card_height = 286
+        card_height = 316
         gap = 24
         margin = 24
         header_height = 70
@@ -365,12 +373,16 @@ def write_metric_comparison_overviews(comparison_frame: pd.DataFrame, destinatio
         if y_min == y_max:
             y_max = y_min + 1.0
         metric_label = str(rows.iloc[0]["metric_label"])
+        subtitle = str(rows.iloc[0].get("comparison_subtitle", _default_metric_comparison_subtitle(str(comparison_key))))
         parts = [_svg_header(total_width, total_height)]
         parts.append(f'<rect width="{total_width}" height="{total_height}" fill="{BACKGROUND}" />')
-        parts.append(f'<text x="{margin}" y="{margin + 22}" font-size="22" font-family="Georgia, serif" fill="{TEXT}">{escape(metric_label)} comparison</text>')
+        parts.append(
+            f'<text x="{margin}" y="{margin + 22}" font-size="22" font-family="Georgia, serif" fill="{TEXT}">'
+            f"{escape(_metric_comparison_title(metric_label, str(comparison_key)))}</text>"
+        )
         parts.append(
             f'<text x="{margin}" y="{margin + 42}" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">'
-            "Gray is paper context, orange is SMILES, teal is MolADT, and blue is the richer MolADT+ feature model when it is available."
+            f"{escape(subtitle)}"
             "</text>"
         )
         for index, (dataset, frame) in enumerate(datasets):
@@ -391,7 +403,7 @@ def write_metric_comparison_overviews(comparison_frame: pd.DataFrame, destinatio
                 )
             )
         parts.append("</svg>\n")
-        destination = destination_dir / f"{metric_key}_comparison.svg"
+        destination = destination_dir / _metric_comparison_filename(str(metric_key), str(comparison_key))
         destination.write_text("".join(parts), encoding="utf-8")
 
 
@@ -595,30 +607,44 @@ def _metric_comparison_card_svg(
     y_min: float,
     y_max: float,
 ) -> list[str]:
+    ordered = frame.sort_values(["series_order", "series_key"]).reset_index(drop=True)
     plot_x = x0 + 48
-    plot_y = y0 + 92
+    context = str(ordered.iloc[0].get("comparison_context", ""))
+    paper_row = ordered.loc[ordered["series_key"] == "paper"]
+    paper_title = str(paper_row.iloc[0]["paper_source_title"]) if not paper_row.empty else "Paper context unavailable for this metric."
+    context_lines = _wrap_text(context, 58)[:2]
+    paper_title_lines = _wrap_text(paper_title, 58)[:2]
+    plot_y = y0 + 88 + 12 * max(0, len(context_lines) - 1) + 12 * max(0, len(paper_title_lines) - 1)
     plot_width = width - 76
     plot_height = 120
     zero_y = plot_y + plot_height - ((0.0 - y_min) / max(y_max - y_min, 1e-6)) * plot_height
-    bar_width = 54
-    bar_gap = 16
-    left_pad = 10
-    context = str(frame.iloc[0].get("comparison_context", ""))
-    paper_row = frame.loc[frame["series_key"] == "paper"]
-    paper_title = str(paper_row.iloc[0]["paper_source_title"]) if not paper_row.empty else "Paper context unavailable for this metric."
-    bars = []
-    for series_key in ("paper", "smiles", "moladt", "moladt_typed"):
-        series_rows = frame.loc[frame["series_key"] == series_key]
-        if series_rows.empty:
-            continue
-        row = series_rows.iloc[0]
-        bars.append((str(row["series_label"]), float(row["value"]), SERIES_COLORS[series_key]))
+    bars = [
+        (
+            str(row["series_label"]),
+            float(row["value"]),
+            str(row.get("series_color", "")) or SERIES_COLORS.get(str(row["series_key"]), "#475569"),
+        )
+        for _, row in ordered.iterrows()
+        if pd.notna(row.get("value", pd.NA))
+    ]
+    bar_gap = 12 if len(bars) >= 5 else 16
+    available_width = plot_width - 20 - bar_gap * max(0, len(bars) - 1)
+    bar_width = max(36, min(54, int(available_width / max(1, len(bars)))))
+    left_pad = max(8, int((plot_width - (len(bars) * bar_width + max(0, len(bars) - 1) * bar_gap)) / 2))
     parts = [
         f'<rect x="{x0}" y="{y0}" width="{width}" height="{height}" rx="18" fill="{CARD_FILL}" stroke="{CARD_STROKE}" />',
         f'<text x="{x0 + 20}" y="{y0 + 28}" font-size="18" font-family="Georgia, serif" fill="{TEXT}">{escape(dataset)}</text>',
-        f'<text x="{x0 + 20}" y="{y0 + 48}" font-size="11" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">{escape(context)}</text>',
-        f'<text x="{x0 + 20}" y="{y0 + 64}" font-size="10" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">{escape(paper_title)}</text>',
     ]
+    text_y = y0 + 48
+    for line_index, line in enumerate(context_lines or [""]):
+        parts.append(
+            f'<text x="{x0 + 20}" y="{text_y + line_index * 12}" font-size="11" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">{escape(line)}</text>'
+        )
+    paper_base_y = text_y + max(1, len(context_lines)) * 12 + 4
+    for line_index, line in enumerate(paper_title_lines or [""]):
+        parts.append(
+            f'<text x="{x0 + 20}" y="{paper_base_y + line_index * 12}" font-size="10" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">{escape(line)}</text>'
+        )
     for step in range(5):
         fraction = step / 4.0
         y_value = y_min + (y_max - y_min) * fraction
@@ -647,6 +673,35 @@ def _metric_comparison_card_svg(
     note_lines = _wrap_text(str(paper_row.iloc[0]["paper_note"]) if not paper_row.empty else "No numeric literature value was attached for this metric.", 60)
     for line_index, line in enumerate(note_lines[:3]):
         parts.append(
-            f'<text x="{x0 + 20}" y="{y0 + 236 + line_index * 13}" font-size="10" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">{escape(line)}</text>'
+            f'<text x="{x0 + 20}" y="{y0 + height - 44 + line_index * 13}" font-size="10" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">{escape(line)}</text>'
         )
     return parts
+
+
+def _metric_comparison_title(metric_label: str, comparison_key: str) -> str:
+    if comparison_key == "frontier":
+        return f"{metric_label} frontier"
+    return f"{metric_label} comparison"
+
+
+def _metric_comparison_filename(metric_key: str, comparison_key: str) -> str:
+    if comparison_key == "frontier":
+        return f"{metric_key}_frontier_comparison.svg"
+    return f"{metric_key}_comparison.svg"
+
+
+def _default_metric_comparison_subtitle(comparison_key: str) -> str:
+    if comparison_key == "frontier":
+        return "This mixed-family frontier adds the rose MolADT+ 3D row and allows geometry models when that improves the representation."
+    return "Gray is paper context, orange is SMILES, teal is MolADT, and blue is the richer MolADT+ feature model when it is available."
+
+
+def _series_order_for_key(series_key: str) -> int:
+    order = {
+        "paper": 0,
+        "smiles": 1,
+        "moladt": 2,
+        "moladt_typed": 3,
+        "moladt_typed_geom": 4,
+    }
+    return order.get(series_key, len(order))

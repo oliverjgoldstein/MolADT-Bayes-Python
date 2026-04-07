@@ -12,7 +12,7 @@ make benchmark-small
 make benchmark-paper
 ./.venv/bin/python -m scripts.run_all benchmark --include-moladt-predictive --extra-models catboost_uncertainty
 ./.venv/bin/python -m scripts.run_all benchmark --include-moladt-predictive --extra-models catboost_uncertainty --geom-model visnet
-./.venv/bin/python -m scripts.run_all benchmark --include-moladt-predictive --extra-models catboost_uncertainty,visnet_ensemble --paper-mode
+./.venv/bin/python -m scripts.run_all benchmark --include-moladt-predictive --extra-models catboost_uncertainty,visnet_ensemble,dimenetpp_ensemble --paper-mode
 ```
 
 `make timing` is the local timing-only command:
@@ -86,7 +86,7 @@ Reported representations are:
 - `moladt`
   The `moladt` branch is not a raw SDF descriptor path. Structure-backed molecules are parsed into the MolADT object first, then ADT-native descriptors are computed from that object.
 - `moladt_typed`
-  This richer ADT branch is shown in the reports as `MolADT+`. It keeps the same model families but extends the feature table with typed pair-interaction channels, radial distance channels, and bonding-system summaries computed from the parsed SDF-backed ADT.
+  This richer ADT branch is shown in the reports as `MolADT+`. It keeps the same model families but extends the feature table with typed pair-interaction channels, radial distance channels, bond-angle channels, torsion channels, and bonding-system summaries computed from the parsed SDF-backed ADT.
 - `sdf_geom`, `moladt_geom`, and `moladt_typed_geom` behind the optional geometry extras
 
 The MolADT file parse stage uses `orjson` when it is present in the local environment because this is runtime data parsing, not source-code parsing.
@@ -134,7 +134,7 @@ Each run writes a timestamped folder. The top level is intentionally small:
 
 For the paper-scale make run, outputs go under `results/paper/run_<timestamp>/`.
 
-The metric comparison pack writes one SVG per metric. Each chart now compares four bars when available: paper context, `smiles`, baseline `moladt`, and richer `moladt_typed` shown as `MolADT+`.
+The metric comparison pack now writes two SVG views per metric. The fair tabular chart compares paper context, `smiles`, baseline `moladt`, and richer `moladt_typed` shown as `MolADT+`. The frontier chart adds `moladt_typed_geom` shown as `MolADT+ 3D`, and the note on each card makes it explicit when that row switches from the shared tabular learner to a geometry model family.
 
 ## Other Entrypoints
 
