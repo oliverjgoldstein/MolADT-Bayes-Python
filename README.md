@@ -59,14 +59,14 @@ make benchmark-small
 make benchmark-paper
 ```
 
-`make benchmark-small` runs the default 2000-row QM9 subset with MolADT timing enabled.
-`make benchmark-paper` runs the paper-sized QM9 split counts `110462 / 10000 / 10000`, uses the paper inference preset, includes MolADT timing, and writes the long-run artifacts under `results/paper/run_<timestamp>/`.
-That QM9 paper-style split uses `130,462` molecules in total: `110,462` train, `10,000` validation, and `10,000` test. It is not `100k` in each split.
-`make timing` builds a local matched timing corpus under `data/processed/zinc_timing/...`: one `.moladt.json` file per molecule plus a canonical SMILES file with the same molecule count. It then times RDKit baseline parsing, local MolADT SMILES parsing, and local MolADT file parsing, and writes the run under `results/timing/run_<timestamp>/`.
-`make catboost-geom-model` runs the predictive model suite only, without the ZINC timing pass. It prepares FreeSolv and QM9, uses the default QM9 `2000`-row subset with `subset` split mode, runs the configured predictive models, writes the run under `results/models/run_<timestamp>/`, and then creates per-model folders under `models/` so you can open one model at a time and see its filtered metrics, predictions, and a short explanation of how to read that model against `smiles`, baseline `MolADT`, and richer `MolADT+`.
-`make catboost-geom-model-paper` runs the same predictive model suite on the paper-sized QM9 split counts `110462 / 10000 / 10000` and writes under `results/models/paper/run_<timestamp>/`.
-All of those paths are local to this repo directory: `.venv/`, `.cmdstan/`, `data/`, and `results/`.
-By default, both model-suite targets run the two Stan baselines plus the default extra-model set from the `models` subcommand: `catboost_uncertainty` and `visnet_ensemble`. So the default suite is:
+- `make benchmark-small`: runs the default 2000-row QM9 subset with MolADT timing enabled.
+- `make benchmark-paper`: runs the paper-sized QM9 split counts `110462 / 10000 / 10000`, uses the paper inference preset, includes MolADT timing, and writes the long-run artifacts under `results/paper/run_<timestamp>/`.
+- QM9 paper-style split note: the full total is `130,462` molecules, split as `110,462` train, `10,000` validation, and `10,000` test. It is not `100k` in each split.
+- `make timing`: builds a local matched timing corpus under `data/processed/zinc_timing/...`, with one `.moladt.json` file per molecule plus a canonical SMILES file with the same molecule count. It then times RDKit baseline parsing, local MolADT SMILES parsing, and local MolADT file parsing, and writes the run under `results/timing/run_<timestamp>/`.
+- `make catboost-geom-model`: runs the predictive model suite only, without the ZINC timing pass. It prepares FreeSolv and QM9, uses the default QM9 `2000`-row subset with `subset` split mode, runs the configured predictive models, writes the run under `results/models/run_<timestamp>/`, and creates per-model folders under `models/` so you can inspect filtered metrics, predictions, and a short explanation of how to read that model against `smiles`, baseline `MolADT`, and richer `MolADT+`.
+- `make catboost-geom-model-paper`: runs the same predictive model suite on the paper-sized QM9 split counts `110462 / 10000 / 10000` and writes under `results/models/paper/run_<timestamp>/`.
+- All of those paths are local to this repo directory: `.venv/`, `.cmdstan/`, `data/`, and `results/`.
+- By default, both model-suite targets run the two Stan baselines plus the default extra-model set from the `models` subcommand: `catboost_uncertainty` and `visnet_ensemble`. The default suite is:
 
 - Stan: `bayes_linear_student_t`
 - Stan: `bayes_hierarchical_shrinkage`
