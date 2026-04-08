@@ -20,6 +20,8 @@ Those are the front-door commands.
 - `make qm9` runs the focused dipole moment benchmark.
 - `make timing` runs the ZINC parsing and file-ingest timing benchmark.
 
+The raw source files those commands use live in this repo under `data/raw/`.
+
 ## Representation
 
 MolADT keeps atoms, sigma bonds, Dietz-style bonding systems, coordinates, shells, and orbitals explicit.
@@ -83,6 +85,7 @@ The comparison charts now separate the fair tabular story from the mixed-family 
 - [MolADT representation](docs/representation.md)
 - [Parsing and rendering](docs/parsing.md)
 - [Models and benchmarks](docs/models.md)
+- [Data sources](docs/data-sources.md)
 - [Outputs](docs/outputs.md)
 - [Quickstart](docs/quickstart.md)
 - [Deep benchmark reference](docs/inference-and-benchmarks.md)

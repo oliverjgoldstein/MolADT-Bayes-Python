@@ -64,3 +64,27 @@ def test_benzene_smiles_round_trip_recovers_explicit_hydrogens_and_pi_ring() -> 
     assert len(round_tripped.local_bonds) == 12
     assert len(round_tripped.systems) == 1
     assert round_tripped.systems[0][1].tag == "pi_ring"
+
+
+def test_smiles_parse_preserves_atom_centered_stereochemistry_annotations() -> None:
+    molecule = parse_smiles("N[C@](Br)(O)C")
+
+    assert len(molecule.smiles_stereochemistry.atom_stereo) == 1
+    stereo = molecule.smiles_stereochemistry.atom_stereo[0]
+    assert stereo.stereo_class.value == "TH"
+    assert stereo.configuration == 1
+    assert stereo.token == "@"
+
+
+def test_smiles_parse_preserves_directional_bond_annotations() -> None:
+    molecule = parse_smiles("F/C=C\\F")
+
+    directions = {(item.start_atom.value, item.end_atom.value, item.direction.value) for item in molecule.smiles_stereochemistry.bond_stereo}
+    assert directions == {(1, 2, "/"), (3, 4, "\\")}
+
+
+def test_smiles_stereochemistry_survives_json_round_trip() -> None:
+    molecule = parse_smiles("C[C@@H](O)F")
+    restored = molecule.from_json(molecule.to_json_bytes())
+
+    assert restored.smiles_stereochemistry == molecule.smiles_stereochemistry

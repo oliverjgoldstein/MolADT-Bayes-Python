@@ -13,7 +13,16 @@ from scripts.benchmark_zinc import (
     _prepare_timing_library,
     _read_timing_library_manifest,
 )
-from scripts.download_data import freesolv_raw_dir, qm9_raw_dir, zinc_archive_filename, zinc_normalized_source_name, zinc_raw_dir
+from scripts.download_data import (
+    download_freesolv,
+    download_qm9,
+    download_zinc,
+    freesolv_raw_dir,
+    qm9_raw_dir,
+    zinc_archive_filename,
+    zinc_normalized_source_name,
+    zinc_raw_dir,
+)
 from scripts.features import (
     FeatureTable,
     canonicalize_smiles,
@@ -35,6 +44,75 @@ def test_download_path_resolution_is_deterministic() -> None:
     assert zinc_raw_dir().name == "zinc"
     assert zinc_archive_filename("250K", "2D") == "zinc15_250K_2D.tar.gz"
     assert zinc_normalized_source_name("1M", "2D", ".csv") == "zinc15_1M_2D.csv"
+
+
+def test_download_freesolv_prefers_vendored_snapshot(tmp_path, monkeypatch) -> None:
+    import scripts.download_data as download_data
+
+    raw_dir = tmp_path / "raw"
+    freesolv_dir = raw_dir / "freesolv"
+    sdf_dir = freesolv_dir / "sdffiles"
+    sdf_dir.mkdir(parents=True)
+    (freesolv_dir / "SAMPL.csv").write_text("smiles,expt\nO,-1.0\n", encoding="utf-8")
+    (sdf_dir / "demo.sdf").write_text("demo\n", encoding="utf-8")
+    monkeypatch.setattr(download_data, "RAW_DATA_DIR", raw_dir)
+
+    def fail_download(*args, **kwargs):
+        raise AssertionError("download_freesolv should not hit the network when the vendored snapshot exists")
+
+    monkeypatch.setattr(download_data, "download_file", fail_download)
+
+    downloads = download_freesolv()
+
+    assert downloads.csv_path == freesolv_dir / "SAMPL.csv"
+    assert downloads.repo_archive_path is None
+    assert downloads.repo_extract_dir == freesolv_dir
+
+
+def test_download_qm9_prefers_vendored_snapshot(tmp_path, monkeypatch) -> None:
+    import scripts.download_data as download_data
+
+    raw_dir = tmp_path / "raw"
+    qm9_dir = raw_dir / "qm9"
+    qm9_dir.mkdir(parents=True)
+    (qm9_dir / "qm9.sdf").write_text("demo\n", encoding="utf-8")
+    (qm9_dir / "qm9.sdf.csv").write_text("mol_id,mu\nmol_1,0.1\n", encoding="utf-8")
+    monkeypatch.setattr(download_data, "RAW_DATA_DIR", raw_dir)
+
+    def fail_download(*args, **kwargs):
+        raise AssertionError("download_qm9 should not hit the network when the vendored snapshot exists")
+
+    monkeypatch.setattr(download_data, "download_first", fail_download)
+    monkeypatch.setattr(download_data, "download_file", fail_download)
+
+    downloads = download_qm9()
+
+    assert downloads.sdf_path == qm9_dir / "qm9.sdf"
+    assert downloads.csv_path == qm9_dir / "qm9.sdf.csv"
+    assert downloads.archive_path is None
+    assert downloads.extract_dir == qm9_dir
+
+
+def test_download_zinc_prefers_vendored_snapshot(tmp_path, monkeypatch) -> None:
+    import scripts.download_data as download_data
+
+    raw_dir = tmp_path / "raw"
+    zinc_dir = raw_dir / "zinc"
+    zinc_dir.mkdir(parents=True)
+    zinc_csv = zinc_dir / "zinc15_250K_2D.csv"
+    zinc_csv.write_text("smiles\nCCO\n", encoding="utf-8")
+    monkeypatch.setattr(download_data, "RAW_DATA_DIR", raw_dir)
+
+    def fail_download(*args, **kwargs):
+        raise AssertionError("download_zinc should not hit the network when the vendored snapshot exists")
+
+    monkeypatch.setattr(download_data, "download_file", fail_download)
+
+    downloads = download_zinc()
+
+    assert downloads.source_path == zinc_csv
+    assert downloads.archive_path is None
+    assert downloads.extract_dir == zinc_dir
 
 
 def test_canonical_smiles_generation_is_stable() -> None:

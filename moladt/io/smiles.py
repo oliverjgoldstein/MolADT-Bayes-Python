@@ -5,7 +5,16 @@ from dataclasses import dataclass
 from ..chem.constants import element_attributes, element_shells
 from ..chem.coordinate import Coordinate, mk_angstrom
 from ..chem.dietz import AtomId, BondingSystem, Edge, NonNegative, SystemId, mk_bonding_system, mk_edge
-from ..chem.molecule import Atom, AtomicSymbol, Molecule
+from ..chem.molecule import (
+    Atom,
+    AtomicSymbol,
+    Molecule,
+    SmilesAtomStereo,
+    SmilesAtomStereoClass,
+    SmilesBondStereo,
+    SmilesBondStereoDirection,
+    SmilesStereochemistry,
+)
 
 
 BondKind = str
@@ -15,6 +24,11 @@ _BOND_SYMBOLS: dict[str, BondKind] = {
     "=": "double",
     "#": "triple",
     ":": "aromatic",
+}
+
+_BOND_DIRECTIONS: dict[str, SmilesBondStereoDirection] = {
+    "/": SmilesBondStereoDirection.UP,
+    "\\": SmilesBondStereoDirection.DOWN,
 }
 
 _TWO_CHAR_SYMBOLS: dict[str, AtomicSymbol] = {
@@ -59,12 +73,21 @@ class _BracketAtom:
     aromatic: bool
     hydrogen_count: int
     charge: int
+    stereo_class: SmilesAtomStereoClass | None = None
+    stereo_configuration: int | None = None
+    stereo_token: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class _RingOpen:
     atom: _AtomRef
-    bond_kind: BondKind | None
+    bond_spec: "_BondSpec | None"
+
+
+@dataclass(frozen=True, slots=True)
+class _BondSpec:
+    kind: BondKind | None = None
+    direction: SmilesBondStereoDirection | None = None
 
 
 def parse_smiles(text: str) -> Molecule:
@@ -92,6 +115,8 @@ class _SMILESParser:
         self.atoms: dict[AtomId, Atom] = {}
         self.local_bonds: set[Edge] = set()
         self.systems: list[BondingSystem] = []
+        self.atom_stereo: list[SmilesAtomStereo] = []
+        self.bond_stereo: list[SmilesBondStereo] = []
         self.aromatic_candidate_edges: set[Edge] = set()
         self.branch_stack: list[_AtomRef] = []
         self.ring_opens: dict[str, _RingOpen] = {}
@@ -100,7 +125,7 @@ class _SMILESParser:
         if not self.text:
             raise ValueError("SMILES string is empty")
         current: _AtomRef | None = None
-        pending_bond: BondKind | None = None
+        pending_bond: _BondSpec | None = None
 
         while self.index < len(self.text):
             char = self.text[self.index]
@@ -122,9 +147,11 @@ class _SMILESParser:
                 self.index += 1
                 continue
             if char in _BOND_SYMBOLS:
-                if pending_bond is not None:
-                    raise ValueError("Multiple bond symbols in sequence")
-                pending_bond = _BOND_SYMBOLS[char]
+                pending_bond = _extend_bond_spec(pending_bond, kind=_BOND_SYMBOLS[char])
+                self.index += 1
+                continue
+            if char in _BOND_DIRECTIONS:
+                pending_bond = _extend_bond_spec(pending_bond, direction=_BOND_DIRECTIONS[char])
                 self.index += 1
                 continue
             if char.isdigit():
@@ -153,6 +180,10 @@ class _SMILESParser:
             atoms=self.atoms,
             local_bonds=frozenset(self.local_bonds),
             systems=tuple((SystemId(index), system) for index, system in enumerate(systems, start=1)),
+            smiles_stereochemistry=SmilesStereochemistry(
+                atom_stereo=tuple(self.atom_stereo),
+                bond_stereo=tuple(self.bond_stereo),
+            ),
         )
 
     def _parse_atom(self) -> _AtomRef:
@@ -170,6 +201,15 @@ class _SMILESParser:
         bracket_atom = _parse_bracket_content(content)
         self.index = close_index + 1
         atom = self._new_atom(bracket_atom.symbol, bracket_atom.charge)
+        if bracket_atom.stereo_class is not None and bracket_atom.stereo_configuration is not None and bracket_atom.stereo_token is not None:
+            self.atom_stereo.append(
+                SmilesAtomStereo(
+                    center=atom.atom_id,
+                    stereo_class=bracket_atom.stereo_class,
+                    configuration=bracket_atom.stereo_configuration,
+                    token=bracket_atom.stereo_token,
+                )
+            )
         atom_ref = _AtomRef(atom_id=atom.atom_id, aromatic=bracket_atom.aromatic)
         for _ in range(bracket_atom.hydrogen_count):
             hydrogen = self._new_atom(AtomicSymbol.H, 0)
@@ -206,22 +246,46 @@ class _SMILESParser:
         self.atoms[atom_id] = atom
         return atom
 
-    def _handle_ring_digit(self, digit: str, current: _AtomRef, pending_bond: BondKind | None) -> None:
+    def _handle_ring_digit(self, digit: str, current: _AtomRef, pending_bond: _BondSpec | None) -> None:
         if digit not in self.ring_opens:
-            self.ring_opens[digit] = _RingOpen(atom=current, bond_kind=pending_bond)
+            self.ring_opens[digit] = _RingOpen(atom=current, bond_spec=pending_bond)
             return
         ring_open = self.ring_opens.pop(digit)
         bond_kind = _resolve_bond_kind(
-            ring_open.bond_kind,
-            pending_bond,
+            ring_open.bond_spec.kind if ring_open.bond_spec is not None else None,
+            pending_bond.kind if pending_bond is not None else None,
             ring_open.atom.aromatic,
             current.aromatic,
         )
         self._add_bond(ring_open.atom.atom_id, current.atom_id, bond_kind)
+        if ring_open.bond_spec is not None and ring_open.bond_spec.direction is not None:
+            self.bond_stereo.append(
+                SmilesBondStereo(
+                    start_atom=ring_open.atom.atom_id,
+                    end_atom=current.atom_id,
+                    direction=ring_open.bond_spec.direction,
+                )
+            )
+        if pending_bond is not None and pending_bond.direction is not None:
+            self.bond_stereo.append(
+                SmilesBondStereo(
+                    start_atom=current.atom_id,
+                    end_atom=ring_open.atom.atom_id,
+                    direction=pending_bond.direction,
+                )
+            )
 
-    def _connect(self, left: _AtomRef, right: _AtomRef, pending_bond: BondKind | None) -> None:
-        bond_kind = pending_bond if pending_bond is not None else _default_bond_kind(left, right)
+    def _connect(self, left: _AtomRef, right: _AtomRef, pending_bond: _BondSpec | None) -> None:
+        bond_kind = pending_bond.kind if pending_bond is not None and pending_bond.kind is not None else _default_bond_kind(left, right)
         self._add_bond(left.atom_id, right.atom_id, bond_kind)
+        if pending_bond is not None and pending_bond.direction is not None:
+            self.bond_stereo.append(
+                SmilesBondStereo(
+                    start_atom=left.atom_id,
+                    end_atom=right.atom_id,
+                    direction=pending_bond.direction,
+                )
+            )
 
     def _add_bond(self, left: AtomId, right: AtomId, bond_kind: BondKind) -> None:
         edge = mk_edge(left, right)
@@ -263,6 +327,11 @@ def _parse_bracket_content(content: str) -> _BracketAtom:
         raise ValueError(f"Unsupported bracket atom symbol: {symbol_text}")
 
     index = len(symbol_text)
+    stereo_class: SmilesAtomStereoClass | None = None
+    stereo_configuration: int | None = None
+    stereo_token: str | None = None
+    if index < len(content) and content[index] == "@":
+        stereo_class, stereo_configuration, stereo_token, index = _parse_bracket_stereo(content, index)
     hydrogen_count = 0
     if index < len(content) and content[index] == "H":
         index += 1
@@ -297,7 +366,48 @@ def _parse_bracket_content(content: str) -> _BracketAtom:
         aromatic=aromatic,
         hydrogen_count=hydrogen_count,
         charge=charge,
+        stereo_class=stereo_class,
+        stereo_configuration=stereo_configuration,
+        stereo_token=stereo_token,
     )
+
+
+def _parse_bracket_stereo(
+    content: str,
+    index: int,
+) -> tuple[SmilesAtomStereoClass, int, str, int]:
+    start = index
+    if content.startswith("@@", index):
+        return (SmilesAtomStereoClass.TETRAHEDRAL, 2, "@@", index + 2)
+    if content[index] != "@":
+        raise ValueError(f"Unsupported bracket atom feature: [{content}]")
+    index += 1
+    if index >= len(content) or content[index] in {"H", "+", "-"}:
+        return (SmilesAtomStereoClass.TETRAHEDRAL, 1, "@", index)
+    stereo_class: SmilesAtomStereoClass
+    if content.startswith("TH", index):
+        stereo_class = SmilesAtomStereoClass.TETRAHEDRAL
+        index += 2
+    elif content.startswith("AL", index):
+        stereo_class = SmilesAtomStereoClass.ALLENE
+        index += 2
+    elif content.startswith("SP", index):
+        stereo_class = SmilesAtomStereoClass.SQUARE_PLANAR
+        index += 2
+    elif content.startswith("TB", index):
+        stereo_class = SmilesAtomStereoClass.TRIGONAL_BIPYRAMIDAL
+        index += 2
+    elif content.startswith("OH", index):
+        stereo_class = SmilesAtomStereoClass.OCTAHEDRAL
+        index += 2
+    else:
+        return (SmilesAtomStereoClass.TETRAHEDRAL, 1, content[start:index], index)
+    digits_start = index
+    while index < len(content) and content[index].isdigit():
+        index += 1
+    configuration = int(content[digits_start:index]) if index > digits_start else 1
+    token = content[start:index]
+    return (stereo_class, configuration, token, index)
 
 
 def _default_bond_kind(left: _AtomRef, right: _AtomRef) -> BondKind:
@@ -321,6 +431,24 @@ def _resolve_bond_kind(
     if left_aromatic and right_aromatic:
         return "aromatic"
     return "single"
+
+
+def _extend_bond_spec(
+    current: _BondSpec | None,
+    *,
+    kind: BondKind | None = None,
+    direction: SmilesBondStereoDirection | None = None,
+) -> _BondSpec:
+    spec = current if current is not None else _BondSpec()
+    if kind is not None:
+        if spec.kind is not None:
+            raise ValueError("Multiple bond symbols in sequence")
+        return _BondSpec(kind=kind, direction=spec.direction)
+    if direction is not None:
+        if spec.direction is not None:
+            raise ValueError("Multiple directional bond symbols in sequence")
+        return _BondSpec(kind=spec.kind, direction=direction)
+    return spec
 
 
 def _normalize_smiles_systems(

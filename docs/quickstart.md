@@ -20,11 +20,12 @@ source .venv/bin/activate
 python -m pip install -U pip setuptools wheel
 python -m pip install -U -e ".[dev,ml]"
 python -m pip install -U torch
+python -m pip install -U torch-sparse -f "https://data.pyg.org/whl/torch-$(python -c 'import torch; version = torch.__version__.split(\"+\")[0].split(\".\"); print(f\"{version[0]}.{version[1]}.0\")')+$(python -c 'import torch; cuda = torch.version.cuda; print(\"cpu\" if not cuda else \"cu\" + cuda.replace(\".\", \"\"))').html"
 python -m pip install -U torch-cluster -f "https://data.pyg.org/whl/torch-$(python -c 'import torch; version = torch.__version__.split(\"+\")[0].split(\".\"); print(f\"{version[0]}.{version[1]}.0\")')+$(python -c 'import torch; cuda = torch.version.cuda; print(\"cpu\" if not cuda else \"cu\" + cuda.replace(\".\", \"\"))').html"
 python -m pip install -U torch-geometric
 ```
 
-`torch-cluster` needs to see an installed PyTorch when its build hooks run, so the geometry stack is installed in a second phase instead of through one combined extras command.
+`torch-sparse` and `torch-cluster` need to see an installed PyTorch when their build hooks run, so the geometry stack is installed in a second phase instead of through one combined extras command.
 
 Windows users should use WSL2 for the benchmark stack. The Makefile also recognizes Windows-style `.venv/Scripts` layouts when it is run from a POSIX shell, but WSL2 remains the documented Windows path.
 
@@ -98,6 +99,8 @@ Use them in that order the first time through.
 - `make freesolv` is the lightest predictive path and the best first end-to-end check.
 - `make qm9` is the focused dipole benchmark on the default local QM9 subset.
 - `make timing` is the timing-only path that builds the matched ADT/SMILES corpus first.
+
+The repo now vendors the raw FreeSolv, QM9, and ZINC source files used by these commands. Provenance and upstream links are listed in [Data sources](data-sources.md).
 
 The older broad benchmark wrappers still exist, but they are no longer the shortest recommended path:
 

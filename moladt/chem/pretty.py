@@ -7,7 +7,14 @@ from typing import Iterable
 from .coordinate import Coordinate
 from .dietz import AtomId, BondingSystem, Edge
 from .dietz import SystemId
-from .molecule import Atom, Molecule, effective_order, neighbors_sigma
+from .molecule import (
+    Atom,
+    Molecule,
+    SmilesAtomStereo,
+    SmilesBondStereo,
+    effective_order,
+    neighbors_sigma,
+)
 from .orbital import (
     Orbital,
     PureDOrbital,
@@ -89,6 +96,19 @@ def _(molecule: Molecule) -> PrettyBlock:
     else:
         lines.append("Bonding systems: (none)")
         lines.append("")
+
+    atom_stereo = molecule.smiles_stereochemistry.atom_stereo
+    bond_stereo = molecule.smiles_stereochemistry.bond_stereo
+    if atom_stereo or bond_stereo:
+        lines.append("SMILES stereochemistry:")
+        if atom_stereo:
+            lines.append("  Atom-centered:")
+            lines.extend(_indent((_format_atom_stereo(item) for item in atom_stereo), 4))
+        if bond_stereo:
+            lines.append("  Bond-directed:")
+            lines.extend(_indent((_format_bond_stereo(molecule, item) for item in bond_stereo), 4))
+    else:
+        lines.append("SMILES stereochemistry: (none)")
 
     return PrettyBlock(tuple(lines[:-1] if lines and lines[-1] == "" else lines))
 
@@ -217,6 +237,19 @@ def _format_edge_short(molecule: Molecule, edge: Edge) -> str:
 
 def _format_system_label(system_id: int, tag: str | None) -> str:
     return f"#{system_id} [{tag}]" if tag else f"#{system_id}"
+
+
+def _format_atom_stereo(stereo: SmilesAtomStereo) -> str:
+    return (
+        f"center #{stereo.center.value}: {stereo.stereo_class.value}{stereo.configuration} "
+        f"from token {stereo.token}"
+    )
+
+
+def _format_bond_stereo(molecule: Molecule, stereo: SmilesBondStereo) -> str:
+    left = _render_atom_ref(molecule.atoms[stereo.start_atom])
+    right = _render_atom_ref(molecule.atoms[stereo.end_atom])
+    return f"{left} -> {right}: {stereo.direction.value}"
 
 
 def _pretty_shell_lines(shells: Shells) -> list[str]:

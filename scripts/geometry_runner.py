@@ -29,7 +29,7 @@ def run_geometry_ensemble(
     *,
     config: GeometryRunConfig,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
-    torch, pyg_data, pyg_loader, pyg_models = _import_geometry_stack()
+    torch, pyg_data, pyg_loader, pyg_models = _import_geometry_stack(model_name=config.model_name)
     dataset_defaults = _geometry_defaults(bundle.dataset_name, config.model_name)
     device = torch.device("cpu")
     train_data = _build_data_objects(torch, pyg_data, bundle, bundle.train_indices)
@@ -403,7 +403,7 @@ def _seed_everything(torch: Any, seed: int) -> None:
     torch.manual_seed(seed)
 
 
-def _import_geometry_stack() -> tuple[Any, Any, Any, Any]:
+def _import_geometry_stack(*, model_name: str) -> tuple[Any, Any, Any, Any]:
     try:
         torch = importlib.import_module("torch")
         pyg_data = importlib.import_module("torch_geometric.data")
@@ -421,4 +421,12 @@ def _import_geometry_stack() -> tuple[Any, Any, Any, Any]:
             "Geometry models require `torch-cluster` in the local repo environment. "
             "Re-run `make python-setup` so the full PyTorch Geometric runtime is installed."
         ) from exc
+    if model_name == "dimenetpp_ensemble":
+        try:
+            importlib.import_module("torch_sparse")
+        except ModuleNotFoundError as exc:
+            raise OptionalModelDependencyError(
+                "DimeNet++ requires `torch-sparse` in the local repo environment. "
+                "Re-run `make python-setup` so the full PyTorch Geometric runtime is installed."
+            ) from exc
     return torch, pyg_data, pyg_loader, pyg_models

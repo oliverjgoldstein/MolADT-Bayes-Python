@@ -23,6 +23,8 @@ It uses:
 - `catboost_uncertainty` for the fair tabular `smiles` vs `moladt` vs `moladt_typed` comparison
 - `dimenetpp_ensemble` for the geometry-aware `sdf_geom`, `moladt_geom`, and `moladt_typed_geom` rows
 
+The repo vendors the raw FreeSolv source files for this path: `data/raw/freesolv/SAMPL.csv` plus `data/raw/freesolv/sdffiles/*.sdf`. Provenance and upstream links are listed in [Data sources](data-sources.md).
+
 The point is to keep the strong shared tabular baseline while letting the geometry branch use the model family that currently best fits this task in the repo.
 
 ## QM9
@@ -39,6 +41,8 @@ It uses:
 - `visnet_ensemble` for the geometry-aware rows
 
 This matches the tensorial and geometry-heavy character of the dipole task better than reusing the same geometry preference as FreeSolv.
+
+The repo vendors the normalized QM9 source files for this path: `data/raw/qm9/qm9.sdf` and `data/raw/qm9/qm9.sdf.csv`.
 
 If you want the paper-sized split instead of the local default subset:
 
@@ -62,6 +66,8 @@ This builds the local matched timing corpus and measures:
 - local timing-library build
 - MolADT SMILES parsing
 - MolADT file parsing
+
+The repo vendors the normalized ZINC source file for this path: `data/raw/zinc/zinc15_250K_2D.csv`.
 
 ## Why The README No Longer Starts With Stan
 

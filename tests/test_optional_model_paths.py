@@ -5,10 +5,12 @@ from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
+import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from scripts.features import FeatureTable, featurize_moladt_geometry_records, featurize_moladt_typed_geometry_records
+from scripts.geometry_runner import _import_geometry_stack
 from scripts.model_errors import OptionalModelDependencyError
 from scripts.model_registry import RegisteredModel
 from scripts.run_all import _extend_with_property_results, _parse_extra_models, build_parser
@@ -242,3 +244,17 @@ def test_extend_with_property_results_skips_missing_optional_geometry_dependency
     assert metrics_rows == []
     assert prediction_rows == []
     assert training_curve_rows == []
+
+
+def test_dimenet_reports_missing_torch_sparse_dependency(monkeypatch) -> None:
+    import scripts.geometry_runner as geometry_runner
+
+    def fake_import_module(name: str):
+        if name == "torch_sparse":
+            raise ModuleNotFoundError("No module named 'torch_sparse'")
+        return SimpleNamespace()
+
+    monkeypatch.setattr(geometry_runner.importlib, "import_module", fake_import_module)
+
+    with pytest.raises(OptionalModelDependencyError, match="torch-sparse"):
+        _import_geometry_stack(model_name="dimenetpp_ensemble")

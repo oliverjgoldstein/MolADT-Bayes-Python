@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from math import sqrt
 from types import MappingProxyType
@@ -46,6 +46,101 @@ class AtomicSymbol(Enum):
 
     def __str__(self) -> str:
         return self.value
+
+
+class SmilesAtomStereoClass(Enum):
+    TETRAHEDRAL = "TH"
+    ALLENE = "AL"
+    SQUARE_PLANAR = "SP"
+    TRIGONAL_BIPYRAMIDAL = "TB"
+    OCTAHEDRAL = "OH"
+
+
+class SmilesBondStereoDirection(Enum):
+    UP = "/"
+    DOWN = "\\"
+
+
+@dataclass(frozen=True, slots=True)
+class SmilesAtomStereo:
+    center: AtomId
+    stereo_class: SmilesAtomStereoClass
+    configuration: int
+    token: str
+
+    def __post_init__(self) -> None:
+        if self.configuration <= 0:
+            raise ValueError("SMILES atom stereochemistry configuration must be positive")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "center": self.center.to_dict(),
+            "stereo_class": self.stereo_class.value,
+            "configuration": self.configuration,
+            "token": self.token,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> SmilesAtomStereo:
+        return cls(
+            center=AtomId.from_dict(data["center"]),
+            stereo_class=SmilesAtomStereoClass(str(data["stereo_class"])),
+            configuration=int(data["configuration"]),
+            token=str(data["token"]),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class SmilesBondStereo:
+    start_atom: AtomId
+    end_atom: AtomId
+    direction: SmilesBondStereoDirection
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "start_atom": self.start_atom.to_dict(),
+            "end_atom": self.end_atom.to_dict(),
+            "direction": self.direction.value,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> SmilesBondStereo:
+        return cls(
+            start_atom=AtomId.from_dict(data["start_atom"]),
+            end_atom=AtomId.from_dict(data["end_atom"]),
+            direction=SmilesBondStereoDirection(str(data["direction"])),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class SmilesStereochemistry:
+    atom_stereo: tuple[SmilesAtomStereo, ...] = ()
+    bond_stereo: tuple[SmilesBondStereo, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "atom_stereo",
+            tuple(sorted(self.atom_stereo, key=lambda item: (item.center.value, item.stereo_class.value, item.configuration, item.token))),
+        )
+        object.__setattr__(
+            self,
+            "bond_stereo",
+            tuple(sorted(self.bond_stereo, key=lambda item: (item.start_atom.value, item.end_atom.value, item.direction.value))),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "atom_stereo": [item.to_dict() for item in self.atom_stereo],
+            "bond_stereo": [item.to_dict() for item in self.bond_stereo],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> SmilesStereochemistry:
+        return cls(
+            atom_stereo=tuple(SmilesAtomStereo.from_dict(item) for item in data.get("atom_stereo", [])),
+            bond_stereo=tuple(SmilesBondStereo.from_dict(item) for item in data.get("bond_stereo", [])),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,6 +215,7 @@ class Molecule:
     atoms: Mapping[AtomId, Atom]
     local_bonds: frozenset[Edge]
     systems: MoleculeSystems
+    smiles_stereochemistry: SmilesStereochemistry = field(default_factory=SmilesStereochemistry)
 
     def __post_init__(self) -> None:
         atom_map = dict(sorted(self.atoms.items(), key=lambda item: item[0].value))
@@ -129,6 +225,7 @@ class Molecule:
         object.__setattr__(self, "atoms", MappingProxyType(atom_map))
         object.__setattr__(self, "local_bonds", frozenset(self.local_bonds))
         object.__setattr__(self, "systems", tuple(sorted(self.systems, key=lambda item: item[0].value)))
+        object.__setattr__(self, "smiles_stereochemistry", self.smiles_stereochemistry)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -141,6 +238,7 @@ class Molecule:
                 {"system_id": system_id.to_dict(), "bonding_system": bonding_system.to_dict()}
                 for system_id, bonding_system in self.systems
             ],
+            "smiles_stereochemistry": self.smiles_stereochemistry.to_dict(),
         }
 
     @classmethod
@@ -154,7 +252,8 @@ class Molecule:
             (SystemId.from_dict(item["system_id"]), BondingSystem.from_dict(item["bonding_system"]))
             for item in data["systems"]
         )
-        return cls(atoms=atoms, local_bonds=local_bonds, systems=systems)
+        smiles_stereochemistry = SmilesStereochemistry.from_dict(data.get("smiles_stereochemistry", {}))
+        return cls(atoms=atoms, local_bonds=local_bonds, systems=systems, smiles_stereochemistry=smiles_stereochemistry)
 
     def to_json(self) -> str:
         payload = self.to_dict()
@@ -190,6 +289,7 @@ def add_sigma(atom_a: AtomId, atom_b: AtomId, molecule: Molecule) -> Molecule:
         atoms=molecule.atoms,
         local_bonds=molecule.local_bonds | {mk_edge(atom_a, atom_b)},
         systems=molecule.systems,
+        smiles_stereochemistry=molecule.smiles_stereochemistry,
     )
 
 

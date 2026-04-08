@@ -16,6 +16,7 @@ from .common import (
     download_first,
     ensure_directory,
     extract_archive,
+    log,
     require_single_file,
 )
 
@@ -23,7 +24,7 @@ from .common import (
 @dataclass(frozen=True, slots=True)
 class FreeSolvDownloads:
     csv_path: Path
-    repo_archive_path: Path
+    repo_archive_path: Path | None
     repo_extract_dir: Path
 
 
@@ -31,15 +32,15 @@ class FreeSolvDownloads:
 class QM9Downloads:
     sdf_path: Path
     csv_path: Path
-    archive_path: Path
-    extract_dir: Path
+    archive_path: Path | None
+    extract_dir: Path | None
 
 
 @dataclass(frozen=True, slots=True)
 class ZincDownloads:
     source_path: Path
-    archive_path: Path
-    extract_dir: Path
+    archive_path: Path | None
+    extract_dir: Path | None
     dataset_size: str
     dataset_dimension: str
 
@@ -66,7 +67,12 @@ def zinc_normalized_source_name(dataset_size: str, dataset_dimension: str, suffi
 
 def download_freesolv(*, force: bool = False) -> FreeSolvDownloads:
     target_dir = ensure_directory(freesolv_raw_dir())
-    csv_path = download_file(FREESOLV_CSV_URL, target_dir / "SAMPL.csv", force=force)
+    csv_path = target_dir / "SAMPL.csv"
+    vendored_sdf_dir = target_dir / "sdffiles"
+    if not force and csv_path.exists() and vendored_sdf_dir.is_dir() and any(vendored_sdf_dir.glob("*.sdf")):
+        log(f"Using vendored FreeSolv snapshot under {target_dir}")
+        return FreeSolvDownloads(csv_path=csv_path, repo_archive_path=None, repo_extract_dir=target_dir)
+    csv_path = download_file(FREESOLV_CSV_URL, csv_path, force=force)
     repo_archive_path = download_file(FREESOLV_REPO_ZIP_URL, target_dir / "FreeSolv-master.zip", force=force)
     repo_extract_dir = extract_archive(repo_archive_path, target_dir / "FreeSolv-master", force=force)
     return FreeSolvDownloads(csv_path=csv_path, repo_archive_path=repo_archive_path, repo_extract_dir=repo_extract_dir)
@@ -74,6 +80,11 @@ def download_freesolv(*, force: bool = False) -> FreeSolvDownloads:
 
 def download_qm9(*, force: bool = False) -> QM9Downloads:
     target_dir = ensure_directory(qm9_raw_dir())
+    sdf_path = target_dir / "qm9.sdf"
+    csv_path = target_dir / "qm9.sdf.csv"
+    if not force and sdf_path.exists() and csv_path.exists():
+        log(f"Using vendored QM9 snapshot under {target_dir}")
+        return QM9Downloads(sdf_path=sdf_path, csv_path=csv_path, archive_path=None, extract_dir=target_dir)
     archive_path = download_first(QM9_TAR_URLS, target_dir / "qm9.tar.gz", force=force)
     extract_dir = extract_archive(archive_path, target_dir / "extracted", force=force)
     sdf_source = require_single_file(extract_dir, ("qm9.sdf", "gdb9.sdf", "*.sdf"), "QM9 SDF")
@@ -82,13 +93,23 @@ def download_qm9(*, force: bool = False) -> QM9Downloads:
         csv_source = require_single_file(extract_dir, csv_candidates, "QM9 target CSV")
     except FileNotFoundError:
         csv_source = download_file(QM9_CSV_URL, target_dir / "qm9.csv", force=force)
-    sdf_path = copy_if_needed(sdf_source, target_dir / "qm9.sdf", force=force)
-    csv_path = copy_if_needed(csv_source, target_dir / "qm9.sdf.csv", force=force)
+    sdf_path = copy_if_needed(sdf_source, sdf_path, force=force)
+    csv_path = copy_if_needed(csv_source, csv_path, force=force)
     return QM9Downloads(sdf_path=sdf_path, csv_path=csv_path, archive_path=archive_path, extract_dir=extract_dir)
 
 
 def download_zinc(*, dataset_size: str = "250K", dataset_dimension: str = "2D", force: bool = False) -> ZincDownloads:
     target_dir = ensure_directory(zinc_raw_dir())
+    normalized = target_dir / zinc_normalized_source_name(dataset_size, dataset_dimension, ".csv")
+    if not force and normalized.exists():
+        log(f"Using vendored ZINC source under {normalized}")
+        return ZincDownloads(
+            source_path=normalized,
+            archive_path=None,
+            extract_dir=target_dir,
+            dataset_size=dataset_size,
+            dataset_dimension=dataset_dimension,
+        )
     archive_name = zinc_archive_filename(dataset_size, dataset_dimension)
     archive_path = download_file(
         ZINC_URL_TEMPLATE.format(dataset_size=dataset_size, dataset_dimension=dataset_dimension),

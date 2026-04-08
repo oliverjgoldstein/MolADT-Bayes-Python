@@ -1,5 +1,7 @@
 # macOS
 .DS_Store
+data/.DS_Store
+data/raw/.DS_Store
 
 # Python caches and test artifacts
 __pycache__/
@@ -30,7 +32,19 @@ stan/*
 !stan/*.stan
 
 # Generated benchmark data and outputs
-data/raw/
+data/raw/*
+!data/raw/freesolv/
+data/raw/freesolv/*
+!data/raw/freesolv/SAMPL.csv
+!data/raw/freesolv/sdffiles/
+!data/raw/freesolv/sdffiles/**
+!data/raw/qm9/
+data/raw/qm9/*
+# Keep the raw QM9 SDF local; GitHub rejects it above 100 MB.
+!data/raw/qm9/qm9.sdf.csv
+!data/raw/zinc/
+data/raw/zinc/*
+!data/raw/zinc/zinc15_250K_2D.csv
 data/processed/
 results/
 

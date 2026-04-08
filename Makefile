@@ -320,6 +320,13 @@ python-setup:
 		torch_tag="$$( "$$venv_python" -c 'import torch; version = torch.__version__.split("+")[0].split("."); print(f"{version[0]}.{version[1]}.0")' )"; \
 		cuda_tag="$$( "$$venv_python" -c 'import torch; cuda = torch.version.cuda; print("cpu" if not cuda else "cu" + cuda.replace(".", ""))' )"; \
 		pyg_wheel_url="https://data.pyg.org/whl/torch-$${torch_tag}+$${cuda_tag}.html"; \
+		if ! "$$venv_python" -m pip install -U torch-sparse -f "$$pyg_wheel_url"; then \
+			printf "%s\n" \
+				"" \
+				"Falling back to a local torch-sparse build without build isolation." \
+				"This is slower, but it lets the build backend import the already-installed torch package."; \
+			"$$venv_python" -m pip install -U --no-build-isolation torch-sparse; \
+		fi; \
 		if ! "$$venv_python" -m pip install -U torch-cluster -f "$$pyg_wheel_url"; then \
 			printf "%s\n" \
 				"" \
