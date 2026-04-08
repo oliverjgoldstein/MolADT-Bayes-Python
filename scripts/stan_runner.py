@@ -96,14 +96,21 @@ def run_model_suite(
     results: list[dict[str, Any]] = []
     predictions: list[dict[str, Any]] = []
     coefficients: list[dict[str, Any]] = []
-    for method in config.methods:
+    total_methods = len(config.methods)
+    for method_index, method in enumerate(config.methods, start=1):
         if config.verbose:
             log(
-                "Running Stan fit "
+                f"[stan {method_index}/{total_methods}] "
                 f"{bundle.dataset_name}/{bundle.representation}/{model_name}/{method} "
-                f"with output in {display_path(output_dir / method)}"
+                f"output={display_path(output_dir / method)}"
             )
         fit, runtime_seconds = _run_method(model, data, method=method, config=config, output_dir=output_dir)
+        if config.verbose:
+            log(
+                f"[stan {method_index}/{total_methods}] "
+                f"{bundle.dataset_name}/{bundle.representation}/{model_name}/{method} "
+                f"runtime_s={runtime_seconds:.2f}"
+            )
         summary_rows, prediction_rows, coefficient_rows = _evaluate_fit(
             bundle,
             model_name=model_name,

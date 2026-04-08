@@ -80,6 +80,16 @@ def log(message: str) -> None:
     print(message, flush=True)
 
 
+def log_stage(scope: str, stage_index: int, total_stages: int, message: str) -> None:
+    log(f"[{scope} {stage_index}/{total_stages}] {message}")
+
+
+def format_progress(current: int, total: int) -> str:
+    if total <= 0:
+        return str(current)
+    return f"{current}/{total}"
+
+
 def _format_bytes(num_bytes: float) -> str:
     units = ("B", "KiB", "MiB", "GiB", "TiB")
     value = float(num_bytes)

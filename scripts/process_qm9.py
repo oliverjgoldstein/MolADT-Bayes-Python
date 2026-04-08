@@ -8,7 +8,7 @@ from pathlib import Path
 import pandas as pd
 from rdkit import Chem, rdBase
 
-from .common import DEFAULT_SEED, FailureRecord, PROCESSED_DATA_DIR, ensure_directory, write_failure_csv
+from .common import DEFAULT_SEED, FailureRecord, PROCESSED_DATA_DIR, ensure_directory, log, log_stage, write_failure_csv
 from .download_data import download_qm9
 from .features import (
     canonical_smiles_from_mol,
@@ -53,16 +53,30 @@ def process_qm9_dataset(
     force: bool = False,
     limit: int | None = None,
     split_mode: str = "subset",
+    verbose: bool = False,
 ) -> QM9Artifacts:
     if split_mode == "paper" and limit is not None and limit < QM9_PAPER_TOTAL:
         raise ValueError(
             f"QM9 paper split requires at least {QM9_PAPER_TOTAL} aligned molecules; "
             "omit --limit or provide a larger value"
         )
+    total_stages = 5
+    if verbose:
+        log_stage(
+            "qm9",
+            1,
+            total_stages,
+            f"Preparing QM9 inputs (limit={limit if limit is not None else 'full'}, split_mode={split_mode})",
+        )
     downloads = download_qm9(force=force)
     ensure_directory(PROCESSED_DATA_DIR)
     with _block_rdkit_logs():
-        combined_frame, failures = _build_qm9_aligned_frame(downloads.sdf_path, downloads.csv_path, limit=limit)
+        combined_frame, failures = _build_qm9_aligned_frame(downloads.sdf_path, downloads.csv_path, limit=limit, verbose=verbose)
+    if verbose:
+        log(
+            f"[qm9 1/{total_stages}] aligned_rows={len(combined_frame)} "
+            f"processing_failures={len(failures)}"
+        )
     processed_csv_path = PROCESSED_DATA_DIR / "qm9_processed.csv"
     combined_frame.loc[:, ["mol_id", "smiles", "mu"]].to_csv(processed_csv_path, index=False)
     moladt_index_path = PROCESSED_DATA_DIR / "qm9_moladt_index.csv"
@@ -72,7 +86,16 @@ def process_qm9_dataset(
     write_failure_csv(processing_failure_path, failures)
     failure_paths.append(processing_failure_path)
     split_partition = _qm9_split_partition(len(combined_frame), seed=seed, split_mode=split_mode)
+    if verbose:
+        log(
+            f"[qm9 1/{total_stages}] split_sizes="
+            f"train={len(split_partition.train_indices)} "
+            f"valid={len(split_partition.valid_indices)} "
+            f"test={len(split_partition.test_indices)}"
+        )
 
+    if verbose:
+        log_stage("qm9", 2, total_stages, f"Featurizing QM9 SMILES records (rows={len(combined_frame)})")
     with _block_rdkit_logs():
         smiles_table = featurize_smiles_dataframe(
             combined_frame.loc[:, ["mol_id", "smiles", "mu"]],
@@ -92,8 +115,16 @@ def process_qm9_dataset(
         seed=seed,
         split_partition=split_partition,
     )
+    if verbose:
+        log(
+            f"[qm9 2/{total_stages}] smiles_rows={len(smiles_table.rows)} "
+            f"smiles_feature_failures={len(smiles_table.failures)} "
+            f"train={len(smiles_export.y_train)} valid={len(smiles_export.y_valid)} test={len(smiles_export.y_test)}"
+        )
     tabular_exports: dict[str, ExportedDataset] = {"smiles": smiles_export}
 
+    if verbose:
+        log_stage("qm9", 3, total_stages, f"Featurizing QM9 MolADT tables (rows={len(combined_frame)})")
     with _block_rdkit_logs():
         moladt_table = featurize_moladt_records(
             combined_frame,
@@ -115,6 +146,12 @@ def process_qm9_dataset(
         split_partition=split_partition,
     )
     tabular_exports["moladt"] = moladt_export
+    if verbose:
+        log(
+            f"[qm9 3/{total_stages}] moladt_rows={len(moladt_table.rows)} "
+            f"moladt_feature_failures={len(moladt_table.failures)} "
+            f"train={len(moladt_export.y_train)} valid={len(moladt_export.y_valid)} test={len(moladt_export.y_test)}"
+        )
     with _block_rdkit_logs():
         moladt_typed_table = featurize_moladt_typed_records(
             combined_frame,
@@ -136,7 +173,16 @@ def process_qm9_dataset(
             seed=seed,
             split_partition=split_partition,
         )
+        if verbose:
+            typed_export = tabular_exports["moladt_typed"]
+            log(
+                f"[qm9 3/{total_stages}] moladt_typed_rows={len(moladt_typed_table.rows)} "
+                f"moladt_typed_feature_failures={len(moladt_typed_table.failures)} "
+                f"train={len(typed_export.y_train)} valid={len(typed_export.y_valid)} test={len(typed_export.y_test)}"
+            )
 
+    if verbose:
+        log_stage("qm9", 4, total_stages, f"Featurizing QM9 geometry tables (rows={len(combined_frame)})")
     with _block_rdkit_logs():
         sdf_geom_table = featurize_sdf_geometry_records(
             combined_frame,
@@ -183,6 +229,13 @@ def process_qm9_dataset(
             seed=seed,
             split_partition=split_partition,
         )
+        if verbose:
+            geom_export = geometric_exports["sdf_geom"]
+            log(
+                f"[qm9 4/{total_stages}] sdf_geom_rows={len(sdf_geom_table.rows)} "
+                f"sdf_geom_feature_failures={len(sdf_geom_table.failures)} "
+                f"train={len(geom_export.train_indices)} valid={len(geom_export.valid_indices)} test={len(geom_export.test_indices)}"
+            )
     if not moladt_geom_table.rows.empty:
         geometric_exports["moladt_geom"] = export_geometric_splits(
             moladt_geom_table,
@@ -192,6 +245,13 @@ def process_qm9_dataset(
             seed=seed,
             split_partition=split_partition,
         )
+        if verbose:
+            geom_export = geometric_exports["moladt_geom"]
+            log(
+                f"[qm9 4/{total_stages}] moladt_geom_rows={len(moladt_geom_table.rows)} "
+                f"moladt_geom_feature_failures={len(moladt_geom_table.failures)} "
+                f"train={len(geom_export.train_indices)} valid={len(geom_export.valid_indices)} test={len(geom_export.test_indices)}"
+            )
     if not moladt_typed_geom_table.rows.empty:
         geometric_exports["moladt_typed_geom"] = export_geometric_splits(
             moladt_typed_geom_table,
@@ -201,6 +261,18 @@ def process_qm9_dataset(
             seed=seed,
             split_partition=split_partition,
         )
+        if verbose:
+            geom_export = geometric_exports["moladt_typed_geom"]
+            log(
+                f"[qm9 4/{total_stages}] moladt_typed_geom_rows={len(moladt_typed_geom_table.rows)} "
+                f"moladt_typed_geom_feature_failures={len(moladt_typed_geom_table.failures)} "
+                f"train={len(geom_export.train_indices)} valid={len(geom_export.valid_indices)} test={len(geom_export.test_indices)}"
+            )
+
+    if verbose:
+        tabular_keys = ", ".join(sorted(tabular_exports))
+        geometric_keys = ", ".join(sorted(geometric_exports)) or "(none)"
+        log_stage("qm9", 5, total_stages, f"Prepared exports: tabular={tabular_keys}; geometric={geometric_keys}")
 
     return QM9Artifacts(
         processed_csv_path=processed_csv_path,
@@ -213,7 +285,13 @@ def process_qm9_dataset(
     )
 
 
-def _build_qm9_aligned_frame(sdf_path: Path, csv_path: Path, *, limit: int | None) -> tuple[pd.DataFrame, list[FailureRecord]]:
+def _build_qm9_aligned_frame(
+    sdf_path: Path,
+    csv_path: Path,
+    *,
+    limit: int | None,
+    verbose: bool = False,
+) -> tuple[pd.DataFrame, list[FailureRecord]]:
     targets = pd.read_csv(csv_path)
     if "mu" not in targets.columns:
         raise ValueError("QM9 CSV must contain target column `mu`")
@@ -245,6 +323,12 @@ def _build_qm9_aligned_frame(sdf_path: Path, csv_path: Path, *, limit: int | Non
                 "rdkit_mol": molecule,
             }
         )
+        if verbose and len(rows) % 5000 == 0:
+            target_total = min(limit, len(targets)) if limit is not None else len(targets)
+            log(
+                f"[qm9 1/5] aligned_rows={len(rows)}/{target_total} "
+                f"processing_failures={len(failures)}"
+            )
     if not rows:
         raise ValueError("No QM9 rows were processed successfully")
     return pd.DataFrame(rows), failures
@@ -256,12 +340,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--split-mode", choices=("subset", "paper"), default="subset")
+    parser.add_argument("--verbose", action="store_true")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    artifacts = process_qm9_dataset(seed=args.seed, force=args.force, limit=args.limit, split_mode=args.split_mode)
+    artifacts = process_qm9_dataset(
+        seed=args.seed,
+        force=args.force,
+        limit=args.limit,
+        split_mode=args.split_mode,
+        verbose=args.verbose,
+    )
     print(artifacts.processed_csv_path)
     print(artifacts.moladt_index_path)
     return 0

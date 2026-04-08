@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 from .benchmark_zinc import run_zinc_benchmark
-from .common import DEFAULT_SEED, RESULTS_DIR, display_path, ensure_directory, log
+from .common import DEFAULT_SEED, RESULTS_DIR, display_path, ensure_directory, log, log_stage
 from .geometry_runner import GeometryRunConfig
 from .literature_baselines import literature_baselines_frame
 from .model_errors import OptionalModelDependencyError
@@ -120,10 +120,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "smoke-test":
         if args.verbose:
             log("Starting FreeSolv smoke benchmark")
+            log(f"Results directory: {display_path(RESULTS_DIR)}")
+            log_stage("benchmark", 1, 3, "Preparing FreeSolv exports")
         artifacts = process_freesolv_dataset(
             seed=args.seed,
             force=args.force,
             include_moladt=not args.skip_moladt or args.include_moladt_predictive,
+            verbose=args.verbose,
         )
         _extend_with_property_results(
             artifacts,
@@ -140,7 +143,9 @@ def main(argv: list[str] | None = None) -> int:
         qm9_split_mode = "paper" if args.paper_mode else args.split_mode
         if args.verbose:
             log(f"Starting QM9 benchmark with limit={qm9_limit}, split_mode={qm9_split_mode}")
-        artifacts = process_qm9_dataset(seed=args.seed, force=args.force, limit=qm9_limit, split_mode=qm9_split_mode)
+            log(f"Results directory: {display_path(RESULTS_DIR)}")
+            log_stage("benchmark", 1, 3, "Preparing QM9 exports")
+        artifacts = process_qm9_dataset(seed=args.seed, force=args.force, limit=qm9_limit, split_mode=qm9_split_mode, verbose=args.verbose)
         _extend_with_property_results(
             artifacts,
             metrics_rows,
@@ -172,10 +177,12 @@ def main(argv: list[str] | None = None) -> int:
                 f"include_moladt={args.include_moladt}, extra_models={','.join(extra_models) or '(none)'})"
             )
             log(f"Results directory: {display_path(RESULTS_DIR)}")
+            log_stage("benchmark", 1, 4, "Running FreeSolv benchmark flow")
         freesolv = process_freesolv_dataset(
             seed=args.seed,
             force=args.force,
             include_moladt=not args.skip_moladt or args.include_moladt_predictive,
+            verbose=args.verbose,
         )
         _extend_with_property_results(
             freesolv,
@@ -187,7 +194,9 @@ def main(argv: list[str] | None = None) -> int:
             extra_models,
             args,
         )
-        qm9 = process_qm9_dataset(seed=args.seed, force=args.force, limit=qm9_limit, split_mode=qm9_split_mode)
+        if args.verbose:
+            log_stage("benchmark", 2, 4, "Running QM9 benchmark flow")
+        qm9 = process_qm9_dataset(seed=args.seed, force=args.force, limit=qm9_limit, split_mode=qm9_split_mode, verbose=args.verbose)
         _extend_with_property_results(
             qm9,
             metrics_rows,
@@ -198,6 +207,8 @@ def main(argv: list[str] | None = None) -> int:
             extra_models,
             args,
         )
+        if args.verbose:
+            log_stage("benchmark", 3, 4, "Running ZINC timing flow")
         run_zinc_benchmark(
             dataset_size=args.zinc_dataset_size,
             dataset_dimension=args.zinc_dataset_dimension,
@@ -216,10 +227,12 @@ def main(argv: list[str] | None = None) -> int:
                 f"extra_models={','.join(extra_models) or '(none)'})"
             )
             log(f"Results directory: {display_path(RESULTS_DIR)}")
+            log_stage("benchmark", 1, 3, "Running FreeSolv model flow")
         freesolv = process_freesolv_dataset(
             seed=args.seed,
             force=args.force,
             include_moladt=not args.skip_moladt or args.include_moladt_predictive,
+            verbose=args.verbose,
         )
         _extend_with_property_results(
             freesolv,
@@ -231,7 +244,9 @@ def main(argv: list[str] | None = None) -> int:
             extra_models,
             args,
         )
-        qm9 = process_qm9_dataset(seed=args.seed, force=args.force, limit=qm9_limit, split_mode=qm9_split_mode)
+        if args.verbose:
+            log_stage("benchmark", 2, 3, "Running QM9 model flow")
+        qm9 = process_qm9_dataset(seed=args.seed, force=args.force, limit=qm9_limit, split_mode=qm9_split_mode, verbose=args.verbose)
         _extend_with_property_results(
             qm9,
             metrics_rows,
@@ -246,6 +261,15 @@ def main(argv: list[str] | None = None) -> int:
         raise RuntimeError(f"Unsupported command {args.command}")
 
     if metrics_rows:
+        if args.verbose:
+            total_stages = 3 if args.command in {"smoke-test", "qm9", "models"} else 4 if args.command == "benchmark" else 1
+            log_stage(
+                "benchmark",
+                total_stages,
+                total_stages,
+                f"Writing reports (metrics={len(metrics_rows)} predictions={len(prediction_rows)} "
+                f"coefficients={len(coefficient_rows)} curves={len(training_curve_rows)} artifacts={len(model_artifact_rows)})",
+            )
         details_dir = _details_dir()
         metrics_path = details_dir / "predictive_metrics.csv"
         predictions_path = details_dir / "predictions.csv"
@@ -359,7 +383,15 @@ def _extend_with_property_results(
             tabular_exports["moladt"] = artifacts.moladt_export
     for bundle in tabular_exports.values():
         write_stan_data_json(bundle, student_df=config.student_df)
+        if args.verbose:
+            log(
+                f"[{bundle.dataset_name}/{bundle.representation}] tabular_rows="
+                f"train={len(bundle.y_train)} valid={len(bundle.y_valid)} test={len(bundle.y_test)} "
+                f"features={len(bundle.feature_names)}"
+            )
         for model_name in models:
+            if args.verbose:
+                log(f"[{bundle.dataset_name}/{bundle.representation}] Running Stan model `{model_name}`")
             rows, predictions, coefficients = run_model_suite(bundle, model_name=model_name, config=config)
             metrics_rows.extend(rows)
             prediction_rows.extend(predictions)
@@ -370,6 +402,8 @@ def _extend_with_property_results(
             runner = TABULAR_MODEL_REGISTRY[model_name].runner
             try:
                 for bundle in tabular_exports.values():
+                    if args.verbose:
+                        log(f"[{bundle.dataset_name}/{bundle.representation}] Running optional model `{model_name}`")
                     rows, predictions, artifact_rows = runner(
                         bundle,
                         config=CatBoostRunConfig(seeds=extra_seeds, verbose=args.verbose),
@@ -383,6 +417,15 @@ def _extend_with_property_results(
             runner = GEOMETRIC_MODEL_REGISTRY[model_name].runner
             try:
                 for bundle in getattr(artifacts, "geometric_exports", {}).values():
+                    if args.verbose:
+                        atom_counts = [len(item) for item in bundle.atomic_numbers]
+                        mean_atoms = (sum(atom_counts) / len(atom_counts)) if atom_counts else 0.0
+                        log(
+                            f"[{bundle.dataset_name}/{bundle.representation}] geometry_rows="
+                            f"train={len(bundle.train_indices)} valid={len(bundle.valid_indices)} test={len(bundle.test_indices)} "
+                            f"molecules={len(bundle.rows)} mean_atoms={mean_atoms:.1f}"
+                        )
+                        log(f"[{bundle.dataset_name}/{bundle.representation}] Running geometry model `{model_name}`")
                     rows, predictions, training_curves, artifact_manifest = runner(
                         bundle,
                         config=GeometryRunConfig(model_name=model_name, seeds=extra_seeds, verbose=args.verbose),

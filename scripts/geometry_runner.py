@@ -9,7 +9,7 @@ from typing import Any
 
 import numpy as np
 
-from .common import RESULTS_DIR, ensure_directory
+from .common import RESULTS_DIR, ensure_directory, log
 from .model_errors import OptionalModelDependencyError
 from .predictive_metrics import build_metric_row, build_prediction_rows
 from .splits import GeometricDatasetSpec
@@ -50,8 +50,11 @@ def run_geometry_ensemble(
     artifact_rows: list[dict[str, Any]] = []
     member_predictions: dict[str, list[np.ndarray]] = {"train": [], "valid": [], "test": []}
     parameter_count: int | None = None
+    progress_label = f"{config.model_name}:{bundle.dataset_name}/{bundle.representation}"
+    if config.verbose:
+        log(f"[{progress_label}] training ensemble with {len(config.seeds)} member(s)")
     start = time.perf_counter()
-    for seed in config.seeds:
+    for seed_index, seed in enumerate(config.seeds, start=1):
         _seed_everything(torch, seed)
         model = _build_geometry_model(
             torch=torch,
@@ -65,6 +68,11 @@ def run_geometry_ensemble(
             weight_decay=float(dataset_defaults["weight_decay"]),
         )
         parameter_count = sum(parameter.numel() for parameter in model.parameters())
+        if config.verbose:
+            log(
+                f"[{progress_label}] starting member {seed_index}/{len(config.seeds)} "
+                f"(seed={seed}, max_epochs={int(dataset_defaults['max_epochs'])})"
+            )
         history = _train_member(
             torch=torch,
             model=model,
@@ -77,6 +85,10 @@ def run_geometry_ensemble(
             max_epochs=int(dataset_defaults["max_epochs"]),
             patience=int(dataset_defaults["patience"]),
             gradient_clip_norm=float(dataset_defaults["gradient_clip_norm"]),
+            progress_label=progress_label,
+            seed_index=seed_index,
+            seed_count=len(config.seeds),
+            verbose=config.verbose,
         )
         training_curve_rows.extend(
             {
@@ -119,7 +131,15 @@ def run_geometry_ensemble(
                 target_std=target_std,
             )["predicted_mean"]
         )
+        if config.verbose:
+            best_valid_rmse = min(float(row["valid_rmse"]) for row in history["training_curves"])
+            log(
+                f"[{progress_label}] finished member {seed_index}/{len(config.seeds)} "
+                f"with best validation RMSE {best_valid_rmse:.4f}"
+            )
     runtime_seconds = time.perf_counter() - start
+    if config.verbose:
+        log(f"[{progress_label}] finished ensemble in {runtime_seconds:.1f}s")
     artifact_rows.extend(
         _write_geometry_artifact_manifest(
             bundle=bundle,
@@ -256,6 +276,10 @@ def _train_member(
     max_epochs: int,
     patience: int,
     gradient_clip_norm: float,
+    progress_label: str,
+    seed_index: int,
+    seed_count: int,
+    verbose: bool,
 ) -> dict[str, Any]:
     nnf = torch.nn.functional
     best_state: dict[str, Any] | None = None
@@ -291,6 +315,12 @@ def _train_member(
                 "valid_rmse": valid_rmse,
             }
         )
+        if verbose and (epoch == 1 or epoch % 25 == 0):
+            log(
+                f"[{progress_label}] member {seed_index}/{seed_count} epoch {epoch}/{max_epochs} "
+                f"train_loss={training_curves[-1]['train_loss']:.4f} valid_rmse={valid_rmse:.4f} "
+                f"best={min(float(row['valid_rmse']) for row in training_curves):.4f}"
+            )
         if valid_rmse < best_valid_rmse:
             best_valid_rmse = valid_rmse
             best_state = {key: value.detach().cpu().clone() for key, value in model.state_dict().items()}
@@ -298,6 +328,11 @@ def _train_member(
         else:
             epochs_without_improvement += 1
             if epochs_without_improvement >= patience:
+                if verbose:
+                    log(
+                        f"[{progress_label}] member {seed_index}/{seed_count} early stopped at epoch {epoch} "
+                        f"with best validation RMSE {best_valid_rmse:.4f}"
+                    )
                 break
     if best_state is not None:
         model.load_state_dict(best_state)

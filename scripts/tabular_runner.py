@@ -10,7 +10,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from .common import RESULTS_DIR, ensure_directory
+from .common import RESULTS_DIR, ensure_directory, log
 from .model_errors import OptionalModelDependencyError
 from .predictive_metrics import build_metric_row, build_prediction_rows
 from .splits import ExportedDataset
@@ -77,6 +77,7 @@ def run_catboost_uncertainty(
     y_train = np.asarray(bundle.y_train, dtype=float)
     y_valid = np.asarray(bundle.y_valid, dtype=float)
     y_test = np.asarray(bundle.y_test, dtype=float)
+    progress_label = f"{bundle.dataset_name}/{bundle.representation}"
 
     base_params = dict(_catboost_base_params(bundle.dataset_name, seed=config.seeds[0]))
     if config.search_hyperparameters:
@@ -89,19 +90,28 @@ def run_catboost_uncertainty(
             y_valid=y_valid,
             base_params=base_params,
             virtual_ensembles_count=config.virtual_ensembles_count,
+            progress_label=progress_label,
+            verbose=config.verbose,
         )
     else:
         best_params = dict(_dataset_defaults(bundle.dataset_name))
+    if config.verbose:
+        log(f"[catboost_uncertainty:{progress_label}] selected params {best_params}")
 
     metrics_rows: list[dict[str, Any]] = []
     prediction_rows: list[dict[str, Any]] = []
     artifact_rows: list[dict[str, Any]] = []
-    for seed in config.seeds:
+    for seed_index, seed in enumerate(config.seeds, start=1):
         params = dict(base_params)
         params.update(best_params)
         params["random_seed"] = seed
         early_stopping_rounds = int(params.pop("early_stopping_rounds"))
         model = catboost.CatBoostRegressor(**params)
+        if config.verbose:
+            log(
+                f"[catboost_uncertainty:{progress_label}] training seed {seed_index}/{len(config.seeds)} "
+                f"(seed={seed}, iterations={params['iterations']})"
+            )
         start = time.perf_counter()
         model.fit(
             X_train,
@@ -112,6 +122,11 @@ def run_catboost_uncertainty(
             early_stopping_rounds=early_stopping_rounds,
         )
         runtime_seconds = time.perf_counter() - start
+        if config.verbose:
+            log(
+                f"[catboost_uncertainty:{progress_label}] finished seed {seed_index}/{len(config.seeds)} "
+                f"in {runtime_seconds:.1f}s"
+            )
         artifact_rows.extend(
             _write_catboost_artifacts(
                 model=model,
@@ -250,13 +265,18 @@ def _search_best_params(
     y_valid: np.ndarray,
     base_params: dict[str, Any],
     virtual_ensembles_count: int,
+    progress_label: str,
+    verbose: bool,
 ) -> dict[str, Any]:
     defaults = _dataset_defaults(dataset_name)
     search_space = _CATBOOST_SEARCH_SPACES.get(dataset_name, _CATBOOST_SEARCH_SPACES["qm9"])
     search_keys = ("depth", "learning_rate", "l2_leaf_reg", "iterations", "min_data_in_leaf")
     best_score = float("inf")
     best_params = dict(defaults)
-    for values in itertools.product(*(search_space[key] for key in search_keys)):
+    total_candidates = int(np.prod([len(search_space[key]) for key in search_keys], dtype=int))
+    if verbose:
+        log(f"[catboost_uncertainty:{progress_label}] hyperparameter search over {total_candidates} candidates")
+    for candidate_index, values in enumerate(itertools.product(*(search_space[key] for key in search_keys)), start=1):
         candidate = dict(defaults)
         candidate.update(dict(zip(search_keys, values, strict=True)))
         params = dict(base_params)
@@ -280,6 +300,16 @@ def _search_best_params(
         if rmse < best_score:
             best_score = rmse
             best_params = candidate
+            if verbose:
+                log(
+                    f"[catboost_uncertainty:{progress_label}] new best validation RMSE {best_score:.4f} "
+                    f"at {candidate_index}/{total_candidates}"
+                )
+        elif verbose and (candidate_index == 1 or candidate_index == total_candidates or candidate_index % 10 == 0):
+            log(
+                f"[catboost_uncertainty:{progress_label}] searched {candidate_index}/{total_candidates} "
+                f"candidates; best validation RMSE {best_score:.4f}"
+            )
     return best_params
 
 

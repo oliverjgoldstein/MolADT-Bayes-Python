@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 from rdkit import Chem
 
-from .common import DEFAULT_SEED, FailureRecord, PROCESSED_DATA_DIR, ensure_directory, extract_archive, find_files, write_failure_csv
+from .common import DEFAULT_SEED, FailureRecord, PROCESSED_DATA_DIR, ensure_directory, extract_archive, find_files, log, log_stage, write_failure_csv
 from .download_data import FreeSolvDownloads, download_freesolv
 from .features import (
     canonical_smiles_from_mol,
@@ -39,10 +39,21 @@ def process_freesolv_dataset(
     seed: int = DEFAULT_SEED,
     force: bool = False,
     include_moladt: bool = True,
+    verbose: bool = False,
 ) -> FreeSolvArtifacts:
+    total_stages = 4 if include_moladt else 3
+    if verbose:
+        log_stage("freesolv", 1, total_stages, "Preparing FreeSolv inputs")
     downloads = download_freesolv(force=force)
     ensure_directory(PROCESSED_DATA_DIR)
+    if verbose:
+        log_stage("freesolv", 2, total_stages, "Canonicalizing FreeSolv CSV")
     processed_frame, canonical_failures = _canonicalize_freesolv_csv(downloads)
+    if verbose:
+        log(
+            f"[freesolv 2/{total_stages}] canonicalized molecules={len(processed_frame)} "
+            f"csv_failures={len(canonical_failures)}"
+        )
     processed_csv_path = PROCESSED_DATA_DIR / "freesolv_processed.csv"
     processed_frame.to_csv(processed_csv_path, index=False)
     failure_paths: list[Path] = []
@@ -50,6 +61,13 @@ def process_freesolv_dataset(
     write_failure_csv(canonical_failure_path, canonical_failures)
     failure_paths.append(canonical_failure_path)
 
+    if verbose:
+        log_stage(
+            "freesolv",
+            3,
+            total_stages,
+            f"Featurizing FreeSolv SMILES records (molecules={len(processed_frame)})",
+        )
     smiles_table = featurize_smiles_dataframe(
         processed_frame,
         dataset_name="freesolv_smiles",
@@ -61,17 +79,30 @@ def process_freesolv_dataset(
     write_failure_csv(smiles_feature_failure_path, smiles_table.failures)
     failure_paths.append(smiles_feature_failure_path)
     smiles_export = export_standardized_splits(smiles_table, dataset_name="freesolv", representation="smiles", target_name="expt", seed=seed)
+    if verbose:
+        log(
+            f"[freesolv 3/{total_stages}] smiles_rows={len(smiles_table.rows)} "
+            f"smiles_feature_failures={len(smiles_table.failures)} "
+            f"train={len(smiles_export.y_train)} valid={len(smiles_export.y_valid)} test={len(smiles_export.y_test)}"
+        )
     tabular_exports: dict[str, ExportedDataset] = {"smiles": smiles_export}
     geometric_exports: dict[str, GeometricDatasetSpec] = {}
 
     moladt_index_path: Path | None = None
     moladt_export: ExportedDataset | None = None
     if include_moladt:
+        if verbose:
+            log_stage("freesolv", 4, total_stages, "Aligning SDF records and building MolADT feature tables")
         sdf_frame, sdf_failures = _align_freesolv_sdf(downloads, processed_frame)
         sdf_failure_path = PROCESSED_DATA_DIR / "freesolv_sdf_alignment_failures.csv"
         write_failure_csv(sdf_failure_path, sdf_failures)
         failure_paths.append(sdf_failure_path)
         if not sdf_frame.empty:
+            if verbose:
+                log(
+                    f"[freesolv 4/{total_stages}] aligned_sdf_records={len(sdf_frame)} "
+                    f"sdf_alignment_failures={len(sdf_failures)}"
+                )
             moladt_index_path = PROCESSED_DATA_DIR / "freesolv_moladt_index.csv"
             sdf_frame.drop(columns=["rdkit_mol"]).to_csv(moladt_index_path, index=False)
             moladt_table = featurize_moladt_records(
@@ -93,6 +124,12 @@ def process_freesolv_dataset(
                 seed=seed,
             )
             tabular_exports["moladt"] = moladt_export
+            if verbose:
+                log(
+                    f"[freesolv 4/{total_stages}] moladt_rows={len(moladt_table.rows)} "
+                    f"moladt_feature_failures={len(moladt_table.failures)} "
+                    f"train={len(moladt_export.y_train)} valid={len(moladt_export.y_valid)} test={len(moladt_export.y_test)}"
+                )
             moladt_typed_table = featurize_moladt_typed_records(
                 sdf_frame,
                 dataset_name="freesolv_moladt_typed",
@@ -112,6 +149,13 @@ def process_freesolv_dataset(
                     target_name="expt",
                     seed=seed,
                 )
+                if verbose:
+                    typed_export = tabular_exports["moladt_typed"]
+                    log(
+                        f"[freesolv 4/{total_stages}] moladt_typed_rows={len(moladt_typed_table.rows)} "
+                        f"moladt_typed_feature_failures={len(moladt_typed_table.failures)} "
+                        f"train={len(typed_export.y_train)} valid={len(typed_export.y_valid)} test={len(typed_export.y_test)}"
+                    )
             sdf_geom_table = featurize_sdf_geometry_records(
                 sdf_frame,
                 dataset_name="freesolv_sdf_geom",
@@ -131,6 +175,13 @@ def process_freesolv_dataset(
                     target_name="expt",
                     seed=seed,
                 )
+                if verbose:
+                    geom_export = geometric_exports["sdf_geom"]
+                    log(
+                        f"[freesolv 4/{total_stages}] sdf_geom_rows={len(sdf_geom_table.rows)} "
+                        f"sdf_geom_feature_failures={len(sdf_geom_table.failures)} "
+                        f"train={len(geom_export.train_indices)} valid={len(geom_export.valid_indices)} test={len(geom_export.test_indices)}"
+                    )
             moladt_geom_table = featurize_moladt_geometry_records(
                 sdf_frame,
                 dataset_name="freesolv_moladt_geom",
@@ -150,6 +201,13 @@ def process_freesolv_dataset(
                     target_name="expt",
                     seed=seed,
                 )
+                if verbose:
+                    geom_export = geometric_exports["moladt_geom"]
+                    log(
+                        f"[freesolv 4/{total_stages}] moladt_geom_rows={len(moladt_geom_table.rows)} "
+                        f"moladt_geom_feature_failures={len(moladt_geom_table.failures)} "
+                        f"train={len(geom_export.train_indices)} valid={len(geom_export.valid_indices)} test={len(geom_export.test_indices)}"
+                    )
             moladt_typed_geom_table = featurize_moladt_typed_geometry_records(
                 sdf_frame,
                 dataset_name="freesolv_moladt_typed_geom",
@@ -169,7 +227,19 @@ def process_freesolv_dataset(
                     target_name="expt",
                     seed=seed,
                 )
+                if verbose:
+                    geom_export = geometric_exports["moladt_typed_geom"]
+                    log(
+                        f"[freesolv 4/{total_stages}] moladt_typed_geom_rows={len(moladt_typed_geom_table.rows)} "
+                        f"moladt_typed_geom_feature_failures={len(moladt_typed_geom_table.failures)} "
+                        f"train={len(geom_export.train_indices)} valid={len(geom_export.valid_indices)} test={len(geom_export.test_indices)}"
+                    )
         else:
+            if verbose:
+                log(
+                    f"[freesolv 4/{total_stages}] aligned_sdf_records=0 "
+                    f"sdf_alignment_failures={len(sdf_failures)}; falling back to SMILES-derived MolADT features"
+                )
             moladt_table = featurize_moladt_smiles_dataframe(
                 processed_frame,
                 dataset_name="freesolv_moladt_smiles_fallback",
@@ -189,6 +259,16 @@ def process_freesolv_dataset(
                     seed=seed,
                 )
                 tabular_exports["moladt"] = moladt_export
+                if verbose:
+                    log(
+                        f"[freesolv 4/{total_stages}] moladt_smiles_fallback_rows={len(moladt_table.rows)} "
+                        f"moladt_feature_failures={len(moladt_table.failures)} "
+                        f"train={len(moladt_export.y_train)} valid={len(moladt_export.y_valid)} test={len(moladt_export.y_test)}"
+                    )
+    if verbose:
+        tabular_keys = ", ".join(sorted(tabular_exports))
+        geometric_keys = ", ".join(sorted(geometric_exports)) or "(none)"
+        log(f"[freesolv] prepared exports: tabular={tabular_keys}; geometric={geometric_keys}")
     return FreeSolvArtifacts(
         processed_csv_path=processed_csv_path,
         moladt_index_path=moladt_index_path,
@@ -273,12 +353,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--skip-moladt", dest="skip_moladt", action="store_true")
     parser.add_argument("--skip-sdf", dest="skip_moladt", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--verbose", action="store_true")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    artifacts = process_freesolv_dataset(seed=args.seed, force=args.force, include_moladt=not args.skip_moladt)
+    artifacts = process_freesolv_dataset(
+        seed=args.seed,
+        force=args.force,
+        include_moladt=not args.skip_moladt,
+        verbose=args.verbose,
+    )
     print(artifacts.processed_csv_path)
     if artifacts.moladt_index_path is not None:
         print(artifacts.moladt_index_path)
