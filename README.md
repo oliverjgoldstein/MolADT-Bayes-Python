@@ -1,27 +1,30 @@
 # MolADT-Bayes-Python
 
-MolADT is a chemistry-first molecular ADT for building models over molecules. It keeps atoms, sigma bonds, explicit bonding systems, coordinates, shells, and orbitals visible instead of flattening everything into a serializer-oriented string.
+MolADT is a typed molecular data format. The goal is to represent molecules in a way that exposes chemically meaningful structure and invariances, especially when doing Bayesian sampling over molecules or building models over molecular structure.
 
 Start here: [Quickstart](docs/quickstart.md)
 
 ## Example
 
-Standard SMILES for diborane:
-`[BH2]1[H][BH2][H]1`
+Diborane, ferrocene, and morphine show the boundary quickly.
 
-MolADT can keep the chemistry more directly:
+- diborane in standard SMILES: `[BH2]1[H][BH2][H]1`
+- ferrocene in standard SMILES: `[CH-]1C=CC=C1.[CH-]1C=CC=C1.[Fe+2]`
+- morphine in standard stereochemical SMILES: `CN1CC[C@]23C4=C5C=CC(O)=C4O[C@H]2[C@@H](O)C=C[C@H]3[C@H]1C5`
 
-- two boron atoms
-- two terminal hydrogens
-- two explicit `3c-2e` bridge systems
+Those are useful boundary strings, but they are poor central representations.
 
-That is the point of the project: keep SMILES at the boundary, keep the chemistry object in the center, and make that object usable for models over molecules.
+- diborane wants two explicit `3c-2e` bridge systems
+- ferrocene wants shared Cp/metal bonding systems, not disconnected ionic fragments
+- morphine still pushes fused-ring bookkeeping and five atom-centered stereo flags into string syntax
+
+MolADT instead stores that chemistry directly in typed data. The point of the project is to put molecules into a format whose structure respects chemically meaningful invariances. SMILES is fine at the edge, but it is notation-dependent, folds chemistry into syntax, and becomes awkward exactly where richer molecular structure starts to matter. In the morphine example, the explicit MolADT object keeps the fused sigma graph direct and preserves the parsed SMILES stereo flags beside it.
 
 ## What This Repo Contains
 
 - the Python MolADT types, parser, renderer, and pretty-printer
 - example molecules including diborane, ferrocene, and morphine
-- model and experiment tooling built around the representation
+- Bayesian modeling and experiment tooling built around the representation
 
 For the representation itself:
 

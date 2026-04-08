@@ -24,10 +24,11 @@ Use `parse-smiles`.
 
 This parses the conservative SMILES subset, validates it, and prints the MolADT structure.
 
-Inside that boundary, `parse-smiles` now does two useful recovery passes after reading the graph:
+Inside that boundary, `parse-smiles` now does three useful lifts after reading the graph:
 
 - it infers terminal hydrogens for supported bare atoms such as `C`, `N`, `O`, and aromatic lowercase atoms
 - it promotes recoverable six-membered delocalized cycles into explicit Dietz `pi_ring` systems when the SMILES uses aromatic lowercase syntax, including ring-closure edges
+- it preserves atom-centered `@`/`@@` and bond-directed `/` `\` annotations in `smiles_stereochemistry`
 
 Use `parse-smiles` when you want to see what a SMILES string becomes inside MolADT.
 
@@ -42,6 +43,7 @@ Use `to-smiles`.
 This renders a validated MolADT molecule back to the supported classical SMILES subset.
 
 Not every MolADT molecule can be rendered to SMILES. That is a feature, not a bug: MolADT is broader than the current renderer.
+The parser keeps SMILES stereochemistry flags on the MolADT object, but the current renderer does not yet synthesize those flags back out.
 
 ## If You Want a Rich Example
 

@@ -40,7 +40,7 @@ DIBORANE_MANUSCRIPT = ManuscriptExample(
 MORPHINE_MANUSCRIPT = ManuscriptExample(
     slug="morphine",
     title="Morphine (explicit Dietz skeleton)",
-    note="Dietz-style ADT that spells the five classic SMILES ring closures out as sigma edges and keeps the phenyl ring as an explicit pi system.",
+    note="Dietz-style ADT that turns the five classic SMILES ring closures into sigma edges, keeps the phenyl ring as an explicit pi system, and preserves the five atom-centered stereochemistry flags from the standard boundary string.",
     molecule=morphine_pretty,
 )
 

@@ -8,7 +8,7 @@ This repo includes two small SDF files in `molecules/` and several built-in MolA
 | --- | --- | --- | --- | --- |
 | Benzene | [`molecules/benzene.sdf`](../molecules/benzene.sdf), [`moladt/examples/benzene.py`](../moladt/examples/benzene.py), [`moladt/examples/benzene_pretty.py`](../moladt/examples/benzene_pretty.py) | `./.venv/bin/python -m moladt.cli parse molecules/benzene.sdf` | A classical six-membered ring with one `pi_ring` Dietz system | Both file-backed and built-in |
 | Water | [`molecules/water.sdf`](../molecules/water.sdf), [`moladt/examples/sample_molecules.py`](../moladt/examples/sample_molecules.py) | `./.venv/bin/python -m moladt.cli parse molecules/water.sdf` | A minimal classical molecule used for round-trip and SMILES tests | Both file-backed and built-in |
-| Morphine | [`moladt/examples/morphine.py`](../moladt/examples/morphine.py), [`moladt/examples/manuscript.py`](../moladt/examples/manuscript.py) | `./.venv/bin/python -m moladt.cli pretty-example morphine` | Explicit Dietz version of the classic five-ring-closure morphine sketch | Built-in object |
+| Morphine | [`moladt/examples/morphine.py`](../moladt/examples/morphine.py), [`moladt/examples/manuscript.py`](../moladt/examples/manuscript.py) | `./.venv/bin/python -m moladt.cli pretty-example morphine` | Explicit Dietz version of the classic morphine sketch, with the standard SMILES stereochemistry flags preserved on the object | Built-in object |
 | Ferrocene | [`moladt/examples/ferrocene.py`](../moladt/examples/ferrocene.py), [`moladt/examples/manuscript.py`](../moladt/examples/manuscript.py) | `./.venv/bin/python -m moladt.cli pretty-example ferrocene` | Two cyclopentadienyl `pi` systems plus an Fe back-donation-style pool | Built-in object |
 | Diborane | [`moladt/examples/diborane.py`](../moladt/examples/diborane.py), [`moladt/examples/manuscript.py`](../moladt/examples/manuscript.py) | `./.venv/bin/python -m moladt.cli pretty-example diborane` | Two explicit `3c-2e` bridging hydrogen systems | Built-in object |
 
@@ -49,10 +49,10 @@ Use:
 
 ```bash
 ./.venv/bin/python -m moladt.cli pretty-example morphine
-./.venv/bin/python -m moladt.cli parse-smiles "O1C2C(O)C=C(C3C2(C4)C5c1c(O)ccc5CC3N(C)C4)"
+./.venv/bin/python -m moladt.cli parse-smiles "CN1CC[C@]23C4=C5C=CC(O)=C4O[C@H]2[C@@H](O)C=C[C@H]3[C@H]1C5"
 ```
 
-Morphine is the cleanest built-in example of why the Dietz ADT is not just a parsed string. The classic figure writes five ring closures as SMILES digits, while the built-in MolADT object stores those closures directly as sigma edges and marks the alkene plus phenyl ring as explicit bonding systems.
+Morphine is the cleanest built-in example of why the Dietz ADT is not just a parsed string. The standard boundary SMILES carries ring digits, a localized double-bond pattern, and five atom-centered stereochemistry flags, while the built-in MolADT object stores the fused graph directly as sigma edges, keeps the alkene plus phenyl ring as explicit bonding systems, and preserves those five flags in `smiles_stereochemistry`. The conservative `parse-smiles` path keeps the localized double bonds explicit; the built-in morphine object then groups the alkene and phenyl fragment into Dietz systems on purpose.
 
 ## Ferrocene
 
@@ -84,9 +84,9 @@ Diborane shows explicit multicenter bonding with two bridging hydrogen systems. 
 
 | Example | SMILES Side | MolADT Side |
 | --- | --- | --- |
-| Diborane | No faithful conservative SMILES string in this repo. | `pretty-example diborane` shows two explicit `3c-2e` Dietz bridge systems over the bridging hydrogens. |
-| Ferrocene | No faithful conservative SMILES string in this repo. | `pretty-example ferrocene` shows the Fe-centered object with two Cp `pi` systems and one `fe_backdonation` pool. |
-| Morphine | `O1C2C(O)C=C(C3C2(C4)C5c1c(O)ccc5CC3N(C)C4)` | `pretty-example morphine` shows the same fused graph as direct `local_bonds` plus explicit `alkene_bridge` and `phenyl_pi_ring` systems. |
+| Diborane | `[BH2]1[H][BH2][H]1` is standard, but it does not say "two explicit 3c-2e bridges". | `pretty-example diborane` shows two explicit `3c-2e` Dietz bridge systems over the bridging hydrogens. |
+| Ferrocene | `[CH-]1C=CC=C1.[CH-]1C=CC=C1.[Fe+2]` is standard, but it splits the sandwich into ionic fragments. | `pretty-example ferrocene` shows the Fe-centered object with two Cp `pi` systems and one `fe_backdonation` pool. |
+| Morphine | `CN1CC[C@]23C4=C5C=CC(O)=C4O[C@H]2[C@@H](O)C=C[C@H]3[C@H]1C5` | `pretty-example morphine` shows the same fused graph as direct `local_bonds`, explicit `alkene_bridge` and `phenyl_pi_ring` systems, and preserved atom-centered stereochemistry flags. |
 
 ## Related Example Modules
 

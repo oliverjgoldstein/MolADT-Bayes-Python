@@ -28,12 +28,13 @@ MolADT starts from the chemistry object first and treats SMILES as one possible 
 
 Take the built-in diborane example.
 
-In a SMILES-first view, this is awkward immediately:
+In a SMILES-first view, standard notation is already flattening the chemistry:
 
 ```text
-Diborane has two bridging hydrogens with 3c-2e bonding.
-There is no clean conservative SMILES string in this repo that says that directly.
-Any SMILES-style encoding would have to hide, approximate, or flatten the bridge systems.
+[BH2]1[H][BH2][H]1
+
+That is a recognizable boundary string, but it still does not say
+"two explicit 3c-2e bridge systems".
 ```
 
 In MolADT, the structure is stated directly:
@@ -60,36 +61,45 @@ Bonding systems (2):
 
 That is the point of the representation. The unusual bonding is not an edge case bolted onto a string format later; it is part of the molecule object itself.
 
-Ferrocene makes the same point even more strongly: the built-in `pretty-example ferrocene` output can show two cyclopentadienyl `pi` systems plus an Fe back-donation-style pool, while the current conservative SMILES path intentionally refuses to pretend that this is just an ordinary localized graph.
+Ferrocene makes the same point even more strongly. Standard SMILES can write it as:
+
+```text
+[CH-]1C=CC=C1.[CH-]1C=CC=C1.[Fe+2]
+```
+
+That is useful as a boundary string, but it breaks the sandwich into disconnected ionic fragments instead of the shared Cp/metal pools that the MolADT example stores directly.
 
 ## Morphine and Ring Closures
 
-The classic morphine figure takes the opposite route from diborane. It stays classical, but it still needs SMILES ring-closure machinery to talk about the fused skeleton:
+Morphine shows the classical side of the same boundary. The standard stereochemical SMILES is:
 
 ```text
-O1C2C(O)C=C(C3C2(C4)C5c1c(O)ccc5CC3N(C)C4)
+CN1CC[C@]23C4=C5C=CC(O)=C4O[C@H]2[C@@H](O)C=C[C@H]3[C@H]1C5
 ```
 
-Those digits are serialization backreferences. They mean:
+That boundary string is faithful for the classical graph, but it still pushes fused-ring bookkeeping, localized double-bond syntax, and atom-centered `@`/`@@` flags into string syntax.
 
-- `1` reconnects `O#1` and `C#11`
-- `2` reconnects `C#2` and `C#8`
-- `3` reconnects `C#7` and `C#18`
-- `4` reconnects `C#9` and `C#21`
-- `5` reconnects `C#10` and `C#16`
+In the built-in morphine example at [`moladt/examples/morphine.py`](../moladt/examples/morphine.py), the five classical ring-closure edges from the standard sketch are already ordinary `local_bonds`:
 
-In the built-in morphine example at [`moladt/examples/morphine.py`](../moladt/examples/morphine.py), those same five closures are already ordinary `local_bonds`. The explicit Dietz object then goes beyond the boundary string:
+- `O#1 <-> C#11`
+- `C#2 <-> C#8`
+- `C#7 <-> C#18`
+- `C#9 <-> C#21`
+- `C#10 <-> C#16`
+
+The explicit Dietz object then keeps the remaining structure equally direct:
 
 - `C#5 <-> C#6` is an explicit two-electron system tagged `alkene_bridge`
 - the phenyl fragment `C#10-C#11-C#12-C#14-C#15-C#16` is an explicit six-electron system tagged `phenyl_pi_ring`
+- the five atom-centered flags are preserved in `smiles_stereochemistry.atom_stereo` as centers `#2`, `#3`, `#7`, `#8`, and `#18`
 
-That is the direct comparison to the image. The image explains how to turn a fused polycycle into SMILES text. MolADT stores the fused polycycle and its delocalization directly, without ring digits as an internal representation.
+That is the direct comparison to the image. SMILES is still a useful boundary notation, but MolADT stores the fused polycycle, its delocalization, and its parsed stereochemistry flags directly instead of making string syntax the center of the representation. The conservative `parse-smiles` path keeps the Kekule-style double bonds from the boundary string explicit; the hand-built morphine example then groups the alkene and phenyl fragment into Dietz systems on purpose.
 
 Use:
 
 ```bash
 ./.venv/bin/python -m moladt.cli pretty-example morphine
-./.venv/bin/python -m moladt.cli parse-smiles "O1C2C(O)C=C(C3C2(C4)C5c1c(O)ccc5CC3N(C)C4)"
+./.venv/bin/python -m moladt.cli parse-smiles "CN1CC[C@]23C4=C5C=CC(O)=C4O[C@H]2[C@@H](O)C=C[C@H]3[C@H]1C5"
 ```
 
 The first command shows the explicit Dietz object. The second shows the boundary-format parse path based on the same figure.
@@ -98,9 +108,9 @@ The first command shows the explicit Dietz object. The second shows the boundary
 
 | Example | SMILES Side | MolADT Side |
 | --- | --- | --- |
-| Diborane | No faithful conservative SMILES string in this repo. A classical SMILES graph would flatten or hide the two `3c-2e` bridges. | [`moladt/examples/diborane.py`](../moladt/examples/diborane.py) stores 5 ordinary sigma edges and 2 explicit Dietz bridge systems: `bridge_h3_3c2e` and `bridge_h4_3c2e`. |
-| Ferrocene | No faithful conservative SMILES string in this repo. Standard classical SMILES does not encode the Fe-centered shared pools used here. | [`moladt/examples/ferrocene.py`](../moladt/examples/ferrocene.py) stores the sandwich graph directly, plus `cp1_pi`, `cp2_pi`, and `fe_backdonation` Dietz systems. |
-| Morphine | `O1C2C(O)C=C(C3C2(C4)C5c1c(O)ccc5CC3N(C)C4)` expresses the fused graph through ring digits and aromatic lowercase syntax. | [`moladt/examples/morphine.py`](../moladt/examples/morphine.py) stores the same fused graph directly in `local_bonds`, then makes the delocalization explicit with `alkene_bridge` and `phenyl_pi_ring`. |
+| Diborane | `[BH2]1[H][BH2][H]1` is a standard boundary string, but it flattens the two bridging hydrogens instead of saying "two explicit 3c-2e bridges". | [`moladt/examples/diborane.py`](../moladt/examples/diborane.py) stores 5 ordinary sigma edges and 2 explicit Dietz bridge systems: `bridge_h3_3c2e` and `bridge_h4_3c2e`. |
+| Ferrocene | `[CH-]1C=CC=C1.[CH-]1C=CC=C1.[Fe+2]` is a standard boundary string, but it splits the sandwich into ionic fragments instead of shared Cp/metal pools. | [`moladt/examples/ferrocene.py`](../moladt/examples/ferrocene.py) stores the sandwich graph directly, plus `cp1_pi`, `cp2_pi`, and `fe_backdonation` Dietz systems. |
+| Morphine | `CN1CC[C@]23C4=C5C=CC(O)=C4O[C@H]2[C@@H](O)C=C[C@H]3[C@H]1C5` expresses the fused graph through ring digits, localized double-bond syntax, and five atom-centered stereo flags. | [`moladt/examples/morphine.py`](../moladt/examples/morphine.py) stores the same fused graph directly in `local_bonds`, keeps the alkene and phenyl delocalization explicit, and preserves the five atom-centered SMILES flags in `smiles_stereochemistry`. |
 
 That is the recurring boundary in this repo: use SMILES where the notation actually carries the information, and switch to explicit Dietz systems where SMILES would only approximate or omit it.
 

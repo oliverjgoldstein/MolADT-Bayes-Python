@@ -25,6 +25,8 @@ def test_morphine_pretty_rendering_includes_explicit_ring_and_pi_systems() -> No
     assert "Molecule with 21 atoms, 25 sigma bonds, 2 bonding systems" in rendered
     assert "System 1 [alkene_bridge]: 2 shared electrons" in rendered
     assert "System 2 [phenyl_pi_ring]: 6 shared electrons" in rendered
+    assert "SMILES stereochemistry:" in rendered
+    assert "center #3: TH2 from token @@" in rendered
 
 
 def test_manuscript_examples_render_titles_and_notes() -> None:
@@ -36,4 +38,4 @@ def test_manuscript_examples_render_titles_and_notes() -> None:
     assert "Diborane (B2H6)" in diborane_text
     assert "3c-2e bridging hydrogen bonding systems" in diborane_text
     assert "Morphine (explicit Dietz skeleton)" in morphine_text
-    assert "five classic SMILES ring closures" in morphine_text
+    assert "atom-centered stereochemistry flags" in morphine_text

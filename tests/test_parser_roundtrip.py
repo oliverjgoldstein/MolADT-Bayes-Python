@@ -45,8 +45,17 @@ def test_morphine_ring_closure_smiles_parses_as_a_boundary_format_example() -> N
     counts = Counter(atom.attributes.symbol.value for atom in molecule.atoms.values())
     assert counts == Counter({"C": 17, "H": 19, "N": 1, "O": 3})
     assert len(molecule.local_bonds) == 44
-    assert [system.tag for _, system in molecule.systems] == [None, "pi_ring"]
-    assert molecule.smiles_stereochemistry.atom_stereo == ()
+    assert [system.tag for _, system in molecule.systems] == [None, None, None, None]
+    assert [
+        (item.center.value, item.stereo_class.value, item.configuration, item.token)
+        for item in molecule.smiles_stereochemistry.atom_stereo
+    ] == [
+        (5, "TH", 1, "@"),
+        (14, "TH", 1, "@"),
+        (16, "TH", 2, "@@"),
+        (21, "TH", 1, "@"),
+        (23, "TH", 1, "@"),
+    ]
 
 
 def test_bare_atoms_infer_terminal_hydrogens() -> None:

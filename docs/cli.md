@@ -36,6 +36,7 @@ What it validates now:
 - atom, bond, and ring-closure syntax inside that subset
 - terminal-hydrogen inference for supported bare atoms
 - six-membered `pi_ring` recovery from aromatic lowercase syntax
+- atom-centered `@`/`@@` and bond-directed `/` `\` annotations, stored on `smiles_stereochemistry`
 - structural validation through `validate_molecule`, including valence checks and bond-map consistency
 
 On success it prints the pretty-printed MolADT structure. It does not print a title or property block because the source is a SMILES string, not an SDF record.
@@ -51,6 +52,10 @@ What it accepts now:
 - validated molecules in the conservative classical subset
 - localized single, double, and triple bonds
 - six-edge `pi_ring` systems that can be rendered as aromatic or deterministic Kekule-style output
+
+Current limitation:
+
+- stored `smiles_stereochemistry` annotations are preserved on parse, but the renderer does not yet emit `@`, `@@`, `/`, or `\`
 
 What it rejects now:
 

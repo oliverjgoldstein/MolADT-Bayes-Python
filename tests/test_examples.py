@@ -14,3 +14,16 @@ def test_ferrocene_constructs_a_valid_molecule() -> None:
 
 def test_morphine_constructs_a_valid_molecule() -> None:
     assert validate_molecule(morphine_pretty) == morphine_pretty
+
+
+def test_morphine_example_keeps_the_documented_stereochemistry_flags() -> None:
+    assert [
+        (item.center.value, item.stereo_class.value, item.configuration, item.token)
+        for item in morphine_pretty.smiles_stereochemistry.atom_stereo
+    ] == [
+        (2, "TH", 1, "@"),
+        (3, "TH", 2, "@@"),
+        (7, "TH", 1, "@"),
+        (8, "TH", 1, "@"),
+        (18, "TH", 1, "@"),
+    ]

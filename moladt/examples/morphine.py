@@ -3,19 +3,31 @@ from __future__ import annotations
 from ..chem.constants import element_attributes, element_shells
 from ..chem.coordinate import Coordinate, mk_angstrom
 from ..chem.dietz import AtomId, NonNegative, SystemId, mk_bonding_system, mk_edge
-from ..chem.molecule import Atom, AtomicSymbol, Molecule
+from ..chem.molecule import (
+    Atom,
+    AtomicSymbol,
+    Molecule,
+    SmilesAtomStereo,
+    SmilesAtomStereoClass,
+    SmilesStereochemistry,
+)
 
 
-MORPHINE_RING_CLOSURE_SMILES = "O1C2C(O)C=C(C3C2(C4)C5c1c(O)ccc5CC3N(C)C4)"
+MORPHINE_RING_CLOSURE_SMILES = "CN1CC[C@]23C4=C5C=CC(O)=C4O[C@H]2[C@@H](O)C=C[C@H]3[C@H]1C5"
 
 # The atom numbering follows the non-cyclic morphine sketch in the classic
-# ring-closure figure. The five SMILES closure digits become ordinary sigma
-# edges here:
+# ring-closure figure. In that sketch, the five broken edges that later become
+# SMILES ring closures are ordinary sigma edges here:
 #   1 -> (1, 11)
 #   2 -> (2, 8)
 #   3 -> (7, 18)
 #   4 -> (9, 21)
 #   5 -> (10, 16)
+#
+# The standard stereochemical boundary string used in the docs is:
+#   CN1CC[C@]23C4=C5C=CC(O)=C4O[C@H]2[C@@H](O)C=C[C@H]3[C@H]1C5
+# Its five atom-centered stereochemistry flags are preserved below as SMILES
+# annotations on the explicit Dietz object.
 #
 # Coordinates are schematic rather than experimental. The point of this
 # example is the explicit Dietz constitution: local sigma edges plus an alkene
@@ -121,5 +133,13 @@ morphine_pretty = Molecule(
             ),
         ),
     ),
+    smiles_stereochemistry=SmilesStereochemistry(
+        atom_stereo=(
+            SmilesAtomStereo(AtomId(2), SmilesAtomStereoClass.TETRAHEDRAL, 1, "@"),
+            SmilesAtomStereo(AtomId(3), SmilesAtomStereoClass.TETRAHEDRAL, 2, "@@"),
+            SmilesAtomStereo(AtomId(7), SmilesAtomStereoClass.TETRAHEDRAL, 1, "@"),
+            SmilesAtomStereo(AtomId(8), SmilesAtomStereoClass.TETRAHEDRAL, 1, "@"),
+            SmilesAtomStereo(AtomId(18), SmilesAtomStereoClass.TETRAHEDRAL, 1, "@"),
+        ),
+    ),
 )
-
