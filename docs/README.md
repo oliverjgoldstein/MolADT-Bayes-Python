@@ -7,7 +7,7 @@ The main README is now the short front door. This folder keeps the rest.
 - [MolADT representation](representation.md)
 - [Orbitals and theoretical chemistry](orbitals.md)
 - [Parsing and rendering](parsing.md)
-- [Models and benchmarks](models.md)
+- [Models and features](models.md)
 - [Outputs](outputs.md)
 
 ## Deeper Reference

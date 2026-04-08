@@ -1,85 +1,61 @@
-# Models and Benchmarks
+# Models and Features
 
-The main README now points to three focused commands:
+This page explains how MolADT is turned into model inputs.
 
-```bash
-make freesolv
-make qm9
-make timing
-```
+The short version is:
 
-These are the user-facing paths. They are intentionally narrower than the older full benchmark sweep.
+- MolADT keeps more chemistry visible than a reduced graph or a SMILES string
+- the repo then derives feature tables or geometry model inputs from that molecule object
+- those features are what the predictive models consume
 
-## FreeSolv
+## Representation Branches
 
-```bash
-make freesolv
-```
+The main Python benchmark uses three MolADT-facing branches:
 
-This runs the hydration free energy benchmark on `expt`.
+- `moladt`
+- `moladt_typed`, shown as `MolADT+`
+- `moladt_typed_geom`, shown as `MolADT+ 3D`
 
-It uses:
+The comparison also includes `smiles` and `sdf_geom` baselines where appropriate.
 
-- `catboost_uncertainty` for the fair tabular `smiles` vs `moladt` vs `moladt_typed` comparison
-- `dimenetpp_ensemble` for the geometry-aware `sdf_geom`, `moladt_geom`, and `moladt_typed_geom` rows
+## What The Features Mean
 
-The repo vendors the raw FreeSolv source files for this path: `data/raw/freesolv/SAMPL.csv` plus `data/raw/freesolv/sdffiles/*.sdf`. Provenance and upstream links are listed in [Data sources](data-sources.md).
+### `smiles`
 
-The point is to keep the strong shared tabular baseline while letting the geometry branch use the model family that currently best fits this task in the repo.
+This is the string-first baseline. Features come from the conventional SMILES path instead of the explicit MolADT object.
 
-## QM9
+### `moladt`
 
-```bash
-make qm9
-```
+This is the first molecule-object path. It uses descriptors derived from the explicit ADT, such as:
 
-This runs the QM9 dipole moment benchmark on `mu`.
+- atom and element counts
+- bond and connectivity summaries
+- bonding-system summaries
+- geometry summaries when coordinates are available
 
-It uses:
+The point is that the features are extracted from the chemistry object, not reverse-engineered from a string.
 
-- `catboost_uncertainty` for the fair tabular comparison
-- `visnet_ensemble` for the geometry-aware rows
+### `moladt_typed` / `MolADT+`
 
-This matches the tensorial and geometry-heavy character of the dipole task better than reusing the same geometry preference as FreeSolv.
+This is the richer descriptor branch. It adds more structured channels over the molecule, including:
 
-The repo vendors the normalized QM9 source files for this path: `data/raw/qm9/qm9.sdf` and `data/raw/qm9/qm9.sdf.csv`.
+- typed pair counts and interactions
+- radial distance channels
+- bond-angle channels
+- torsion channels
+- bonding-system summaries
 
-If you want the paper-sized split instead of the local default subset:
+This is where the representation starts to act less like a flat descriptor table and more like a typed chemistry object being projected into model space.
 
-```bash
-INFERENCE_PRESET=paper QM9_LIMIT= QM9_SPLIT_MODE=paper make qm9
-```
+### `moladt_typed_geom` / `MolADT+ 3D`
 
-That paper-style QM9 split is `110462 / 10000 / 10000`, for `130,462` molecules total.
+This keeps the richer MolADT view and adds the geometry-aware model path on top.
 
-## ZINC Timing
+That branch is for models that can exploit 3D structure instead of only tabular summaries.
 
-```bash
-make timing
-```
+## Model Families
 
-This builds the local matched timing corpus and measures:
-
-- raw file IO
-- RDKit SMILES parse and sanitize
-- RDKit canonicalization
-- local timing-library build
-- MolADT SMILES parsing
-- MolADT file parsing
-
-The repo vendors the normalized ZINC source file for this path: `data/raw/zinc/zinc15_250K_2D.csv`.
-
-## Why The README No Longer Starts With Stan
-
-The old Stan baselines are still in the repo, but they are no longer the front-door story.
-
-- They are useful for manuscript context and ablation.
-- They are not the best user-facing demonstration of the representation.
-- The focused commands keep the comparison centered on the strongest non-degenerate paths now in the repo.
-
-## All Model Families Still Present
-
-The repo still contains five predictive model families:
+The repo contains five predictive model families:
 
 - `bayes_linear_student_t`
 - `bayes_hierarchical_shrinkage`
@@ -87,8 +63,36 @@ The repo still contains five predictive model families:
 - `visnet_ensemble`
 - `dimenetpp_ensemble`
 
-The front-page commands just stop making the Stan baselines the default experience.
+They do not all consume the exact same input form.
 
-## Deep Reference
+- the Bayesian and CatBoost paths consume exported feature tables
+- the geometry model families consume 3D molecular structure through their own model-specific pipelines
 
-For the full protocol, legacy benchmark commands, and lower-level options, see [Inference and benchmarks](inference-and-benchmarks.md).
+## Why This Matters
+
+The representation is not there just to print prettier molecules.
+
+It is there so models can be built over:
+
+- explicit bonding systems
+- typed local structure
+- shell and orbital context
+- geometry when available
+
+That is the claim of the repo: richer chemistry objects can support richer model inputs.
+
+## Benchmark Commands
+
+The benchmark commands remain:
+
+```bash
+make freesolv
+make qm9
+make timing
+```
+
+- `make freesolv` is the lightest end-to-end run
+- `make qm9` runs the focused dipole benchmark
+- `make timing` measures SMILES vs MolADT ingest cost
+
+For the broader protocol and benchmark details, see [Inference and benchmarks](inference-and-benchmarks.md).
