@@ -37,6 +37,7 @@ QM9_CSV_URL = "https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/qm9.csv"
 
 ZINC_URL_TEMPLATE = "https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/zinc15_{dataset_size}_{dataset_dimension}.tar.gz"
 GITHUB_FILE_SIZE_LIMIT_BYTES = 100_000_000
+TRANSFER_CHUNK_SIZE_BYTES = 4 * 1024 * 1024
 
 
 def configured_results_dir() -> Path:
@@ -91,6 +92,16 @@ def _format_bytes(num_bytes: float) -> str:
     return f"{value:.1f} TiB"
 
 
+def _format_duration(seconds: float) -> str:
+    if seconds < 60.0:
+        return f"{seconds:.1f}s"
+    minutes, remainder = divmod(int(seconds), 60)
+    if minutes < 60:
+        return f"{minutes}m {remainder:02d}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h {minutes:02d}m"
+
+
 def _parse_content_length(raw_value: str | None) -> int | None:
     if raw_value is None:
         return None
@@ -140,7 +151,7 @@ class _ProgressReporter:
 
     def _emit(self, *, force: bool) -> None:
         now = time.monotonic()
-        interval = 0.2 if self.dynamic else 5.0
+        interval = 0.2 if self.dynamic else 1.0
         if not force and now - self.last_emit_time < interval:
             return
         message = self._format_message(now)
@@ -168,7 +179,13 @@ class _ProgressReporter:
         elif self.items_done:
             parts.append(f"{self.items_done} {self.item_label}")
         elapsed = max(now - self.start_time, 1e-9)
-        parts.append(f"{_format_bytes(self.bytes_done / elapsed)}/s")
+        bytes_per_second = self.bytes_done / elapsed
+        parts.append(f"{_format_bytes(bytes_per_second)}/s")
+        parts.append(f"elapsed {_format_duration(elapsed)}")
+        if self.total_bytes is not None and self.bytes_done > 0 and self.bytes_done < self.total_bytes:
+            remaining_bytes = self.total_bytes - self.bytes_done
+            eta_seconds = remaining_bytes / max(bytes_per_second, 1e-9)
+            parts.append(f"eta {_format_duration(eta_seconds)}")
         return f"{self.label}: {', '.join(parts)}"
 
 
@@ -210,7 +227,7 @@ def _copy_stream(
     destination: BinaryIO,
     reporter: _ProgressReporter | None,
     *,
-    chunk_size: int = 1024 * 1024,
+    chunk_size: int = TRANSFER_CHUNK_SIZE_BYTES,
 ) -> None:
     while True:
         chunk = source.read(chunk_size)
@@ -240,7 +257,7 @@ def download_file(url: str, destination: Path, *, force: bool = False, timeout_s
             if reporter is None:
                 log(f"Downloading {url} -> {display_path(destination)}")
             with temp_path.open("wb") as handle:
-                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                for chunk in response.iter_content(chunk_size=TRANSFER_CHUNK_SIZE_BYTES):
                     if not chunk:
                         continue
                     handle.write(chunk)

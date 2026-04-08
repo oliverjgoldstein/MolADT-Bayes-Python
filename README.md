@@ -22,9 +22,13 @@ Those are the front-door commands.
 
 The raw source files those commands use live in this repo under `data/raw/`.
 
+If a raw dataset file is too large to keep in GitHub, the download path fetches it on demand. Large transfers and archive extraction show live byte counts, extraction entry counts, throughput, and elapsed time.
+
 ## Representation
 
 MolADT keeps atoms, sigma bonds, Dietz-style bonding systems, coordinates, shells, and orbitals explicit.
+
+If you want the orbital layer explained on its own, see [Orbitals and theoretical chemistry](docs/orbitals.md).
 
 In the benchmark, that appears as three MolADT-facing branches:
 
@@ -43,6 +47,64 @@ In the benchmark, that appears as three MolADT-facing branches:
 | Morphine | Wikipedia SMILES: `CN1CC[C@]23C4=C5C=CC(O)=C4O[C@H]2[C@@H](O)C=C[C@H]3[C@H]1C5`. This is a faithful standard boundary string for the classical graph and stereochemistry. | [`moladt/examples/morphine.py`](moladt/examples/morphine.py) stores the fused graph directly in `local_bonds` and makes the delocalization explicit with `alkene_bridge` and `phenyl_pi_ring`. |
 
 That is the intended boundary: keep what SMILES really says when it is present, and use explicit Dietz systems where SMILES would otherwise flatten or omit the chemistry.
+
+### Immutability and Traversal
+
+In Python, `Molecule` is immutable. Its top-level fields are exposed as read-only values:
+
+- `atoms`
+- `local_bonds`
+- `systems`
+- `smiles_stereochemistry`
+
+You can destructure those four fields directly because `Molecule.__iter__` yields them in that order:
+
+```python
+atoms, local_bonds, systems, smiles_stereochemistry = molecule
+```
+
+You can then iterate or sample from each attribute explicitly:
+
+```python
+atom_id, atom = next(iter(molecule.atoms.items()))
+edge = next(iter(molecule.local_bonds))
+system_entry = next(iter(molecule.systems), None)
+atom_stereo = next(iter(molecule.smiles_stereochemistry.atom_stereo), None)
+bond_stereo = next(iter(molecule.smiles_stereochemistry.bond_stereo), None)
+```
+
+The object itself does not mutate. If you want a changed molecule, construct a new one from the old one rather than editing in place.
+
+### Mutable Sampling Workspace
+
+For probabilistic sampling, proposal kernels, or local graph surgery, use `MutableMolecule` as a scratch state and freeze it back to `Molecule` when the proposal is ready.
+
+`MutableMolecule` keeps the same four top-level attributes, but stores them in mutable collections:
+
+- `atoms` as a `dict`
+- `local_bonds` as a `set`
+- `systems` as a `list`
+- `smiles_stereochemistry` as a replaceable `SmilesStereochemistry` value
+
+Create it from an immutable molecule with `molecule.to_mutable()` or `MutableMolecule.from_molecule(molecule)`:
+
+```python
+from dataclasses import replace
+
+from moladt import AtomId, MutableMolecule, SmilesStereochemistry
+
+state = MutableMolecule.from_molecule(molecule)
+
+state.local_bonds.clear()
+state.atoms[AtomId(1)] = replace(state.atoms[AtomId(1)], formal_charge=1)
+state.smiles_stereochemistry = SmilesStereochemistry()
+
+proposal = state.freeze()
+```
+
+The purpose is not to replace the immutable ADT. It gives samplers a writable workspace for birth-death moves, coordinate perturbations, charge proposals, and system edits, then returns to the canonical immutable `Molecule` for validation, serialization, and model input.
+
+The leaf records such as `Atom`, `BondingSystem`, and the stereo entries are still immutable value objects. In a sampler, you mutate the collections or replace those records wholesale rather than editing them in place.
 
 ## Why This Exists
 
@@ -93,6 +155,7 @@ The comparison charts now separate the fair tabular story from the mixed-family 
 ## Read More
 
 - [MolADT representation](docs/representation.md)
+- [Orbitals and theoretical chemistry](docs/orbitals.md)
 - [Parsing and rendering](docs/parsing.md)
 - [Models and benchmarks](docs/models.md)
 - [Data sources](docs/data-sources.md)

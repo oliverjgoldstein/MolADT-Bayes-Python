@@ -58,8 +58,10 @@ def test_download_file_reports_progress(capsys, monkeypatch, tmp_path: Path) -> 
     output = capsys.readouterr().out
     assert "Downloading" in output
     assert str(destination) in output
+    assert "8 B / 8 B" in output
     assert "100.0%" in output
     assert "/s" in output
+    assert "elapsed" in output
 
 
 def test_download_first_retries_after_partial_failure(capsys, monkeypatch, tmp_path: Path) -> None:
@@ -108,8 +110,10 @@ def test_extract_archive_reports_progress(capsys, tmp_path: Path) -> None:
         output = capsys.readouterr().out
         assert "Extracting" in output
         assert str(archive_path) in output
+        assert "1/1 entries" in output
         assert "100.0%" in output
         assert "/s" in output
+        assert "elapsed" in output
     finally:
         common.GITHUB_FILE_SIZE_LIMIT_BYTES = original_limit
 
@@ -132,6 +136,7 @@ def test_copy_if_needed_reports_progress(capsys, tmp_path: Path) -> None:
         assert str(destination) in output
         assert "100.0%" in output
         assert "/s" in output
+        assert "elapsed" in output
     finally:
         common.GITHUB_FILE_SIZE_LIMIT_BYTES = original_limit
 

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from math import sqrt
 from types import MappingProxyType
-from typing import Any, Mapping, Protocol, TypeAlias, cast
+from typing import Any, Iterator, Mapping, Protocol, TypeAlias, cast
 
 from .coordinate import Angstrom, Coordinate, mk_angstrom
 from .dietz import AtomId, BondingSystem, Edge, SystemId, mk_edge
@@ -208,6 +208,19 @@ class Atom:
 
 
 MoleculeSystems: TypeAlias = tuple[tuple[SystemId, BondingSystem], ...]
+MoleculeFields: TypeAlias = tuple[
+    Mapping[AtomId, Atom],
+    frozenset[Edge],
+    MoleculeSystems,
+    SmilesStereochemistry,
+]
+MutableMoleculeSystems: TypeAlias = list[tuple[SystemId, BondingSystem]]
+MutableMoleculeFields: TypeAlias = tuple[
+    dict[AtomId, Atom],
+    set[Edge],
+    MutableMoleculeSystems,
+    SmilesStereochemistry,
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,6 +239,18 @@ class Molecule:
         object.__setattr__(self, "local_bonds", frozenset(self.local_bonds))
         object.__setattr__(self, "systems", tuple(sorted(self.systems, key=lambda item: item[0].value)))
         object.__setattr__(self, "smiles_stereochemistry", self.smiles_stereochemistry)
+
+    def __iter__(self) -> Iterator[Mapping[AtomId, Atom] | frozenset[Edge] | MoleculeSystems | SmilesStereochemistry]:
+        fields: MoleculeFields = (
+            self.atoms,
+            self.local_bonds,
+            self.systems,
+            self.smiles_stereochemistry,
+        )
+        return iter(fields)
+
+    def to_mutable(self) -> MutableMolecule:
+        return MutableMolecule.from_molecule(self)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -279,6 +304,63 @@ class Molecule:
         from .pretty import pretty_text
 
         return pretty_text(self)
+
+    def __str__(self) -> str:
+        return self.pretty()
+
+
+@dataclass(slots=True)
+class MutableMolecule:
+    atoms: dict[AtomId, Atom]
+    local_bonds: set[Edge]
+    systems: MutableMoleculeSystems
+    smiles_stereochemistry: SmilesStereochemistry = field(default_factory=SmilesStereochemistry)
+
+    def __post_init__(self) -> None:
+        atom_map = dict(sorted(self.atoms.items(), key=lambda item: item[0].value))
+        for atom_id, atom in atom_map.items():
+            if atom.atom_id != atom_id:
+                raise ValueError("Atom map keys must match Atom.atom_id")
+        self.atoms = atom_map
+        self.local_bonds = set(self.local_bonds)
+        self.systems = list(sorted(self.systems, key=lambda item: item[0].value))
+
+    def __iter__(self) -> Iterator[dict[AtomId, Atom] | set[Edge] | MutableMoleculeSystems | SmilesStereochemistry]:
+        fields: MutableMoleculeFields = (
+            self.atoms,
+            self.local_bonds,
+            self.systems,
+            self.smiles_stereochemistry,
+        )
+        return iter(fields)
+
+    @classmethod
+    def from_molecule(cls, molecule: Molecule) -> MutableMolecule:
+        return cls(
+            atoms=dict(molecule.atoms),
+            local_bonds=set(molecule.local_bonds),
+            systems=list(molecule.systems),
+            smiles_stereochemistry=molecule.smiles_stereochemistry,
+        )
+
+    def freeze(self) -> Molecule:
+        return Molecule(
+            atoms=self.atoms,
+            local_bonds=frozenset(self.local_bonds),
+            systems=tuple(self.systems),
+            smiles_stereochemistry=self.smiles_stereochemistry,
+        )
+
+    def copy(self) -> MutableMolecule:
+        return MutableMolecule(
+            atoms=dict(self.atoms),
+            local_bonds=set(self.local_bonds),
+            systems=list(self.systems),
+            smiles_stereochemistry=self.smiles_stereochemistry,
+        )
+
+    def pretty(self) -> str:
+        return self.freeze().pretty()
 
     def __str__(self) -> str:
         return self.pretty()
