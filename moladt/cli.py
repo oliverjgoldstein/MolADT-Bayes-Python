@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .chem.molecule import pretty_print_molecule
 from .chem.validate import validate_molecule
-from .examples import get_manuscript_example
+from .examples import MANUSCRIPT_EXAMPLES, get_manuscript_example
 from .io.sdf import read_sdf_record
 from .io.smiles import molecule_to_smiles, parse_smiles
 
@@ -27,7 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
         "pretty-example",
         help="Render a manuscript-facing built-in example molecule",
     )
-    pretty_example_parser.add_argument("name", choices=("diborane", "ferrocene"))
+    pretty_example_parser.add_argument("name", choices=tuple(sorted(MANUSCRIPT_EXAMPLES)))
 
     return parser
 

@@ -6,6 +6,7 @@ from ..chem.molecule import Molecule
 from ..chem.pretty import pretty_text
 from .diborane import diborane_pretty
 from .ferrocene import ferrocene_pretty
+from .morphine import morphine_pretty
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,9 +37,17 @@ DIBORANE_MANUSCRIPT = ManuscriptExample(
     molecule=diborane_pretty,
 )
 
+MORPHINE_MANUSCRIPT = ManuscriptExample(
+    slug="morphine",
+    title="Morphine (explicit Dietz skeleton)",
+    note="Dietz-style ADT that spells the five classic SMILES ring closures out as sigma edges and keeps the phenyl ring as an explicit pi system.",
+    molecule=morphine_pretty,
+)
+
 MANUSCRIPT_EXAMPLES: dict[str, ManuscriptExample] = {
     FERROCENE_MANUSCRIPT.slug: FERROCENE_MANUSCRIPT,
     DIBORANE_MANUSCRIPT.slug: DIBORANE_MANUSCRIPT,
+    MORPHINE_MANUSCRIPT.slug: MORPHINE_MANUSCRIPT,
 }
 
 

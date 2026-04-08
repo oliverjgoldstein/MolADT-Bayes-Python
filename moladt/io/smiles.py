@@ -60,6 +60,36 @@ _AROMATIC_SYMBOLS: dict[str, AtomicSymbol] = {
     "s": AtomicSymbol.S,
 }
 
+_IMPLICIT_HYDROGEN_SYMBOLS: frozenset[AtomicSymbol] = frozenset(
+    {
+        AtomicSymbol.B,
+        AtomicSymbol.Br,
+        AtomicSymbol.C,
+        AtomicSymbol.Cl,
+        AtomicSymbol.F,
+        AtomicSymbol.I,
+        AtomicSymbol.N,
+        AtomicSymbol.O,
+        AtomicSymbol.P,
+        AtomicSymbol.S,
+        AtomicSymbol.Si,
+    }
+)
+
+_IMPLICIT_HYDROGEN_VALENCE: dict[AtomicSymbol, float] = {
+    AtomicSymbol.B: 3.0,
+    AtomicSymbol.Br: 1.0,
+    AtomicSymbol.C: 4.0,
+    AtomicSymbol.Cl: 1.0,
+    AtomicSymbol.F: 1.0,
+    AtomicSymbol.I: 1.0,
+    AtomicSymbol.N: 3.0,
+    AtomicSymbol.O: 2.0,
+    AtomicSymbol.P: 3.0,
+    AtomicSymbol.S: 2.0,
+    AtomicSymbol.Si: 4.0,
+}
+
 
 @dataclass(frozen=True, slots=True)
 class _AtomRef:
@@ -118,6 +148,8 @@ class _SMILESParser:
         self.atom_stereo: list[SmilesAtomStereo] = []
         self.bond_stereo: list[SmilesBondStereo] = []
         self.aromatic_candidate_edges: set[Edge] = set()
+        self.aromatic_atoms: set[AtomId] = set()
+        self.implicit_hydrogen_hosts: set[AtomId] = set()
         self.branch_stack: list[_AtomRef] = []
         self.ring_opens: dict[str, _RingOpen] = {}
 
@@ -175,10 +207,21 @@ class _SMILESParser:
         if pending_bond is not None:
             raise ValueError("SMILES ended after a bond symbol")
 
-        systems = _normalize_smiles_systems(self.local_bonds, self.systems, self.aromatic_candidate_edges)
+        systems = _normalize_smiles_systems(
+            self.local_bonds,
+            self.systems,
+            self.aromatic_candidate_edges,
+            self.aromatic_atoms,
+        )
+        atoms, local_bonds = _infer_implicit_hydrogens(
+            self.atoms,
+            self.local_bonds,
+            systems,
+            self.implicit_hydrogen_hosts,
+        )
         return Molecule(
-            atoms=self.atoms,
-            local_bonds=frozenset(self.local_bonds),
+            atoms=atoms,
+            local_bonds=frozenset(local_bonds),
             systems=tuple((SystemId(index), system) for index, system in enumerate(systems, start=1)),
             smiles_stereochemistry=SmilesStereochemistry(
                 atom_stereo=tuple(self.atom_stereo),
@@ -201,6 +244,8 @@ class _SMILESParser:
         bracket_atom = _parse_bracket_content(content)
         self.index = close_index + 1
         atom = self._new_atom(bracket_atom.symbol, bracket_atom.charge)
+        if bracket_atom.aromatic:
+            self.aromatic_atoms.add(atom.atom_id)
         if bracket_atom.stereo_class is not None and bracket_atom.stereo_configuration is not None and bracket_atom.stereo_token is not None:
             self.atom_stereo.append(
                 SmilesAtomStereo(
@@ -220,16 +265,24 @@ class _SMILESParser:
         token = self.text[self.index : self.index + 2]
         if token in _TWO_CHAR_SYMBOLS:
             self.index += 2
-            atom = self._new_atom(_TWO_CHAR_SYMBOLS[token], 0)
+            symbol = _TWO_CHAR_SYMBOLS[token]
+            atom = self._new_atom(symbol, 0)
+            if symbol in _IMPLICIT_HYDROGEN_SYMBOLS:
+                self.implicit_hydrogen_hosts.add(atom.atom_id)
             return _AtomRef(atom.atom_id, False)
         char = self.text[self.index]
         if char in _AROMATIC_SYMBOLS:
             self.index += 1
             atom = self._new_atom(_AROMATIC_SYMBOLS[char], 0)
+            self.aromatic_atoms.add(atom.atom_id)
+            self.implicit_hydrogen_hosts.add(atom.atom_id)
             return _AtomRef(atom.atom_id, True)
         if char in _ONE_CHAR_SYMBOLS:
             self.index += 1
-            atom = self._new_atom(_ONE_CHAR_SYMBOLS[char], 0)
+            symbol = _ONE_CHAR_SYMBOLS[char]
+            atom = self._new_atom(symbol, 0)
+            if symbol in _IMPLICIT_HYDROGEN_SYMBOLS:
+                self.implicit_hydrogen_hosts.add(atom.atom_id)
             return _AtomRef(atom.atom_id, False)
         raise ValueError(f"Unsupported SMILES atom token at index {self.index}: {char!r}")
 
@@ -455,14 +508,10 @@ def _normalize_smiles_systems(
     local_bonds: set[Edge],
     systems: list[BondingSystem],
     aromatic_candidate_edges: set[Edge],
+    aromatic_atoms: set[AtomId],
 ) -> list[BondingSystem]:
     pi_rings = {ring for ring in _detect_aromatic_six_rings(aromatic_candidate_edges)}
-    double_edges = {
-        next(iter(system.member_edges))
-        for system in systems
-        if len(system.member_edges) == 1 and system.shared_electrons.value == 2
-    }
-    pi_rings.update(_detect_alternating_six_rings(local_bonds, double_edges))
+    pi_rings.update(_detect_lowercase_aromatic_six_rings(local_bonds, aromatic_candidate_edges, aromatic_atoms))
     ring_edges = {edge for ring in pi_rings for edge in ring}
 
     normalized = [
@@ -479,11 +528,6 @@ def _normalize_smiles_systems(
         for ring in sorted(pi_rings, key=_ring_sort_key)
     )
     return normalized
-
-
-def _detect_alternating_six_rings(local_bonds: set[Edge], double_edges: set[Edge]) -> set[frozenset[Edge]]:
-    bonds = [(edge, 2 if edge in double_edges else 1) for edge in sorted(local_bonds)]
-    return set(_detect_six_rings_with_orders(bonds))
 
 
 def _detect_aromatic_six_rings(edges: set[Edge]) -> list[frozenset[Edge]]:
@@ -517,50 +561,116 @@ def _detect_aromatic_six_rings(edges: set[Edge]) -> list[frozenset[Edge]]:
     return sorted(discovered, key=_ring_sort_key)
 
 
-def _detect_six_rings_with_orders(bonds: list[tuple[Edge, int]]) -> list[frozenset[Edge]]:
-    adjacency: dict[AtomId, list[tuple[AtomId, int]]] = {}
-    for edge, order in bonds:
-        adjacency.setdefault(edge.a, []).append((edge.b, order))
-        adjacency.setdefault(edge.b, []).append((edge.a, order))
+def _detect_lowercase_aromatic_six_rings(
+    local_bonds: set[Edge],
+    aromatic_candidate_edges: set[Edge],
+    aromatic_atoms: set[AtomId],
+) -> set[frozenset[Edge]]:
+    adjacency: dict[AtomId, list[AtomId]] = {}
+    for edge in local_bonds:
+        adjacency.setdefault(edge.a, []).append(edge.b)
+        adjacency.setdefault(edge.b, []).append(edge.a)
     for atom_id in adjacency:
-        adjacency[atom_id].sort(key=lambda item: item[0].value)
-
-    def alternate(order: int) -> int:
-        if order == 1:
-            return 2
-        if order == 2:
-            return 1
-        return 0
+        adjacency[atom_id].sort()
 
     discovered: set[frozenset[Edge]] = set()
 
-    def search(path: list[AtomId], current: AtomId, previous_order: int | None) -> None:
+    def search(path: list[AtomId], current: AtomId) -> None:
         if len(path) == 6:
-            if previous_order is None:
-                return
-            for neighbor, order in adjacency.get(current, []):
-                if neighbor == path[0] and order == alternate(previous_order):
-                    atoms = path + [path[0]]
-                    ring_edges = frozenset(mk_edge(atoms[index], atoms[index + 1]) for index in range(6))
-                    if path[0] == min(path):
-                        discovered.add(ring_edges)
+            for neighbor in adjacency.get(current, []):
+                if neighbor != path[0]:
+                    continue
+                ring_atoms = frozenset(path)
+                aromatic_count = sum(1 for atom_id in ring_atoms if atom_id in aromatic_atoms)
+                atoms = path + [path[0]]
+                ring = frozenset(mk_edge(atoms[index], atoms[index + 1]) for index in range(6))
+                aromatic_edge_count = sum(1 for edge in ring if edge in aromatic_candidate_edges)
+                if aromatic_count >= 5 and aromatic_edge_count >= 4 and path[0] == min(path):
+                    discovered.add(ring)
             return
-        for neighbor, order in adjacency.get(current, []):
-            if order not in {1, 2}:
-                continue
-            if previous_order is not None and order != alternate(previous_order):
-                continue
+        for neighbor in adjacency.get(current, []):
             if neighbor in path:
                 continue
-            search(path + [neighbor], neighbor, order)
+            search(path + [neighbor], neighbor)
 
     for start in sorted(adjacency):
-        search([start], start, None)
-    return sorted(discovered, key=_ring_sort_key)
+        search([start], start)
+    return discovered
 
 
 def _ring_sort_key(ring: frozenset[Edge]) -> tuple[tuple[int, int], ...]:
     return tuple(sorted((edge.a.value, edge.b.value) for edge in ring))
+
+
+def _infer_implicit_hydrogens(
+    atoms: dict[AtomId, Atom],
+    local_bonds: set[Edge],
+    systems: list[BondingSystem],
+    hosts: set[AtomId],
+) -> tuple[dict[AtomId, Atom], set[Edge]]:
+    sigma_counts = {atom_id: 0 for atom_id in atoms}
+    for edge in local_bonds:
+        sigma_counts[edge.a] = sigma_counts.get(edge.a, 0) + 1
+        sigma_counts[edge.b] = sigma_counts.get(edge.b, 0) + 1
+
+    system_contributions = {atom_id: 0.0 for atom_id in atoms}
+    for system in systems:
+        edge_count = len(system.member_edges)
+        if edge_count == 0:
+            continue
+        contribution = system.shared_electrons.value / (2.0 * edge_count)
+        for edge in system.member_edges:
+            system_contributions[edge.a] = system_contributions.get(edge.a, 0.0) + contribution
+            system_contributions[edge.b] = system_contributions.get(edge.b, 0.0) + contribution
+
+    enriched_atoms = dict(atoms)
+    enriched_bonds = set(local_bonds)
+    next_atom_index = max((atom_id.value for atom_id in atoms), default=0) + 1
+
+    for host in sorted(hosts):
+        atom = atoms.get(host)
+        if atom is None or atom.attributes.symbol is AtomicSymbol.H or atom.formal_charge != 0:
+            continue
+        current_used = float(sigma_counts.get(host, 0)) + float(system_contributions.get(host, 0.0))
+        missing = _implicit_hydrogen_count(_implicit_hydrogen_valence(atom.attributes.symbol) - current_used)
+        for hydrogen_offset in range(missing):
+            hydrogen_id = AtomId(next_atom_index)
+            next_atom_index += 1
+            enriched_atoms[hydrogen_id] = Atom(
+                atom_id=hydrogen_id,
+                attributes=element_attributes(AtomicSymbol.H),
+                coordinate=_inferred_hydrogen_coordinate(atom, hydrogen_offset),
+                shells=element_shells(AtomicSymbol.H),
+                formal_charge=0,
+            )
+            enriched_bonds.add(mk_edge(host, hydrogen_id))
+
+    return enriched_atoms, enriched_bonds
+
+
+def _implicit_hydrogen_count(missing_valence: float) -> int:
+    if missing_valence <= 1e-9:
+        return 0
+    rounded = int(round(missing_valence))
+    if rounded <= 0:
+        return 0
+    if abs(missing_valence - rounded) > 1e-6:
+        return 0
+    return rounded
+
+
+def _implicit_hydrogen_valence(symbol: AtomicSymbol) -> float:
+    return _IMPLICIT_HYDROGEN_VALENCE[symbol]
+
+
+def _inferred_hydrogen_coordinate(host: Atom, hydrogen_offset: int) -> Coordinate:
+    host_coordinate = host.coordinate
+    shift = 0.12 * float(hydrogen_offset + 1)
+    return Coordinate(
+        mk_angstrom(host_coordinate.x.value),
+        mk_angstrom(host_coordinate.y.value),
+        mk_angstrom(host_coordinate.z.value + shift),
+    )
 
 
 def _collapse_terminal_hydrogens(molecule: Molecule) -> tuple[dict[AtomId, Atom], dict[AtomId, int]]:

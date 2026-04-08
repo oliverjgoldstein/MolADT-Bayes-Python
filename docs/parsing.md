@@ -24,6 +24,11 @@ Use `parse-smiles`.
 
 This parses the conservative SMILES subset, validates it, and prints the MolADT structure.
 
+Inside that boundary, `parse-smiles` now does two useful recovery passes after reading the graph:
+
+- it infers terminal hydrogens for supported bare atoms such as `C`, `N`, `O`, and aromatic lowercase atoms
+- it promotes recoverable six-membered delocalized cycles into explicit Dietz `pi_ring` systems when the SMILES uses aromatic lowercase syntax, including ring-closure edges
+
 Use `parse-smiles` when you want to see what a SMILES string becomes inside MolADT.
 
 ## If You Want SMILES Back Out
@@ -45,6 +50,7 @@ Use `pretty-example`.
 ```bash
 ./.venv/bin/python -m moladt.cli pretty-example ferrocene
 ./.venv/bin/python -m moladt.cli pretty-example diborane
+./.venv/bin/python -m moladt.cli pretty-example morphine
 ```
 
 These examples show the point of the representation more clearly than benzene does.

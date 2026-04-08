@@ -34,6 +34,8 @@ What it validates now:
 
 - the conservative SMILES grammar implemented in [`moladt/io/smiles.py`](../moladt/io/smiles.py)
 - atom, bond, and ring-closure syntax inside that subset
+- terminal-hydrogen inference for supported bare atoms
+- six-membered `pi_ring` recovery from aromatic lowercase syntax
 - structural validation through `validate_molecule`, including valence checks and bond-map consistency
 
 On success it prints the pretty-printed MolADT structure. It does not print a title or property block because the source is a SMILES string, not an SDF record.
@@ -67,9 +69,10 @@ Current rejection messages come directly from the SMILES renderer, for example:
 ```bash
 ./.venv/bin/python -m moladt.cli pretty-example ferrocene
 ./.venv/bin/python -m moladt.cli pretty-example diborane
+./.venv/bin/python -m moladt.cli pretty-example morphine
 ```
 
-This command loads named built-in examples from [`moladt/examples/manuscript.py`](../moladt/examples/manuscript.py), validates them, and prints the manuscript-facing pretty rendering. It currently supports `ferrocene` and `diborane`.
+This command loads named built-in examples from [`moladt/examples/manuscript.py`](../moladt/examples/manuscript.py), validates them, and prints the manuscript-facing pretty rendering. It currently supports `ferrocene`, `diborane`, and `morphine`.
 
 ## How the Commands Differ
 

@@ -5,11 +5,14 @@ The SMILES layer in this repo is intentionally conservative. It is meant to cove
 ## Supported
 
 - atoms and bracket atoms
-- bracket hydrogens and formal charges
+- explicit bracket hydrogens and formal charges
+- implicit terminal hydrogens on supported bare atoms such as `C`, `N`, `O`, halogens, and aromatic lowercase atoms
 - branches
 - ring digits `1-9`
 - single, double, and triple bonds
+- graph-based six-membered `pi_ring` recovery from aromatic lowercase input
 - benzene-style aromatic input such as `c1ccccc1`
+- fused classical ring cases such as the morphine boundary string when the graph still contains a recoverable six-membered delocalized cycle
 
 ## Not Supported
 
@@ -44,6 +47,9 @@ Validation checks include:
 That is why:
 
 - `c1ccccc1` is supported input
+- bare `C` and bare `O` become methane- and water-style MolADT objects with inferred terminal hydrogens
+- the morphine boundary string now recovers the phenyl `pi_ring` from the parsed graph
+- an explicit Kekule string stays explicit and does not get silently promoted to a delocalized `pi_ring`
 - benzene from `molecules/benzene.sdf` renders successfully
 - ferrocene and diborane remain MolADT examples but are not `to-smiles` targets
 

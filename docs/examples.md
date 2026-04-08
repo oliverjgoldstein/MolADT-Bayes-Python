@@ -1,6 +1,6 @@
 # Example Molecules
 
-This repo includes two small SDF files in `molecules/` and several built-in MolADT objects under `moladt/examples/`. The easiest inspection path is the CLI for file-backed examples and `pretty-example` for the non-classical built-ins.
+This repo includes two small SDF files in `molecules/` and several built-in MolADT objects under `moladt/examples/`. The easiest inspection path is the CLI for file-backed examples and `pretty-example` for the built-in Dietz objects.
 
 ## At a Glance
 
@@ -8,6 +8,7 @@ This repo includes two small SDF files in `molecules/` and several built-in MolA
 | --- | --- | --- | --- | --- |
 | Benzene | [`molecules/benzene.sdf`](../molecules/benzene.sdf), [`moladt/examples/benzene.py`](../moladt/examples/benzene.py), [`moladt/examples/benzene_pretty.py`](../moladt/examples/benzene_pretty.py) | `./.venv/bin/python -m moladt.cli parse molecules/benzene.sdf` | A classical six-membered ring with one `pi_ring` Dietz system | Both file-backed and built-in |
 | Water | [`molecules/water.sdf`](../molecules/water.sdf), [`moladt/examples/sample_molecules.py`](../moladt/examples/sample_molecules.py) | `./.venv/bin/python -m moladt.cli parse molecules/water.sdf` | A minimal classical molecule used for round-trip and SMILES tests | Both file-backed and built-in |
+| Morphine | [`moladt/examples/morphine.py`](../moladt/examples/morphine.py), [`moladt/examples/manuscript.py`](../moladt/examples/manuscript.py) | `./.venv/bin/python -m moladt.cli pretty-example morphine` | Explicit Dietz version of the classic five-ring-closure morphine sketch | Built-in object |
 | Ferrocene | [`moladt/examples/ferrocene.py`](../moladt/examples/ferrocene.py), [`moladt/examples/manuscript.py`](../moladt/examples/manuscript.py) | `./.venv/bin/python -m moladt.cli pretty-example ferrocene` | Two cyclopentadienyl `pi` systems plus an Fe back-donation-style pool | Built-in object |
 | Diborane | [`moladt/examples/diborane.py`](../moladt/examples/diborane.py), [`moladt/examples/manuscript.py`](../moladt/examples/manuscript.py) | `./.venv/bin/python -m moladt.cli pretty-example diborane` | Two explicit `3c-2e` bridging hydrogen systems | Built-in object |
 
@@ -39,6 +40,20 @@ Use:
 
 Water is a small sanity-check molecule used in parser and renderer tests. It stays inside the conservative SMILES subset and renders to `[OH2]`.
 
+## Morphine
+
+- Built-in source: [`moladt/examples/morphine.py`](../moladt/examples/morphine.py)
+- Manuscript-facing wrapper: [`moladt/examples/manuscript.py`](../moladt/examples/manuscript.py)
+
+Use:
+
+```bash
+./.venv/bin/python -m moladt.cli pretty-example morphine
+./.venv/bin/python -m moladt.cli parse-smiles "O1C2C(O)C=C(C3C2(C4)C5c1c(O)ccc5CC3N(C)C4)"
+```
+
+Morphine is the cleanest built-in example of why the Dietz ADT is not just a parsed string. The classic figure writes five ring closures as SMILES digits, while the built-in MolADT object stores those closures directly as sigma edges and marks the alkene plus phenyl ring as explicit bonding systems.
+
 ## Ferrocene
 
 - Built-in source: [`moladt/examples/ferrocene.py`](../moladt/examples/ferrocene.py)
@@ -65,6 +80,14 @@ Use:
 
 Diborane shows explicit multicenter bonding with two bridging hydrogen systems. Like ferrocene, it remains a MolADT example, not a supported `to-smiles` target.
 
+## Side-by-Side SMILES vs MolADT
+
+| Example | SMILES Side | MolADT Side |
+| --- | --- | --- |
+| Diborane | No faithful conservative SMILES string in this repo. | `pretty-example diborane` shows two explicit `3c-2e` Dietz bridge systems over the bridging hydrogens. |
+| Ferrocene | No faithful conservative SMILES string in this repo. | `pretty-example ferrocene` shows the Fe-centered object with two Cp `pi` systems and one `fe_backdonation` pool. |
+| Morphine | `O1C2C(O)C=C(C3C2(C4)C5c1c(O)ccc5CC3N(C)C4)` | `pretty-example morphine` shows the same fused graph as direct `local_bonds` plus explicit `alkene_bridge` and `phenyl_pi_ring` systems. |
+
 ## Related Example Modules
 
 - [`moladt/examples/manuscript.py`](../moladt/examples/manuscript.py)
@@ -72,4 +95,5 @@ Diborane shows explicit multicenter bonding with two bridging hydrogen systems. 
 - [`moladt/examples/benzene_pretty.py`](../moladt/examples/benzene_pretty.py)
 - [`moladt/examples/diborane.py`](../moladt/examples/diborane.py)
 - [`moladt/examples/ferrocene.py`](../moladt/examples/ferrocene.py)
+- [`moladt/examples/morphine.py`](../moladt/examples/morphine.py)
 - [`moladt/examples/sample_molecules.py`](../moladt/examples/sample_molecules.py)

@@ -22,6 +22,7 @@ Built-in example molecules and manuscript-facing render wrappers:
 - water and other small sample molecules
 - diborane
 - ferrocene
+- morphine
 
 ### [`moladt/inference/`](../moladt/inference/)
 
