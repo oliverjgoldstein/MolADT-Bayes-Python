@@ -2,18 +2,27 @@
 
 The main README is now the short front door. This folder keeps the rest.
 
+## Our Approach
+
+- represent the molecule as a typed MolADT object
+- derive MolADT descriptor matrices from that object
+- run the local Stan sweep on FreeSolv and QM9
+- compare the best local MolADT result to MoleculeNet only
+
+For the shortest path, start with [Quickstart](quickstart.md). For the benchmark story, go straight to [Inference and benchmarks](inference-and-benchmarks.md).
+
 ## Start Here
 
+- [Quickstart](quickstart.md)
+- [Inference and benchmarks](inference-and-benchmarks.md)
 - [MolADT representation](representation.md)
-- [Orbitals and theoretical chemistry](orbitals.md)
 - [Parsing and rendering](parsing.md)
 - [Models and features](models.md)
 - [Outputs](outputs.md)
 
 ## Deeper Reference
 
-- [Quickstart](quickstart.md)
-- [Inference and benchmarks](inference-and-benchmarks.md)
+- [Orbitals and theoretical chemistry](orbitals.md)
 - [CLI](cli.md)
 - [Examples](examples.md)
 - [SMILES scope and validation](smiles-scope-and-validation.md)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+import numpy as np
 import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -25,10 +26,12 @@ from scripts.download_data import (
 )
 from scripts.features import (
     FeatureTable,
+    MOLADT_FEATURE_GROUPS,
     canonicalize_smiles,
     compute_3d_descriptors,
     compute_base_descriptors,
     featurize_moladt_records,
+    featurize_moladt_smiles_dataframe,
     featurize_moladt_typed_records,
 )
 from scripts.process_freesolv import process_freesolv_dataset
@@ -116,7 +119,7 @@ def test_download_zinc_prefers_vendored_snapshot(tmp_path, monkeypatch) -> None:
 
 
 def test_canonical_smiles_generation_is_stable() -> None:
-    assert canonicalize_smiles("OCC") == "CCO"
+    assert canonicalize_smiles("OCC") == canonicalize_smiles("CCO")
 
 
 def test_descriptor_generation_produces_expected_keys() -> None:
@@ -196,7 +199,7 @@ def test_featurize_moladt_records_uses_adt_descriptors() -> None:
     assert not table.rows.empty
     assert table.failures == ()
     assert "weight" in table.feature_names
-    assert "radius_of_gyration" in table.feature_names
+    assert "radius_of_gyration" not in table.feature_names
     assert float(table.rows.iloc[0]["weight"]) > 0.0
 
 
@@ -370,7 +373,7 @@ def test_process_qm9_creates_processed_directory_before_writing(tmp_path, monkey
     monkeypatch.setattr(process_qm9, "download_qm9", lambda force=False: FakeDownloads())
     aligned_frame = pd.DataFrame(
         [
-            {"mol_id": f"qm9_{index:06d}", "smiles": "O", "mu": float(index), "sdf_record_index": index, "rdkit_mol": object()}
+            {"mol_id": f"qm9_{index:06d}", "smiles": "O", "mu": float(index), "sdf_record_index": index, "moladt_molecule": object()}
             for index in range(12)
         ]
     )
@@ -392,7 +395,7 @@ def test_process_qm9_creates_processed_directory_before_writing(tmp_path, monkey
     )
     monkeypatch.setattr(
         process_qm9,
-        "featurize_moladt_records",
+        "featurize_moladt_smiles_dataframe",
         lambda *args, **kwargs: FeatureTable(
             rows=pd.DataFrame(
                 [
@@ -402,6 +405,42 @@ def test_process_qm9_creates_processed_directory_before_writing(tmp_path, monkey
             ),
             feature_names=("x1", "x2"),
             feature_groups={"x1": "group_a", "x2": "group_b"},
+            failures=(),
+        ),
+    )
+    monkeypatch.setattr(
+        process_qm9,
+        "featurize_sdf_geometry_records",
+        lambda *args, **kwargs: process_qm9.GeometricFeatureTable(
+            rows=pd.DataFrame(
+                [
+                    {"mol_id": f"qm9_{index:06d}", "smiles": "O", "mu": float(index), "sdf_record_index": index}
+                    for index in range(12)
+                ]
+            ),
+            atomic_numbers=tuple(np.asarray([8], dtype=np.int64) for _ in range(12)),
+            coordinates=tuple(np.asarray([[0.0, 0.0, 0.0]], dtype=float) for _ in range(12)),
+            global_feature_names=("z_mean",),
+            global_feature_groups={"z_mean": "geometry_atoms"},
+            global_features=np.asarray([[8.0] for _ in range(12)], dtype=float),
+            failures=(),
+        ),
+    )
+    monkeypatch.setattr(
+        process_qm9,
+        "featurize_moladt_geometry_records",
+        lambda *args, **kwargs: process_qm9.GeometricFeatureTable(
+            rows=pd.DataFrame(
+                [
+                    {"mol_id": f"qm9_{index:06d}", "smiles": "O", "mu": float(index), "sdf_record_index": index}
+                    for index in range(12)
+                ]
+            ),
+            atomic_numbers=tuple(np.asarray([8], dtype=np.int64) for _ in range(12)),
+            coordinates=tuple(np.asarray([[0.0, 0.0, 0.0]], dtype=float) for _ in range(12)),
+            global_feature_names=("weight",),
+            global_feature_groups={"weight": "adt_composition"},
+            global_features=np.asarray([[18.0] for _ in range(12)], dtype=float),
             failures=(),
         ),
     )
@@ -416,3 +455,19 @@ def test_process_qm9_creates_processed_directory_before_writing(tmp_path, monkey
 
     assert processed_dir.is_dir()
     assert artifacts.processed_csv_path.exists()
+
+
+def test_featurize_moladt_smiles_dataframe_uses_plain_moladt_feature_schema() -> None:
+    frame = pd.DataFrame([{"mol_id": "mol-1", "smiles": "O", "target": 1.0}])
+
+    table = featurize_moladt_smiles_dataframe(
+        frame,
+        dataset_name="unit_moladt",
+        mol_id_column="mol_id",
+        smiles_column="smiles",
+        target_column="target",
+    )
+
+    assert table.feature_names == tuple(MOLADT_FEATURE_GROUPS)
+    assert table.feature_groups == MOLADT_FEATURE_GROUPS
+    assert "radius_of_gyration" not in table.rows.columns

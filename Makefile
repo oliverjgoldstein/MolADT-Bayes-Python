@@ -109,8 +109,6 @@ MODEL_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),models/paper/ru
 TIMING_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),timing/paper/run_$(RUN_TIMESTAMP),timing/run_$(RUN_TIMESTAMP))
 FREESOLV_RESULTS_SUBDIR := freesolv/run_$(RUN_TIMESTAMP)
 QM9_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),qm9/paper/run_$(RUN_TIMESTAMP),qm9/run_$(RUN_TIMESTAMP))
-BEST_FREESOLV_EXTRA_MODELS := catboost_uncertainty,dimenetpp_ensemble
-BEST_QM9_EXTRA_MODELS := catboost_uncertainty,visnet_ensemble
 
 .PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-activate python-parse python-parse-smiles python-to-smiles python-pretty-example python-benchmark-smoke python-benchmark-qm9 python-benchmark-zinc freesolv qm9 benchmark benchmark-small benchmark-paper benchmark-bg timing catboost-geom-model catboost-geom-model-paper model
 
@@ -126,15 +124,13 @@ help:
 	"  make python-parse-smiles    Parse c1ccccc1" \
 	"  make python-to-smiles       Render molecules/benzene.sdf to SMILES" \
 		"  make python-pretty-example  Render EXAMPLE=ferrocene or EXAMPLE=diborane" \
-		"  make freesolv              Run the focused FreeSolv benchmark with CatBoost + DimeNet++" \
-		"  make qm9                   Run the focused QM9 benchmark with CatBoost + ViSNet" \
-		"  make benchmark              Run FreeSolv, QM9, and ZINC benchmark flows" \
-		"  make benchmark-small        Run the default 2000-row QM9 subset benchmark with MolADT timing enabled" \
-		"  make benchmark-paper        Run the paper-sized QM9 split (110462/10000/10000) with MolADT timing enabled" \
+		"  make freesolv              Run the FreeSolv MolADT-vs-MoleculeNet Stan comparison" \
+		"  make qm9                   Run the QM9 MolADT-vs-MoleculeNet Stan comparison" \
+		"  make benchmark              Run the combined FreeSolv + QM9 MolADT Stan comparison bundle" \
+		"  make benchmark-small        Run the default 2000-row QM9 subset comparison" \
+		"  make benchmark-paper        Run the paper-sized QM9 split (110462/10000/10000)" \
 		"  make benchmark-bg           Run the benchmark in the foreground and mirror output to the active results directory" \
 		"  make timing                 Build the local ZINC timing corpus and compare SMILES vs MolADT parse times" \
-		"  make catboost-geom-model    Run the predictive model suite on the default QM9 subset" \
-		"  make catboost-geom-model-paper Run the predictive model suite on the paper-sized QM9 split" \
 		"  full long run: make benchmark-paper" \
 		"  quieter run: BENCHMARK_VERBOSE=0 make benchmark" \
 		"" \
@@ -143,7 +139,6 @@ help:
 		"  results_root=$(RESULTS_ROOT)" \
 		"  qm9_split_mode=$(QM9_SPLIT_MODE)" \
 		"  qm9_limit=$(if $(QM9_LIMIT),$(QM9_LIMIT),full-local-download)" \
-	"  include_moladt=$(INCLUDE_MOLADT)" \
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
 	"  python_extras=$(PYTHON_EXTRAS)" \
 	"  toolchain_env=$(if $(DARWIN_SDKROOT),apple-xcrun,default)" \
@@ -338,6 +333,14 @@ python-setup:
 	fi
 
 python-cmdstan-install:
+	@printf "%s\n" \
+	"Preparing local CmdStan installation." \
+	"  repo: MolADT-Bayes-Python" \
+	"  python: $(PYTHON_CMD)" \
+	"  destination: .cmdstan" \
+	"  tested cmdstanpy version: $(TESTED_CMDSTANPY)" \
+	"  tested CmdStan version: $(TESTED_CMDSTAN)" \
+	"  toolchain_env: $(if $(DARWIN_SDKROOT),apple-xcrun,default)"
 	$(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.install_cmdstan
 
 python-test:
@@ -380,42 +383,159 @@ python-pretty-example:
 	$(PYTHON_CMD) -m moladt.cli pretty-example $(EXAMPLE)
 
 python-benchmark-smoke:
+	@printf "%s\n" \
+	"Running FreeSolv smoke benchmark." \
+	"  repo: MolADT-Bayes-Python" \
+	"  command: scripts.run_all smoke-test" \
+	"  dataset: FreeSolv" \
+	"  results_dir: $(RESULTS_ROOT)" \
+	"  inference_preset: $(INFERENCE_PRESET)" \
+	"  methods: $(METHODS)" \
+	"  models: $(MODELS)" \
+	"  sample_chains=$(SAMPLE_CHAINS) sample_warmup=$(SAMPLE_WARMUP) sample_draws=$(SAMPLE_DRAWS)" \
+	"  approximation_draws=$(APPROXIMATION_DRAWS) variational_iterations=$(VARIATIONAL_ITERATIONS)" \
+	"  optimize_iterations=$(OPTIMIZE_ITERATIONS) pathfinder_paths=$(PATHFINDER_PATHS) predictive_draws=$(PREDICTIVE_DRAWS)" \
+	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
+	"  toolchain_env: $(if $(DARWIN_SDKROOT),apple-xcrun,default)" \
+	"  expected outputs: $(RESULTS_ROOT)/results.csv and $(RESULTS_ROOT)/details/"
 	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all smoke-test $(VERBOSE_ARG) $(BENCHMARK_ARGS)
 
 python-benchmark-qm9:
+	@printf "%s\n" \
+	"Running QM9 benchmark export and Stan sweep." \
+	"  repo: MolADT-Bayes-Python" \
+	"  command: scripts.run_all qm9" \
+	"  dataset: QM9 (mu task, MolADT only)" \
+	"  results_dir: $(RESULTS_ROOT)" \
+	"  inference_preset: $(INFERENCE_PRESET)" \
+	"  qm9_split_mode: $(QM9_SPLIT_MODE)" \
+	"  qm9_limit: $(if $(QM9_LIMIT),$(QM9_LIMIT),full-local-download)" \
+	"  methods: $(METHODS)" \
+	"  models: $(MODELS)" \
+	"  sample_chains=$(SAMPLE_CHAINS) sample_warmup=$(SAMPLE_WARMUP) sample_draws=$(SAMPLE_DRAWS)" \
+	"  approximation_draws=$(APPROXIMATION_DRAWS) variational_iterations=$(VARIATIONAL_ITERATIONS)" \
+	"  optimize_iterations=$(OPTIMIZE_ITERATIONS) pathfinder_paths=$(PATHFINDER_PATHS) predictive_draws=$(PREDICTIVE_DRAWS)" \
+	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
+	"  toolchain_env: $(if $(DARWIN_SDKROOT),apple-xcrun,default)" \
+	"  expected outputs: $(RESULTS_ROOT)/results.csv and $(RESULTS_ROOT)/details/"
 	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 $(QM9_LIMIT_QM9_ARG) --split-mode $(QM9_SPLIT_MODE) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
 
 python-benchmark-zinc:
+	@printf "%s\n" \
+	"Running ZINC timing benchmark." \
+	"  repo: MolADT-Bayes-Python" \
+	"  command: scripts.run_all zinc-timing" \
+	"  dataset: ZINC" \
+	"  results_dir: $(RESULTS_ROOT)" \
+	"  dataset_size: $(ZINC_DATASET_SIZE)" \
+	"  dataset_dimension: $(ZINC_DATASET_DIMENSION)" \
+	"  zinc_limit: $(if $(ZINC_LIMIT),$(ZINC_LIMIT),full-configured-pass)" \
+	"  include_moladt: $(if $(filter 1 true yes TRUE YES,$(INCLUDE_MOLADT)),yes,no)" \
+	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
+	"  toolchain_env: $(if $(DARWIN_SDKROOT),apple-xcrun,default)" \
+	"  expected outputs: $(RESULTS_ROOT)/timing_summary.csv and $(RESULTS_ROOT)/details/"
 	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all zinc-timing --dataset-size $(ZINC_DATASET_SIZE) --dataset-dimension $(ZINC_DATASET_DIMENSION) $(ZINC_LIMIT_TIMING_ARG) $(INCLUDE_MOLADT_ARG) $(VERBOSE_ARG)
 
 freesolv:
-	MOLADT_RESULTS_DIR=results/$(FREESOLV_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all smoke-test --include-moladt-predictive --models "" --extra-models $(BEST_FREESOLV_EXTRA_MODELS) $(VERBOSE_ARG)
+	@printf "%s\n" \
+	"Running reviewer-facing FreeSolv comparison." \
+	"  repo: MolADT-Bayes-Python" \
+	"  command: scripts.run_all smoke-test" \
+	"  dataset: FreeSolv" \
+	"  results_dir: results/$(FREESOLV_RESULTS_SUBDIR)" \
+	"  paper baseline: MoleculeNet MPNN RMSE 1.15" \
+	"  inference_preset: $(INFERENCE_PRESET)" \
+	"  methods: $(METHODS)" \
+	"  models: $(MODELS)" \
+	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
+	"  expected figure: results/$(FREESOLV_RESULTS_SUBDIR)/details/freesolv_rmse_vs_moleculenet.svg"
+	MOLADT_RESULTS_DIR=results/$(FREESOLV_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all smoke-test $(VERBOSE_ARG) $(BENCHMARK_ARGS)
 
 qm9:
-	MOLADT_RESULTS_DIR=results/$(QM9_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 $(QM9_LIMIT_QM9_ARG) --split-mode $(QM9_SPLIT_MODE) $(if $(filter paper,$(INFERENCE_PRESET)),--paper-mode,) --include-moladt-predictive --models "" --extra-models $(BEST_QM9_EXTRA_MODELS) $(VERBOSE_ARG)
+	@printf "%s\n" \
+	"Running reviewer-facing QM9 comparison." \
+	"  repo: MolADT-Bayes-Python" \
+	"  command: scripts.run_all qm9" \
+	"  dataset: QM9 (mu task, MolADT only)" \
+	"  results_dir: results/$(QM9_RESULTS_SUBDIR)" \
+	"  paper baseline: MoleculeNet DTNN MAE 2.35" \
+	"  inference_preset: $(INFERENCE_PRESET)" \
+	"  qm9_split_mode: $(QM9_SPLIT_MODE)" \
+	"  qm9_limit: $(if $(QM9_LIMIT),$(QM9_LIMIT),full-local-download)" \
+	"  methods: $(METHODS)" \
+	"  models: $(MODELS)" \
+	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
+	"  expected figure: results/$(QM9_RESULTS_SUBDIR)/details/qm9_mae_vs_moleculenet.svg"
+	MOLADT_RESULTS_DIR=results/$(QM9_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 $(QM9_LIMIT_QM9_ARG) --split-mode $(QM9_SPLIT_MODE) $(if $(filter paper,$(INFERENCE_PRESET)),--paper-mode,) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
 
 benchmark:
-	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all benchmark $(QM9_LIMIT_BENCHMARK_ARG) --qm9-split-mode $(QM9_SPLIT_MODE) --zinc-dataset-size $(ZINC_DATASET_SIZE) --zinc-dataset-dimension $(ZINC_DATASET_DIMENSION) $(ZINC_LIMIT_BENCHMARK_ARG) $(INCLUDE_MOLADT_ARG) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
+	@printf "%s\n" \
+	"Running combined MolADT benchmark bundle." \
+	"  repo: MolADT-Bayes-Python" \
+	"  command: scripts.run_all benchmark" \
+	"  datasets: FreeSolv RMSE + QM9 mu MAE" \
+	"  results_dir: $(RESULTS_ROOT)" \
+	"  inference_preset: $(INFERENCE_PRESET)" \
+	"  qm9_split_mode: $(QM9_SPLIT_MODE)" \
+	"  qm9_limit: $(if $(QM9_LIMIT),$(QM9_LIMIT),full-local-download)" \
+	"  zinc_limit: $(if $(ZINC_LIMIT),$(ZINC_LIMIT),not-used-in-this-target)" \
+	"  methods: $(METHODS)" \
+	"  models: $(MODELS)" \
+	"  sample_chains=$(SAMPLE_CHAINS) sample_warmup=$(SAMPLE_WARMUP) sample_draws=$(SAMPLE_DRAWS)" \
+	"  approximation_draws=$(APPROXIMATION_DRAWS) variational_iterations=$(VARIATIONAL_ITERATIONS)" \
+	"  optimize_iterations=$(OPTIMIZE_ITERATIONS) pathfinder_paths=$(PATHFINDER_PATHS) predictive_draws=$(PREDICTIVE_DRAWS)" \
+	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
+	"  paper baselines: FreeSolv RMSE 1.15; QM9 DTNN MAE 2.35" \
+	"  expected outputs: $(RESULTS_ROOT)/results.csv, $(RESULTS_ROOT)/details/freesolv_rmse_vs_moleculenet.svg, $(RESULTS_ROOT)/details/qm9_mae_vs_moleculenet.svg"
+	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all benchmark $(QM9_LIMIT_BENCHMARK_ARG) --qm9-split-mode $(QM9_SPLIT_MODE) $(if $(filter paper,$(INFERENCE_PRESET)),--paper-mode,) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
 
 benchmark-small:
-	@$(MAKE) --no-print-directory benchmark QM9_LIMIT=2000 QM9_SPLIT_MODE=subset INCLUDE_MOLADT=1
+	@$(MAKE) --no-print-directory benchmark QM9_LIMIT=2000 QM9_SPLIT_MODE=subset
 
 benchmark-paper:
-	@$(MAKE) --no-print-directory benchmark INFERENCE_PRESET=paper QM9_LIMIT= QM9_SPLIT_MODE=paper INCLUDE_MOLADT=1
+	@$(MAKE) --no-print-directory benchmark INFERENCE_PRESET=paper QM9_LIMIT= QM9_SPLIT_MODE=paper
 
 benchmark-bg:
 	@mkdir -p $(dir $(BENCHMARK_LOG))
 	@printf "%s\n" \
-	"Running benchmark in the foreground." \
+	"Running benchmark in the foreground with mirrored logging." \
+	"  repo: MolADT-Bayes-Python" \
+	"  delegated target: benchmark" \
+	"  inference_preset: $(INFERENCE_PRESET)" \
+	"  qm9_split_mode: $(QM9_SPLIT_MODE)" \
+	"  qm9_limit: $(if $(QM9_LIMIT),$(QM9_LIMIT),full-local-download)" \
+	"  methods: $(METHODS)" \
+	"  models: $(MODELS)" \
 	"  output is mirrored to: $(BENCHMARK_LOG)" \
 	"  summary csv: $(RESULTS_ROOT)/results.csv" \
 	"  details dir: $(RESULTS_ROOT)/details/"
 	@$(BASH) -o pipefail -c '$(MAKE) --no-print-directory benchmark 2>&1 | tee "$(BENCHMARK_LOG)"'
 
 timing:
+	@printf "%s\n" \
+	"Running MolADT timing benchmark." \
+	"  repo: MolADT-Bayes-Python" \
+	"  command: scripts.run_all zinc-timing --include-moladt" \
+	"  results_dir: results/$(TIMING_RESULTS_SUBDIR)" \
+	"  dataset_size: $(ZINC_DATASET_SIZE)" \
+	"  dataset_dimension: $(ZINC_DATASET_DIMENSION)" \
+	"  zinc_limit: $(if $(ZINC_LIMIT),$(ZINC_LIMIT),full-configured-pass)" \
+	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
+	"  expected outputs: results/$(TIMING_RESULTS_SUBDIR)/timing_summary.csv and details/"
 	MOLADT_RESULTS_DIR=results/$(TIMING_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all zinc-timing --dataset-size $(ZINC_DATASET_SIZE) --dataset-dimension $(ZINC_DATASET_DIMENSION) $(ZINC_LIMIT_TIMING_ARG) --include-moladt $(VERBOSE_ARG)
 
 catboost-geom-model:
+	@printf "%s\n" \
+	"Running CatBoost geometry-backed model sweep." \
+	"  repo: MolADT-Bayes-Python" \
+	"  command: scripts.run_all models" \
+	"  results_dir: results/$(MODEL_RESULTS_SUBDIR)" \
+	"  inference_preset: $(INFERENCE_PRESET)" \
+	"  qm9_split_mode: $(QM9_SPLIT_MODE)" \
+	"  qm9_limit: $(if $(QM9_LIMIT),$(QM9_LIMIT),full-local-download)" \
+	"  methods: $(METHODS)" \
+	"  models: $(MODELS)" \
+	"  benchmark_verbose=$(BENCHMARK_VERBOSE)"
 	MOLADT_RESULTS_DIR=results/$(MODEL_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all models $(QM9_LIMIT_BENCHMARK_ARG) --qm9-split-mode $(QM9_SPLIT_MODE) $(if $(filter paper,$(INFERENCE_PRESET)),--paper-mode,) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
 
 catboost-geom-model-paper:

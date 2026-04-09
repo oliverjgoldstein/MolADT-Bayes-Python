@@ -59,9 +59,9 @@ That is why:
 
 ## Benchmarking Boundary
 
-The predictive benchmarks use canonicalized classical SMILES or MolADT-derived features. The structural branch is not reported as a raw SDF descriptor path: structure-backed molecules are parsed into the MolADT object first and then featurized from that ADT.
+The predictive benchmarks now use MolADT as the benchmark object. Boundary SMILES still matter because they are one of the ways the repo builds the typed molecule, but the published benchmark graphs compare the best local MolADT Stan run against MoleculeNet rather than running a separate SMILES benchmark row.
 
-The ZINC timing benchmark still measures RDKit parsing/canonicalization, and the MolADT-enabled path now also builds a matched local corpus with one MolADT JSON file per molecule plus one canonical SMILES file with the same molecule count. It then measures the local MolADT SMILES parser against local MolADT file parsing on that matched corpus.
+The ZINC timing benchmark is an interoperability/runtime benchmark rather than the central representation comparison. It keeps its own ingest-path measurements and matched local MolADT corpus.
 
 ## Related Files
 

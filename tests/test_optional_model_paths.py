@@ -204,8 +204,8 @@ def test_extend_with_property_results_skips_missing_optional_geometry_dependency
         RegisteredModel(name="visnet_ensemble", input_kind="geometric", runner=failing_geometry_runner),
     )
     artifacts = SimpleNamespace(
-        smiles_export=SimpleNamespace(),
-        tabular_exports={"smiles": SimpleNamespace()},
+        moladt_export=SimpleNamespace(),
+        tabular_exports={"moladt": SimpleNamespace()},
         geometric_exports={"moladt_geom": SimpleNamespace()},
     )
     args = SimpleNamespace(

@@ -114,29 +114,15 @@ The first command shows the explicit Dietz object. The second shows the boundary
 
 That is the recurring boundary in this repo: use SMILES where the notation actually carries the information, and switch to explicit Dietz systems where SMILES would only approximate or omit it.
 
-## Benchmark Views
+## Benchmark Reminder
 
-The benchmark uses three MolADT-facing representation branches:
-
-- `moladt`
-  The compact ADT-native descriptor table.
-- `moladt_typed`
-  The richer ADT table, shown in reports as `MolADT+`.
-  It adds typed pair channels, radial distance channels, bond-angle channels, torsion channels, and bonding-system summaries.
-- `moladt_typed_geom`
-  The coordinate-aware branch, shown as `MolADT+ 3D`.
-  It keeps atomic numbers and coordinates for the geometry model and also carries the richer global ADT descriptors.
+The benchmark object is just `moladt`: the typed MolADT representation built from the boundary input.
 
 ## What We Are Testing
 
-There are two different questions in the reports:
+The current benchmark asks one narrow question:
 
-- Fair tabular question:
-  if the learner is held fixed, does MolADT beat SMILES?
-- Geometry question:
-  if the model can use 3D coordinates as well, how far can `MolADT+ 3D` push the result?
-
-That is why the repo now writes both a fair tabular comparison and a mixed-family frontier comparison.
+- if we fit the Stan MolADT models and keep the best local run, how does that MolADT result compare with the matching MoleculeNet row for FreeSolv or QM9?
 
 ## See Also
 

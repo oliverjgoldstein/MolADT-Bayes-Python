@@ -2,32 +2,54 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
+import hashlib
 import math
 from pathlib import Path
-from typing import Any
+import re
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
-from rdkit import Chem, RDLogger
-from rdkit.Chem import Descriptors, Lipinski, rdMolDescriptors
 
 from moladt.chem.molecule import AtomicSymbol, Molecule, effective_order
 from moladt.inference import compute_descriptors as compute_moladt_descriptors
+from moladt.inference.descriptors import coordinate_descriptors
 from moladt.io.sdf import parse_sdf_record
+from moladt.io.smiles import molecule_to_smiles, parse_smiles
 
 from .common import FailureRecord
 
+if TYPE_CHECKING:
+    from rdkit import Chem
+
+_SMILES_HASH_BINS = 64
+_SMILES_SUMMARY_FEATURE_GROUPS: dict[str, str] = {
+    "smiles_char_length": "smiles_summary",
+    "smiles_token_count": "smiles_summary",
+    "smiles_branch_open_count": "smiles_summary",
+    "smiles_branch_close_count": "smiles_summary",
+    "smiles_ring_marker_count": "smiles_summary",
+    "smiles_aromatic_token_count": "smiles_summary",
+    "smiles_bracket_token_count": "smiles_summary",
+    "smiles_bond_token_count": "smiles_summary",
+    "smiles_directional_bond_count": "smiles_summary",
+    "smiles_chirality_marker_count": "smiles_summary",
+    "smiles_charge_marker_count": "smiles_summary",
+    "smiles_component_count": "smiles_summary",
+}
+_SMILES_TOKEN_HASH_FEATURE_GROUPS: dict[str, str] = {
+    f"smiles_token_hash_{index:02d}": "smiles_token_hash"
+    for index in range(_SMILES_HASH_BINS)
+}
+_SMILES_BIGRAM_HASH_FEATURE_GROUPS: dict[str, str] = {
+    f"smiles_bigram_hash_{index:02d}": "smiles_bigram_hash"
+    for index in range(_SMILES_HASH_BINS)
+}
+
 BASE_FEATURE_GROUPS: dict[str, str] = {
-    "molecular_weight": "size_2d",
-    "hba": "polarity_2d",
-    "hbd": "polarity_2d",
-    "tpsa": "polarity_2d",
-    "rotatable_bond_count": "topology_2d",
-    "ring_count": "topology_2d",
-    "aromatic_ring_count": "topology_2d",
-    "fraction_csp3": "topology_2d",
-    "formal_charge": "charge_2d",
-    "heavy_atom_count": "size_2d",
+    **_SMILES_SUMMARY_FEATURE_GROUPS,
+    **_SMILES_TOKEN_HASH_FEATURE_GROUPS,
+    **_SMILES_BIGRAM_HASH_FEATURE_GROUPS,
 }
 
 SDF_GEOMETRY_FEATURE_GROUPS: dict[str, str] = {
@@ -54,7 +76,7 @@ THREED_FEATURE_GROUPS: dict[str, str] = {
 MOLADT_FEATURE_GROUPS: dict[str, str] = {
     "weight": "adt_composition",
     "polar": "adt_composition",
-    "surface": "adt_geometry_proxy",
+    "surface": "adt_size_proxy",
     "bond_order": "adt_topology",
     "donor_count": "adt_polarity",
     "acceptor_count": "adt_polarity",
@@ -89,6 +111,10 @@ MOLADT_FEATURE_GROUPS: dict[str, str] = {
     "rotatable_bonds": "adt_topology",
     "heavy_atom_degree_mean": "adt_topology",
     "heavy_atom_degree_max": "adt_topology",
+}
+
+MOLADT_GEOMETRY_FEATURE_GROUPS: dict[str, str] = {
+    **MOLADT_FEATURE_GROUPS,
     "radius_of_gyration": "adt_geometry",
     "distance_mean": "adt_geometry",
     "distance_std": "adt_geometry",
@@ -179,6 +205,49 @@ MOLADT_TYPED_FEATURE_GROUPS: dict[str, str] = {
 }
 
 
+_SMILES_TOKEN_PATTERN = re.compile(
+    r"(\[[^\[\]]+\]|Br|Cl|Si|Na|Fe|se|as|B|C|N|O|S|P|F|I|b|c|n|o|p|s|\(|\)|\.|=|#|-|\+|\\\\|/|:|~|@@?|%[0-9]{2}|[0-9]|\*)"
+)
+
+
+def tokenize_smiles_lexically(smiles: str) -> tuple[str, ...]:
+    tokens = _SMILES_TOKEN_PATTERN.findall(smiles)
+    if "".join(tokens) != smiles:
+        raise ValueError(f"Unsupported SMILES token sequence: {smiles}")
+    if not tokens:
+        raise ValueError("SMILES string is empty")
+    return tuple(tokens)
+
+
+def _stable_hash_bin(prefix: str, token: str, *, bins: int) -> int:
+    digest = hashlib.blake2b(f"{prefix}:{token}".encode("utf-8"), digest_size=8).digest()
+    return int.from_bytes(digest, "big") % bins
+
+
+def compute_smiles_string_features(smiles: str) -> dict[str, float]:
+    tokens = tokenize_smiles_lexically(smiles)
+    features = {name: 0.0 for name in BASE_FEATURE_GROUPS}
+    features["smiles_char_length"] = float(len(smiles))
+    features["smiles_token_count"] = float(len(tokens))
+    features["smiles_branch_open_count"] = float(sum(token == "(" for token in tokens))
+    features["smiles_branch_close_count"] = float(sum(token == ")" for token in tokens))
+    features["smiles_ring_marker_count"] = float(sum(token.isdigit() or token.startswith("%") for token in tokens))
+    features["smiles_aromatic_token_count"] = float(sum(token in {"b", "c", "n", "o", "p", "s", "se", "as"} for token in tokens))
+    features["smiles_bracket_token_count"] = float(sum(token.startswith("[") for token in tokens))
+    features["smiles_bond_token_count"] = float(sum(token in {"-", "=", "#", ":", "/", "\\"} for token in tokens))
+    features["smiles_directional_bond_count"] = float(sum(token in {"/", "\\"} for token in tokens))
+    features["smiles_chirality_marker_count"] = float(sum("@" in token for token in tokens))
+    features["smiles_charge_marker_count"] = float(sum(("+" in token) or ("-" in token and token != "-") for token in tokens))
+    features["smiles_component_count"] = float(smiles.count(".") + 1)
+    for token in tokens:
+        token_bin = _stable_hash_bin("token", token, bins=_SMILES_HASH_BINS)
+        features[f"smiles_token_hash_{token_bin:02d}"] += 1.0
+    for left, right in zip(tokens, tokens[1:], strict=False):
+        bigram_bin = _stable_hash_bin("bigram", f"{left}>{right}", bins=_SMILES_HASH_BINS)
+        features[f"smiles_bigram_hash_{bigram_bin:02d}"] += 1.0
+    return features
+
+
 @dataclass(frozen=True, slots=True)
 class FeatureTable:
     rows: pd.DataFrame
@@ -199,15 +268,32 @@ class GeometricFeatureTable:
 
 
 def canonicalize_smiles(smiles: str) -> str:
-    molecule = Chem.MolFromSmiles(smiles, sanitize=True)
+    chem = _import_rdkit_chem()
+    if chem is None:
+        molecule = parse_smiles(smiles)
+        return molecule_to_smiles(molecule)
+    molecule = chem.MolFromSmiles(smiles, sanitize=True)
     if molecule is None:
-        raise ValueError(f"RDKit failed to parse SMILES: {smiles}")
-    return Chem.MolToSmiles(molecule, canonical=True, isomericSmiles=True)
+        raise ValueError(f"RDKit could not parse SMILES: {smiles}")
+    return chem.MolToSmiles(molecule, canonical=True, isomericSmiles=True)
 
 
-def canonical_smiles_from_mol(molecule: Chem.Mol) -> str:
+def canonical_smiles_from_mol(molecule: "Chem.Mol") -> str:
+    chem = _require_rdkit_chem()
     sanitized = _sanitize_rdkit_mol(molecule)
-    return Chem.MolToSmiles(sanitized, canonical=True, isomericSmiles=True)
+    return chem.MolToSmiles(sanitized, canonical=True, isomericSmiles=True)
+
+
+def canonical_smiles_from_molecule(molecule: Molecule) -> str:
+    return molecule_to_smiles(molecule)
+
+
+def _coerce_moladt_molecule(raw_molecule: Any) -> Molecule:
+    if isinstance(raw_molecule, Molecule):
+        return raw_molecule
+    if hasattr(raw_molecule, "GetAtoms"):
+        return rdkit_mol_to_moladt_record(raw_molecule).molecule
+    raise TypeError(f"Unsupported molecule object: {type(raw_molecule).__name__}")
 
 
 def featurize_smiles_dataframe(
@@ -225,15 +311,11 @@ def featurize_smiles_dataframe(
         smiles = str(getattr(record, smiles_column))
         target = float(getattr(record, target_column))
         try:
-            molecule = Chem.MolFromSmiles(smiles, sanitize=True)
-            if molecule is None:
-                raise ValueError("RDKit returned None from MolFromSmiles")
-            canonical = Chem.MolToSmiles(molecule, canonical=True, isomericSmiles=True)
-            base = compute_base_descriptors(molecule)
+            base = compute_smiles_string_features(smiles)
         except Exception as exc:
             failures.append(FailureRecord(dataset=dataset_name, mol_id=mol_id, stage="smiles_featurize", error=str(exc)))
             continue
-        row = {"mol_id": mol_id, "smiles": canonical, target_column: target}
+        row = {"mol_id": mol_id, "smiles": smiles, target_column: target}
         row.update(base)
         rows.append(row)
     feature_names = tuple(BASE_FEATURE_GROUPS)
@@ -287,11 +369,11 @@ def featurize_moladt_records(
     for record in dataframe.itertuples(index=False):
         mol_id = str(getattr(record, mol_id_column))
         target = float(getattr(record, target_column))
-        raw_molecule = getattr(record, mol_column)
+        molecule = getattr(record, mol_column)
         try:
-            canonical = canonical_smiles_from_mol(raw_molecule)
-            moladt_record = rdkit_mol_to_moladt_record(raw_molecule)
-            features = compute_moladt_descriptors(moladt_record.molecule).to_dict()
+            molecule = _coerce_moladt_molecule(molecule)
+            canonical = canonical_smiles_from_molecule(molecule)
+            features = compute_moladt_descriptors(molecule).to_dict()
         except Exception as exc:
             failures.append(FailureRecord(dataset=dataset_name, mol_id=mol_id, stage="moladt_featurize", error=str(exc)))
             continue
@@ -313,16 +395,20 @@ def featurize_moladt_typed_records(
     target_column: str,
     record_index_column: str | None = None,
 ) -> FeatureTable:
+    # Legacy richer descriptor helper kept for side experiments. The main
+    # benchmark contract is `smiles` vs `moladt`; this path changes the
+    # information budget and is intentionally not part of the default
+    # representation comparison.
     rows: list[dict[str, Any]] = []
     failures: list[FailureRecord] = []
     for record in dataframe.itertuples(index=False):
         mol_id = str(getattr(record, mol_id_column))
         target = float(getattr(record, target_column))
-        raw_molecule = getattr(record, mol_column)
+        molecule = getattr(record, mol_column)
         try:
-            canonical = canonical_smiles_from_mol(raw_molecule)
-            moladt_record = rdkit_mol_to_moladt_record(raw_molecule)
-            features = compute_moladt_typed_descriptors(moladt_record.molecule)
+            molecule = _coerce_moladt_molecule(molecule)
+            canonical = canonical_smiles_from_molecule(molecule)
+            features = compute_moladt_typed_descriptors(molecule)
         except Exception as exc:
             failures.append(FailureRecord(dataset=dataset_name, mol_id=mol_id, stage="moladt_typed_featurize", error=str(exc)))
             continue
@@ -348,8 +434,6 @@ def featurize_moladt_smiles_dataframe(
     smiles_column: str,
     target_column: str,
 ) -> FeatureTable:
-    from moladt.io.smiles import parse_smiles
-
     rows: list[dict[str, Any]] = []
     failures: list[FailureRecord] = []
     for record in dataframe.itertuples(index=False):
@@ -357,13 +441,12 @@ def featurize_moladt_smiles_dataframe(
         smiles = str(getattr(record, smiles_column))
         target = float(getattr(record, target_column))
         try:
-            canonical = canonicalize_smiles(smiles)
-            moladt_molecule = parse_smiles(canonical)
+            moladt_molecule = parse_smiles(smiles)
             features = compute_moladt_descriptors(moladt_molecule).to_dict()
         except Exception as exc:
             failures.append(FailureRecord(dataset=dataset_name, mol_id=mol_id, stage="moladt_smiles_featurize", error=str(exc)))
             continue
-        row: dict[str, Any] = {"mol_id": mol_id, "smiles": canonical, target_column: target}
+        row: dict[str, Any] = {"mol_id": mol_id, "smiles": smiles, target_column: target}
         row.update(features)
         rows.append(row)
     feature_names = tuple(MOLADT_FEATURE_GROUPS)
@@ -388,17 +471,16 @@ def featurize_sdf_geometry_records(
     for record in dataframe.itertuples(index=False):
         mol_id = str(getattr(record, mol_id_column))
         target = float(getattr(record, target_column))
-        raw_molecule = getattr(record, mol_column)
+        molecule = getattr(record, mol_column)
         try:
-            molecule = Chem.Mol(raw_molecule)
-            with _suppress_rdkit_logs("rdApp.error", "rdApp.warning"):
-                Chem.SanitizeMol(molecule)
-            if molecule.GetNumConformers() == 0:
-                raise ValueError("Molecule has no conformer coordinates")
-            conformer = molecule.GetConformer()
-            z = np.asarray([atom.GetAtomicNum() for atom in molecule.GetAtoms()], dtype=np.int64)
-            pos = np.asarray(conformer.GetPositions(), dtype=float)
-            canonical = Chem.MolToSmiles(molecule, canonical=True, isomericSmiles=True)
+            molecule = _coerce_moladt_molecule(molecule)
+            ordered_atoms = [molecule.atoms[atom_id] for atom_id in sorted(molecule.atoms)]
+            z = np.asarray([atom.attributes.atomic_number for atom in ordered_atoms], dtype=np.int64)
+            pos = np.asarray(
+                [[atom.coordinate.x.value, atom.coordinate.y.value, atom.coordinate.z.value] for atom in ordered_atoms],
+                dtype=float,
+            )
+            canonical = canonical_smiles_from_molecule(molecule)
             if pos.shape != (len(z), 3):
                 raise ValueError(f"Expected coordinates with shape ({len(z)}, 3) but found {pos.shape}")
         except Exception as exc:
@@ -446,12 +528,13 @@ def featurize_moladt_geometry_records(
     for record in dataframe.itertuples(index=False):
         mol_id = str(getattr(record, mol_id_column))
         target = float(getattr(record, target_column))
-        raw_molecule = getattr(record, mol_column)
+        molecule = getattr(record, mol_column)
         try:
-            canonical = canonical_smiles_from_mol(raw_molecule)
-            moladt_record = rdkit_mol_to_moladt_record(raw_molecule)
-            descriptor_dict = compute_moladt_descriptors(moladt_record.molecule).to_dict()
-            ordered_atoms = [moladt_record.molecule.atoms[atom_id] for atom_id in sorted(moladt_record.molecule.atoms)]
+            molecule = _coerce_moladt_molecule(molecule)
+            canonical = canonical_smiles_from_molecule(molecule)
+            descriptor_dict = compute_moladt_descriptors(molecule).to_dict()
+            descriptor_dict.update(coordinate_descriptors(molecule))
+            ordered_atoms = [molecule.atoms[atom_id] for atom_id in sorted(molecule.atoms)]
             z = np.asarray([atom.attributes.atomic_number for atom in ordered_atoms], dtype=np.int64)
             pos = np.asarray(
                 [
@@ -477,7 +560,7 @@ def featurize_moladt_geometry_records(
         atomic_numbers=tuple(atomic_numbers),
         coordinates=tuple(coordinates),
         global_feature_names=feature_names,
-        global_feature_groups=dict(MOLADT_FEATURE_GROUPS),
+        global_feature_groups=dict(MOLADT_GEOMETRY_FEATURE_GROUPS),
         global_features=np.asarray([[row[name] for name in feature_names] for row in global_rows], dtype=float) if global_rows else None,
         failures=tuple(failures),
     )
@@ -492,6 +575,8 @@ def featurize_moladt_typed_geometry_records(
     target_column: str,
     record_index_column: str | None = None,
 ) -> GeometricFeatureTable:
+    # Legacy richer geometry helper kept for side experiments. The current
+    # public benchmark reports `sdf_geom` and `moladt_geom` instead.
     rows: list[dict[str, Any]] = []
     atomic_numbers: list[np.ndarray] = []
     coordinates: list[np.ndarray] = []
@@ -538,46 +623,49 @@ def featurize_moladt_typed_geometry_records(
     )
 
 
-def load_rdkit_sdf_records(sdf_path: Path) -> list[Chem.Mol | None]:
-    supplier = Chem.SDMolSupplier(str(sdf_path), removeHs=False, sanitize=False)
+def load_rdkit_sdf_records(sdf_path: Path) -> list["Chem.Mol | None"]:
+    chem = _require_rdkit_chem()
+    supplier = chem.SDMolSupplier(str(sdf_path), removeHs=False, sanitize=False)
     return [molecule for molecule in supplier]
 
 
-def compute_base_descriptors(molecule: Chem.Mol) -> dict[str, float]:
+def compute_base_descriptors(molecule: "Chem.Mol") -> dict[str, float]:
+    descriptors, lipinski, rd_mol_descriptors, chem = _require_rdkit_descriptors()
     reference = _sanitize_rdkit_mol(molecule)
     return {
-        "molecular_weight": float(Descriptors.MolWt(reference)),
-        "hba": float(Lipinski.NumHAcceptors(reference)),
-        "hbd": float(Lipinski.NumHDonors(reference)),
-        "tpsa": float(rdMolDescriptors.CalcTPSA(reference)),
-        "rotatable_bond_count": float(Lipinski.NumRotatableBonds(reference)),
-        "ring_count": float(rdMolDescriptors.CalcNumRings(reference)),
-        "aromatic_ring_count": float(rdMolDescriptors.CalcNumAromaticRings(reference)),
-        "fraction_csp3": float(rdMolDescriptors.CalcFractionCSP3(reference)),
-        "formal_charge": float(Chem.GetFormalCharge(reference)),
+        "molecular_weight": float(descriptors.MolWt(reference)),
+        "hba": float(lipinski.NumHAcceptors(reference)),
+        "hbd": float(lipinski.NumHDonors(reference)),
+        "tpsa": float(rd_mol_descriptors.CalcTPSA(reference)),
+        "rotatable_bond_count": float(lipinski.NumRotatableBonds(reference)),
+        "ring_count": float(rd_mol_descriptors.CalcNumRings(reference)),
+        "aromatic_ring_count": float(rd_mol_descriptors.CalcNumAromaticRings(reference)),
+        "fraction_csp3": float(rd_mol_descriptors.CalcFractionCSP3(reference)),
+        "formal_charge": float(chem.GetFormalCharge(reference)),
         "heavy_atom_count": float(reference.GetNumHeavyAtoms()),
     }
 
 
-def compute_3d_descriptors(molecule: Chem.Mol) -> dict[str, float]:
+def compute_3d_descriptors(molecule: "Chem.Mol") -> dict[str, float]:
+    _, _, rd_mol_descriptors, _ = _require_rdkit_descriptors()
     reference = _sanitize_rdkit_mol(molecule)
     if reference.GetNumConformers() == 0:
         raise ValueError("Molecule has no conformer coordinates")
     return {
-        "radius_of_gyration": float(rdMolDescriptors.CalcRadiusOfGyration(reference)),
-        "asphericity": float(rdMolDescriptors.CalcAsphericity(reference)),
-        "eccentricity": float(rdMolDescriptors.CalcEccentricity(reference)),
-        "inertial_shape_factor": float(rdMolDescriptors.CalcInertialShapeFactor(reference)),
-        "npr1": float(rdMolDescriptors.CalcNPR1(reference)),
-        "npr2": float(rdMolDescriptors.CalcNPR2(reference)),
-        "pmi1": float(rdMolDescriptors.CalcPMI1(reference)),
-        "pmi2": float(rdMolDescriptors.CalcPMI2(reference)),
-        "pmi3": float(rdMolDescriptors.CalcPMI3(reference)),
+        "radius_of_gyration": float(rd_mol_descriptors.CalcRadiusOfGyration(reference)),
+        "asphericity": float(rd_mol_descriptors.CalcAsphericity(reference)),
+        "eccentricity": float(rd_mol_descriptors.CalcEccentricity(reference)),
+        "inertial_shape_factor": float(rd_mol_descriptors.CalcInertialShapeFactor(reference)),
+        "npr1": float(rd_mol_descriptors.CalcNPR1(reference)),
+        "npr2": float(rd_mol_descriptors.CalcNPR2(reference)),
+        "pmi1": float(rd_mol_descriptors.CalcPMI1(reference)),
+        "pmi2": float(rd_mol_descriptors.CalcPMI2(reference)),
+        "pmi3": float(rd_mol_descriptors.CalcPMI3(reference)),
         **pairwise_distance_summaries(reference),
     }
 
 
-def pairwise_distance_summaries(molecule: Chem.Mol) -> dict[str, float]:
+def pairwise_distance_summaries(molecule: "Chem.Mol") -> dict[str, float]:
     conformer = molecule.GetConformer()
     coordinates = np.asarray(conformer.GetPositions(), dtype=float)
     if coordinates.shape[0] < 2:
@@ -594,41 +682,78 @@ def pairwise_distance_summaries(molecule: Chem.Mol) -> dict[str, float]:
 
 @contextmanager
 def _suppress_rdkit_logs(*channels: str):
+    rd_logger = _import_rdkit_logger()
+    if rd_logger is None:
+        yield
+        return
     for channel in channels:
-        RDLogger.DisableLog(channel)
+        rd_logger.DisableLog(channel)
     try:
         yield
     finally:
         for channel in reversed(channels):
-            RDLogger.EnableLog(channel)
+            rd_logger.EnableLog(channel)
 
 
-def _sanitize_rdkit_mol(molecule: Chem.Mol) -> Chem.Mol:
-    working = Chem.Mol(molecule)
-    remove_hs = Chem.RemoveHsParameters()
+def _sanitize_rdkit_mol(molecule: "Chem.Mol") -> "Chem.Mol":
+    chem = _require_rdkit_chem()
+    working = chem.Mol(molecule)
+    remove_hs = chem.RemoveHsParameters()
     remove_hs.removeDegreeZero = True
     remove_hs.showWarnings = False
     with _suppress_rdkit_logs("rdApp.error", "rdApp.warning"):
-        Chem.SanitizeMol(working)
-        without_hydrogens = Chem.RemoveHs(working, remove_hs)
-        Chem.SanitizeMol(without_hydrogens)
+        chem.SanitizeMol(working)
+        without_hydrogens = chem.RemoveHs(working, remove_hs)
+        chem.SanitizeMol(without_hydrogens)
     return without_hydrogens
 
 
-def rdkit_mol_to_moladt_record(molecule: Chem.Mol):
-    working = Chem.Mol(molecule)
+def rdkit_mol_to_moladt_record(molecule: "Chem.Mol"):
+    chem = _require_rdkit_chem()
+    working = chem.Mol(molecule)
     with _suppress_rdkit_logs("rdApp.error", "rdApp.warning"):
-        Chem.SanitizeMol(working)
-    mol_block = Chem.MolToMolBlock(working)
+        chem.SanitizeMol(working)
+    mol_block = chem.MolToMolBlock(working)
     return parse_sdf_record(f"{mol_block}\n$$$$\n")
 
 
+def _import_rdkit_chem():
+    try:
+        from rdkit import Chem
+    except ImportError:
+        return None
+    return Chem
+
+
+def _require_rdkit_chem():
+    chem = _import_rdkit_chem()
+    if chem is None:
+        raise RuntimeError("RDKit is required for this interop helper but is not installed")
+    return chem
+
+
+def _import_rdkit_logger():
+    try:
+        from rdkit import RDLogger
+    except ImportError:
+        return None
+    return RDLogger
+
+
+def _require_rdkit_descriptors():
+    chem = _require_rdkit_chem()
+    try:
+        from rdkit.Chem import Descriptors, Lipinski, rdMolDescriptors
+    except ImportError as exc:
+        raise RuntimeError("RDKit descriptor helpers are not installed") from exc
+    return Descriptors, Lipinski, rdMolDescriptors, chem
+
+
 def compute_moladt_typed_descriptors(molecule: Molecule) -> dict[str, float]:
-    # This richer ADT table keeps the learner fixed while adding
-    # literature-inspired typed pair and radial channels on top of the
-    # compact global MolADT descriptor set. Bond-angle and torsion
-    # channels keep more of the SDF-backed local geometry instead of
-    # collapsing everything into pairwise distance summaries alone.
+    # Legacy richer ADT helper kept for side experiments. It adds typed
+    # pair, radial, angle, torsion, and bonding-system channels on top of
+    # the compact MolADT descriptor set, which means it is not the fair
+    # `smiles` vs `moladt` benchmark comparison.
     descriptors = compute_moladt_descriptors(molecule).to_dict()
     descriptors.update(_typed_pair_features(molecule))
     descriptors.update(_typed_system_features(molecule))

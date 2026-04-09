@@ -8,7 +8,7 @@ The shared contract lives under `data/processed/`. The goal is to let Haskell co
 
 ## What Python Writes
 
-For each exported dataset prefix such as `freesolv_smiles` or `qm9_moladt`, Python writes:
+For each exported dataset prefix such as `freesolv_moladt` or `qm9_moladt`, Python writes:
 
 - `*_X_train.csv`, `*_X_valid.csv`, `*_X_test.csv`
 - `*_y_train.csv`, `*_y_valid.csv`, `*_y_test.csv`
@@ -17,7 +17,7 @@ For each exported dataset prefix such as `freesolv_smiles` or `qm9_moladt`, Pyth
 
 Examples already used by the Haskell side include:
 
-- `data/processed/freesolv_smiles_X_train.csv`
+- `data/processed/freesolv_moladt_X_train.csv`
 - `data/processed/qm9_moladt_X_train.csv`
 
 ## Standardization Contract
@@ -76,7 +76,7 @@ Shared modeling assumptions that matter for interop:
 2. In the Haskell repo, point the consumer at the processed directory:
 
    ```bash
-   MOLADT_PROCESSED_DATA_DIR=../MolADT-Bayes-Python/data/processed stack run moladtbayes -- infer-benchmark freesolv_smiles lwis
+   MOLADT_PROCESSED_DATA_DIR=../MolADT-Bayes-Python/data/processed stack run moladtbayes -- infer-benchmark freesolv_moladt lwis
    ```
 
 3. For an ADT-backed structural benchmark:

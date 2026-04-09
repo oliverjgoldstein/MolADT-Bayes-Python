@@ -64,9 +64,26 @@ def test_makefile_benchmark_defaults_to_verbose_output(tmp_path: Path) -> None:
     )
 
     assert "./.venv/bin/python -m scripts.run_all benchmark" in result.stdout
+    assert "Running combined MolADT benchmark bundle." in result.stdout
     assert "--qm9-limit 2000" in result.stdout
     assert "--qm9-split-mode subset" in result.stdout
     assert "--verbose" in result.stdout
+
+
+def test_makefile_freesolv_target_prints_verbose_context(tmp_path: Path) -> None:
+    _copy_makefile(tmp_path)
+    _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
+
+    result = subprocess.run(
+        ["make", "-C", str(tmp_path), "-n", "freesolv", "SYSTEM_PYTHON=python3"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "Running reviewer-facing FreeSolv comparison." in result.stdout
+    assert "paper baseline: MoleculeNet MPNN RMSE 1.15" in result.stdout
+    assert "./.venv/bin/python -m scripts.run_all smoke-test" in result.stdout
 
 
 def test_makefile_benchmark_defaults_to_timestamped_results_directory(tmp_path: Path) -> None:
@@ -105,7 +122,7 @@ def test_makefile_paper_benchmark_uses_timestamped_paper_subdirectory(tmp_path: 
     assert re.search(r"MOLADT_RESULTS_DIR=results/paper/run_\d{8}_\d{6}", result.stdout)
 
 
-def test_makefile_benchmark_small_target_enables_moladt_subset_mode(tmp_path: Path) -> None:
+def test_makefile_benchmark_small_target_uses_qm9_subset_mode(tmp_path: Path) -> None:
     _copy_makefile(tmp_path)
     _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
 
@@ -116,7 +133,7 @@ def test_makefile_benchmark_small_target_enables_moladt_subset_mode(tmp_path: Pa
         check=True,
     )
 
-    assert "benchmark QM9_LIMIT=2000 QM9_SPLIT_MODE=subset INCLUDE_MOLADT=1" in result.stdout
+    assert "benchmark QM9_LIMIT=2000 QM9_SPLIT_MODE=subset" in result.stdout
 
 
 def test_makefile_benchmark_paper_target_enables_paper_split(tmp_path: Path) -> None:
@@ -130,7 +147,7 @@ def test_makefile_benchmark_paper_target_enables_paper_split(tmp_path: Path) -> 
         check=True,
     )
 
-    assert "benchmark INFERENCE_PRESET=paper QM9_LIMIT= QM9_SPLIT_MODE=paper INCLUDE_MOLADT=1" in result.stdout
+    assert "benchmark INFERENCE_PRESET=paper QM9_LIMIT= QM9_SPLIT_MODE=paper" in result.stdout
 
 
 def test_makefile_catboost_geom_model_target_writes_model_results_subdirectory(tmp_path: Path) -> None:

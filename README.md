@@ -1,37 +1,47 @@
 # MolADT-Bayes-Python
 
-MolADT is a typed molecular data format. The goal is to represent molecules in a way that exposes chemically meaningful structure and invariances, especially when doing Bayesian sampling over molecules or building models over molecular structure.
+MolADT is a typed molecular data format for Bayesian work over molecules. It keeps chemically meaningful structure in the object itself instead of hiding it inside string syntax.
 
-Start here: [Quickstart](docs/quickstart.md)
+[Quickstart](docs/quickstart.md) · [Representation](docs/representation.md) · [Models](docs/models.md) · [Examples](docs/examples.md)
 
-## Example
+## Why MolADT
 
-Diborane, ferrocene, and morphine show the boundary quickly.
+Diborane, ferrocene, and morphine show the point quickly.
 
 - diborane in standard SMILES: `[BH2]1[H][BH2][H]1`
 - ferrocene in standard SMILES: `[CH-]1C=CC=C1.[CH-]1C=CC=C1.[Fe+2]`
 - morphine in standard stereochemical SMILES: `CN1CC[C@]23C4=C5C=CC(O)=C4O[C@H]2[C@@H](O)C=C[C@H]3[C@H]1C5`
 
-Those are useful boundary strings, but they are poor central representations.
+Those are useful boundary strings, but they are weak central objects.
 
-- diborane wants two explicit `3c-2e` bridge systems
-- ferrocene wants shared Cp/metal bonding systems, not disconnected ionic fragments
-- morphine still pushes fused-ring bookkeeping and five atom-centered stereo flags into string syntax
+- diborane wants explicit `3c-2e` bridges
+- ferrocene wants shared Cp/metal bonding systems
+- morphine pushes fused-ring structure and stereo flags into a linear notation
 
-MolADT instead stores that chemistry directly in typed data. The point of the project is to put molecules into a format whose structure respects chemically meaningful invariances. SMILES is fine at the edge, but it is notation-dependent, folds chemistry into syntax, and becomes awkward exactly where richer molecular structure starts to matter. In the morphine example, the explicit MolADT object keeps the fused sigma graph direct and preserves the parsed SMILES stereo flags beside it.
+MolADT keeps that chemistry as typed atoms, local bonds, bonding systems, and stereo annotations. That is the point of the repo: a molecular object that respects meaningful invariances and is easier to sample over, featurize, and compare than a string-first representation.
 
-## What This Repo Contains
+## Benchmark Outputs
 
-- the Python MolADT types, parser, renderer, and pretty-printer
-- example molecules including diborane, ferrocene, and morphine
-- Bayesian modeling and experiment tooling built around the representation
+The repo does not ship precomputed benchmark results. `results/` is meant to stay empty in git and only be populated by real non-dry benchmark runs on your machine.
 
-For the representation itself:
+Run:
 
-- [MolADT representation](docs/representation.md)
-- [Orbitals and theoretical chemistry](docs/orbitals.md)
-- [Parsing and rendering](docs/parsing.md)
-- [Models and features](docs/models.md)
+```bash
+make freesolv
+make qm9
+```
+
+That writes:
+
+- `results/freesolv/run_.../freesolv_rmse_vs_moleculenet.svg`
+- `results/qm9/run_.../qm9_mae_vs_moleculenet.svg`
+
+The comparison is deliberately narrow:
+
+- FreeSolv compares the local MolADT RMSE to the MoleculeNet MPNN RMSE row `1.15`
+- QM9 `mu` compares the local MolADT MAE to the MoleculeNet DTNN MAE row `2.35`
+
+Those outputs are local benchmark artifacts, not committed front-page snapshots. The metric matches the MoleculeNet row; the local split and Stan model family still differ from the paper.
 
 ## Quick Start
 
@@ -45,9 +55,13 @@ make python-setup
 
 For probabilistic proposals or local graph surgery, use `MutableMolecule` as a writable scratch state and call `freeze()` to return to canonical `Molecule`.
 
-## Benchmarking
+## What This Repo Contains
 
-All benchmark commands live here:
+- the Python MolADT types, parser, renderer, and pretty-printer
+- example molecules including diborane, ferrocene, and morphine
+- Stan-oriented feature generation and local benchmark tooling
+
+## Benchmarking
 
 ```bash
 make freesolv
@@ -55,13 +69,11 @@ make qm9
 make timing
 ```
 
-- `make freesolv` is the lightest end-to-end run
-- `make qm9` runs the focused dipole benchmark
-- `make timing` measures SMILES vs MolADT ingest cost
+- `make freesolv` writes the FreeSolv MoleculeNet comparison figure
+- `make qm9` writes the QM9 MoleculeNet comparison figure
+- `make timing` runs the separate ingest/interoperability timing pass
 
-Outputs are written under `results/`.
-
-If a required raw file is too large for GitHub, the repo downloads it on demand. Large transfers and archive extraction show live byte counts, entry counts, throughput, and elapsed time.
+Outputs are written under `results/`. If a required raw file is too large for GitHub, the repo downloads it on demand and shows live progress for large transfers and archive extraction.
 
 ## Read More
 

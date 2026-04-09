@@ -1,153 +1,80 @@
 # Inference and Benchmarks
 
-This repo owns the main benchmark run. It prepares the datasets, exports aligned matrices, fits the Stan models, writes a compact CSV-first result bundle, and runs the timing pass.
+This repo owns the main benchmark run. It prepares datasets, exports aligned MolADT matrices, fits the Stan baselines, and writes the reviewer-facing comparison bundle.
 
 ## Main Commands
 
 ```bash
+make freesolv
+make qm9
 make timing
-make catboost-geom-model
-make catboost-geom-model-paper
-make benchmark-small
-make benchmark-paper
-./.venv/bin/python -m scripts.run_all benchmark --include-moladt-predictive --extra-models catboost_uncertainty
-./.venv/bin/python -m scripts.run_all benchmark --include-moladt-predictive --extra-models catboost_uncertainty --geom-model visnet
-./.venv/bin/python -m scripts.run_all benchmark --include-moladt-predictive --extra-models catboost_uncertainty,visnet_ensemble,dimenetpp_ensemble --paper-mode
+./.venv/bin/python -m scripts.run_all smoke-test --verbose
+./.venv/bin/python -m scripts.run_all qm9 --limit 2000 --split-mode subset --verbose
+./.venv/bin/python -m scripts.run_all benchmark --qm9-limit 2000 --qm9-split-mode subset --verbose
 ```
 
-`make timing` is the local timing-only command:
+- `make freesolv` runs the FreeSolv MolADT sweep and compares the best local Stan run against MoleculeNet Table 3 on RMSE
+- `make qm9` runs the QM9 `mu` MolADT sweep and compares the best local Stan run against MoleculeNet Table 3 on MAE
+- `make timing` runs the separate ZINC timing/interoperability pass
 
-- ZINC timing benchmark only
-- builds a matched local corpus under `data/processed/zinc_timing/...`
-- writes one MolADT JSON file per matched molecule plus one canonical SMILES corpus file
-- measures RDKit baseline parsing plus local MolADT SMILES parsing and local MolADT file parsing
-- writes results under `results/timing/run_<timestamp>/`
+## Benchmark Contract
 
-`make benchmark-small` is the default benchmark:
+The benchmark contract is deliberately narrow:
 
-- FreeSolv predictive benchmark
-- QM9 `mu` benchmark on the deterministic 2000-row subset configuration
-- ZINC timing benchmark
-- MolADT timing included
-- results written under `results/run_<timestamp>/`
+- `moladt`
+  The same boundary SMILES is parsed into the typed MolADT object and featurized from that object.
+- the local bar is the single best Stan model/inference-method pair found on the MolADT export for that dataset
+- the paper bar is the matching MoleculeNet row only
+- FreeSolv uses RMSE
+- QM9 `mu` uses MAE
 
-`make benchmark-paper` is the full long run:
+## What Stan Fits
 
-- FreeSolv predictive benchmark
-- QM9 dipole benchmark for `mu`
-- ZINC timing benchmark
-- MolADT timing included
-- paper-scale inference budget
-- deterministic local split counts matching the paper-sized QM9 setup: `110462 / 10000 / 10000`
-- results written under `results/paper/run_<timestamp>/`
-- live Stan and timing output shown in the terminal by default
+Stan only consumes numeric `X/y` matrices here, so the benchmark is over MolADT-derived descriptor matrices rather than literal string objects.
 
-That paper-style QM9 split uses `130,462` molecules in total: `110,462` train, `10,000` validation, and `10,000` test. It is not `100k` per split.
-
-It is the hours-long benchmark command. If you want a quieter run, use `BENCHMARK_VERBOSE=0 make benchmark-paper`.
-
-Model details: [jump to Model](#model).
-
-## Timing
-
-The ZINC timing benchmark measures:
-
-- `raw_file_read`
-- `smiles_parse_sanitize`
-- `smiles_canonicalization`
-- `timing_library_prepare` when MolADT timing is enabled
-  This builds the matched local timing corpus: one MolADT JSON file per molecule and one canonical SMILES library with the same molecule count.
-- `smiles_library_parse` when MolADT timing is enabled
-  This parses each matched canonical SMILES entry with the local MolADT SMILES parser.
-- `moladt_file_parse` when MolADT timing is enabled
-  This reads each MolADT JSON file and parses it back into the local Molecule ADT.
-
-Current defaults from the code:
-
-- dataset size: `250K`
-- dataset dimension: `2D`
-- QM9 small-run mode: `QM9_LIMIT=2000`, `QM9_SPLIT_MODE=subset`
-- QM9 paper-run mode: `QM9_LIMIT=` with `QM9_SPLIT_MODE=paper`
-- inference methods: `sample,variational,pathfinder,optimize,laplace`
-- models: `bayes_linear_student_t,bayes_hierarchical_shrinkage`
-
-## Model
-
-The predictive benchmark fits:
+The aligned Stan models are:
 
 - [`bayes_linear_student_t`](../stan/bayes_linear_student_t.stan)
 - [`bayes_hierarchical_shrinkage`](../stan/bayes_hierarchical_shrinkage.stan)
-- optional `catboost_uncertainty` for fair tabular representation comparisons
-- optional `visnet_ensemble` or `dimenetpp_ensemble` for geometry-aware rows
 
-Reported representations are:
+The benchmark graph keeps only the best local MolADT row from that Stan sweep.
 
-- `smiles`
-- `moladt`
-  The `moladt` branch is not a raw SDF descriptor path. Structure-backed molecules are parsed into the MolADT object first, then ADT-native descriptors are computed from that object.
-- `moladt_typed`
-  This richer ADT branch is shown in the reports as `MolADT+`. It keeps the same model families but extends the feature table with typed pair-interaction channels, radial distance channels, bond-angle channels, torsion channels, and bonding-system summaries computed from the parsed SDF-backed ADT.
-- `sdf_geom`, `moladt_geom`, and `moladt_typed_geom` behind the optional geometry extras
+## Dataset Meaning
 
-The MolADT file parse stage uses `orjson` when it is present in the local environment because this is runtime data parsing, not source-code parsing.
+- FreeSolv compares the best local MolADT RMSE against the MoleculeNet Table 3 MPNN RMSE row `1.15`.
+- QM9 `mu` compares the best local MolADT MAE against the MoleculeNet Table 3 DTNN MAE row `2.35`.
 
-The Python side also exports the aligned matrices used by the Haskell baseline:
+## Timing
+
+`make timing` is not the same question as the predictive benchmark.
+
+It writes a ZINC timing bundle under `results/timing/run_<timestamp>/` and reports ingest/runtime stages, including the optional local MolADT-library path. Treat it as an interoperability/runtime benchmark, not as the central representation-quality comparison.
+
+## Outputs
+
+Each predictive run writes a small timestamped folder with:
+
+- `results.csv`
+- `freesolv_rmse_vs_moleculenet.svg`
+- `qm9_mae_vs_moleculenet.svg`
+- `details/`
+
+Important detail files include:
+
+- `details/predictive_metrics.csv`
+- `details/aggregated_predictive_metrics.csv`
+- `details/predictions.csv`
+- `details/model_coefficients.csv`
+- `details/moleculenet_comparison.csv`
+
+## Export Contract
+
+The Python side also exports the aligned matrices consumed by the Haskell baseline:
 
 - `*_X_train.csv`, `*_X_valid.csv`, `*_X_test.csv`
 - `*_y_train.csv`, `*_y_valid.csv`, `*_y_test.csv`
 - `*_metadata.json`
 
-`X_train`, `X_valid`, and `X_test` use training-split mean and standard deviation only. `y` stays on the original scale.
-
-## Outputs
-
-Each run writes a timestamped folder. The top level is intentionally small:
-
-- `results.csv`
-- `rmse_train_test_vs_literature.svg`
-- `inference_sweep_overview.svg`
-- `timing_overview.svg` when timing ran
-- `details/`
-
-`details/` holds the raw CSVs and Stan outputs:
-
-- `details/predictive_metrics.csv`
-- `details/aggregated_predictive_metrics.csv`
-- `details/generalization_metrics.csv`
-- `details/predictions.csv`
-- `details/model_coefficients.csv`
-- `details/training_curves.csv`
-- `details/model_artifacts.csv`
-- `details/zinc_timing_items.csv`
-- `details/zinc_timing_library_manifest.csv`
-- `literature_baselines.csv`
-- `literature_comparison.md`
-- `calibration.csv`
-- `models/README.md`
-- `models/<model_name>/README.md`
-- `figures/predicted_vs_actual_scatter.svg`
-- `figures/residual_vs_uncertainty.svg`
-- `figures/coverage_calibration.svg`
-- `figures/metric_comparisons/*.svg`
-- `details/zinc_timing.csv`
-- `details/stan_output/`
-
-For the paper-scale make run, outputs go under `results/paper/run_<timestamp>/`.
-
-The metric comparison pack now writes two SVG views per metric. The fair tabular chart compares paper context, `smiles`, baseline `moladt`, and richer `moladt_typed` shown as `MolADT+`. The frontier chart adds `moladt_typed_geom` shown as `MolADT+ 3D`, and the note on each card makes it explicit when that row switches from the shared tabular learner to a geometry model family.
-
-## Other Entrypoints
-
-```bash
-make timing
-make benchmark-small
-make benchmark-paper
-make benchmark-bg
-./.venv/bin/python -m scripts.run_all --help
-```
-
-`make benchmark-bg` mirrors live output to the active results log while still running in the foreground.
-`make catboost-geom-model` runs the predictive model suite only on the default QM9 subset and writes a per-model browser under `results/models/...`.
-`make catboost-geom-model-paper` runs the predictive model suite only on the paper-sized QM9 split and writes under `results/models/paper/...`.
+`X_train`, `X_valid`, and `X_test` are standardized from the training split only. `y` stays on the original target scale.
 
 For the Haskell consumer view, see [Haskell interop](haskell_interop.md).

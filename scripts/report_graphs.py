@@ -24,10 +24,87 @@ TIMING = "#0f766e"
 SERIES_COLORS = {
     "smiles": "#b45309",
     "moladt": "#0f766e",
-    "moladt_typed": "#0369a1",
-    "moladt_typed_geom": "#be123c",
+    "sdf_geom": "#0369a1",
+    "moladt_geom": "#be123c",
     "paper": LITERATURE,
 }
+
+
+def write_moleculenet_comparison_overviews(comparison_frame: pd.DataFrame, destination_dir: Path) -> None:
+    if comparison_frame.empty:
+        return
+    ensure_directory(destination_dir)
+    for _, row in comparison_frame.sort_values(["dataset"]).iterrows():
+        dataset = str(row["dataset"])
+        metric_name = str(row["metric_name"])
+        destination = destination_dir / f"{dataset}_{metric_name.lower()}_vs_moleculenet.svg"
+        value_max = max(float(row["local_value"]), float(row["paper_value"]), 1e-6) * 1.2
+        width = 520
+        height = 320
+        x0 = 24
+        y0 = 24
+        plot_x = x0 + 56
+        plot_y = y0 + 104
+        plot_width = width - 112
+        plot_height = 124
+        bar_width = 86
+        bar_gap = 94
+        bars = [
+            ("MolADT", float(row["local_value"]), SERIES_COLORS["moladt"]),
+            (str(row["paper_model_name"]), float(row["paper_value"]), SERIES_COLORS["paper"]),
+        ]
+        parts = [_svg_header(width, height)]
+        parts.append(f'<rect width="{width}" height="{height}" fill="{BACKGROUND}" />')
+        parts.append(f'<rect x="{x0}" y="{y0}" width="{width - 48}" height="{height - 48}" rx="18" fill="{CARD_FILL}" stroke="{CARD_STROKE}" />')
+        parts.append(
+            f'<text x="{x0 + 20}" y="{y0 + 30}" font-size="22" font-family="Georgia, serif" fill="{TEXT}">'
+            f"{escape(str(row['dataset_label']))}: {escape(metric_name)}"
+            "</text>"
+        )
+        parts.append(
+            f'<text x="{x0 + 20}" y="{y0 + 50}" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">'
+            "Best local Stan MolADT run against the MoleculeNet Table 3 graph-based baseline."
+            "</text>"
+        )
+        parts.append(
+            f'<text x="{x0 + 20}" y="{y0 + 68}" font-size="11" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">'
+            f"Local: {escape(str(row['model']))} / {escape(str(row['method']))}"
+            "</text>"
+        )
+        parts.append(
+            f'<text x="{x0 + 20}" y="{y0 + 84}" font-size="11" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">'
+            f"Paper: {escape(str(row['paper_model_name']))} from MoleculeNet"
+            "</text>"
+        )
+        for step in range(5):
+            fraction = step / 4.0
+            y_value = value_max * fraction
+            y = plot_y + plot_height - plot_height * fraction
+            parts.append(f'<line x1="{plot_x}" y1="{y:.1f}" x2="{plot_x + plot_width}" y2="{y:.1f}" stroke="{GRID}" stroke-width="1" />')
+            parts.append(
+                f'<text x="{plot_x - 8}" y="{y + 4:.1f}" text-anchor="end" font-size="10" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">{y_value:.2f}</text>'
+            )
+        parts.append(f'<line x1="{plot_x}" y1="{plot_y + plot_height}" x2="{plot_x + plot_width}" y2="{plot_y + plot_height}" stroke="{TEXT}" stroke-width="1.4" />')
+        total_bar_width = len(bars) * bar_width + (len(bars) - 1) * bar_gap
+        left_pad = plot_x + (plot_width - total_bar_width) / 2
+        for index, (label, value, color) in enumerate(bars):
+            x = left_pad + index * (bar_width + bar_gap)
+            bar_height = (value / value_max) * plot_height if value_max > 0 else 0.0
+            y = plot_y + plot_height - bar_height
+            parts.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_width}" height="{bar_height:.1f}" rx="10" fill="{color}" opacity="0.94" />')
+            parts.append(
+                f'<text x="{x + bar_width / 2:.1f}" y="{y - 8:.1f}" text-anchor="middle" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}">{value:.3f}</text>'
+            )
+            parts.append(
+                f'<text x="{x + bar_width / 2:.1f}" y="{plot_y + plot_height + 22}" text-anchor="middle" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}">{escape(label)}</text>'
+            )
+        note_lines = _wrap_text(str(row.get("note", "")), 68)[:3]
+        for line_index, line in enumerate(note_lines):
+            parts.append(
+                f'<text x="{x0 + 20}" y="{height - 54 + line_index * 13}" font-size="10" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">{escape(line)}</text>'
+            )
+        parts.append("</svg>\n")
+        destination.write_text("".join(parts), encoding="utf-8")
 
 
 def write_review_rmse_overview(review_frame: pd.DataFrame, destination: Path) -> None:
@@ -155,7 +232,7 @@ def write_timing_stage_overview(timing: pd.DataFrame, destination: Path) -> None
     parts.append(f'<text x="{x0 + 24}" y="{y0 + 32}" font-size="20" font-family="Georgia, serif" fill="{TEXT}">Local timing overview</text>')
     parts.append(
         f'<text x="{x0 + 24}" y="{y0 + 54}" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">'
-        "This is an execution pipeline view: raw file IO, RDKit parsing, RDKit canonicalization, and optionally the MolADT ingest/render stage."
+        "This is an execution pipeline view: raw file IO, optional toolkit-assisted SMILES normalization, and the local MolADT ingest/render stages."
         "</text>"
     )
     for _, row in rows.iterrows():
@@ -692,8 +769,8 @@ def _metric_comparison_filename(metric_key: str, comparison_key: str) -> str:
 
 def _default_metric_comparison_subtitle(comparison_key: str) -> str:
     if comparison_key == "frontier":
-        return "This mixed-family frontier adds the rose MolADT+ 3D row and allows geometry models when that improves the representation."
-    return "Gray is paper context, orange is SMILES, teal is MolADT, and blue is the richer MolADT+ feature model when it is available."
+        return "This mixed-family frontier adds the coordinate-backed `sdf_geom` and `moladt_geom` rows and allows geometry models when that improves the representation."
+    return "Gray is paper context, orange is the raw SMILES string baseline, and teal is the typed MolADT baseline built from the same boundary strings."
 
 
 def _series_order_for_key(series_key: str) -> int:
@@ -701,7 +778,7 @@ def _series_order_for_key(series_key: str) -> int:
         "paper": 0,
         "smiles": 1,
         "moladt": 2,
-        "moladt_typed": 3,
-        "moladt_typed_geom": 4,
+        "sdf_geom": 3,
+        "moladt_geom": 4,
     }
     return order.get(series_key, len(order))

@@ -33,7 +33,13 @@ If those three commands work, the local install is in good shape.
 
 ## 3. First Benchmark Run
 
-Start with the lightest path:
+If CmdStan is not installed yet, do this once first:
+
+```bash
+make python-cmdstan-install
+```
+
+Then start with the lightest path:
 
 ```bash
 make freesolv
@@ -46,23 +52,20 @@ make qm9
 make timing
 ```
 
-- `make freesolv` is the best first end-to-end check.
-- `make qm9` runs the focused dipole benchmark.
+- `make freesolv` is the best first end-to-end check and writes `freesolv_rmse_vs_moleculenet.svg`.
+- `make qm9` runs the focused dipole benchmark and writes `qm9_mae_vs_moleculenet.svg`.
 - `make timing` builds the matched ADT/SMILES timing corpus.
 
 If a required raw dataset file is too large for GitHub, the repo fetches it on demand. Large downloads and archive extractions show live byte counts, entry counts, throughput, and elapsed time.
 
 ## 4. Optional
 
-Run these when you want extra confidence or the older Stan paths:
+Run these when you want extra confidence:
 
 ```bash
 make python-test
 make python-typecheck
-make python-cmdstan-install
 ```
-
-`make python-cmdstan-install` is only needed for the Stan baselines. The focused front-page commands do not need it.
 
 ## 5. If Setup Fails
 

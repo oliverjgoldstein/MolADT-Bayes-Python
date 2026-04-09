@@ -6,18 +6,16 @@ Each focused run writes a small timestamped bundle under `results/`.
 
 - FreeSolv: `results/freesolv/run_<timestamp>/`
 - QM9: `results/qm9/run_<timestamp>/`
+- combined benchmark: `results/run_<timestamp>/` or `results/paper/run_<timestamp>/`
 - ZINC timing: `results/timing/run_<timestamp>/`
-
-The older broad benchmark targets still write to the existing `results/run_<timestamp>/` and `results/paper/run_<timestamp>/` layout.
 
 ## What You See First
 
 Each predictive run keeps the top level small:
 
 - `results.csv`
-- `rmse_train_test_vs_literature.svg`
-- `inference_sweep_overview.svg`
-- `figures/`
+- `freesolv_rmse_vs_moleculenet.svg`
+- `qm9_mae_vs_moleculenet.svg`
 - `details/`
 
 Timing runs also write:
@@ -25,32 +23,24 @@ Timing runs also write:
 - `timing_overview.svg`
 - `details/zinc_timing.csv`
 
-## The Two Comparison Views
+## The Two Comparison Figures
 
-Inside `figures/metric_comparisons/` the repo now writes two kinds of chart per metric.
+Each predictive run writes only the two reviewer-facing MoleculeNet comparisons:
 
-- `*_comparison.svg`
-  The fair tabular view.
-  This is the fixed-learner comparison for `smiles`, `moladt`, and `moladt_typed`.
-- `*_frontier_comparison.svg`
-  The mixed-family frontier.
-  This adds `moladt_typed_geom` as `MolADT+ 3D` and makes it explicit that the geometry row may come from a different model family.
+- `freesolv_rmse_vs_moleculenet.svg`
+- `qm9_mae_vs_moleculenet.svg`
 
 ## Other Useful Files
 
-- `figures/predicted_vs_actual_scatter.svg`
-- `figures/residual_vs_uncertainty.svg`
-- `figures/coverage_calibration.svg`
 - `details/predictive_metrics.csv`
 - `details/aggregated_predictive_metrics.csv`
 - `details/predictions.csv`
-- `details/model_artifacts.csv`
+- `details/moleculenet_comparison.csv`
 
 ## How To Read The Bundle
 
 Use the files in this order:
 
 1. `results.csv` for the summary row view
-2. `figures/metric_comparisons/` for representation-level comparisons
-3. `figures/predicted_vs_actual_scatter.svg` for molecule-level sanity checking
-4. `details/` when you need raw rows for analysis or plotting
+2. `freesolv_rmse_vs_moleculenet.svg` and `qm9_mae_vs_moleculenet.svg` for the paper comparison
+3. `details/` when you need raw rows for analysis or plotting

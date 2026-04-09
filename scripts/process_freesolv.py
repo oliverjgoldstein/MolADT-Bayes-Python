@@ -5,17 +5,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
-from rdkit import Chem
+from moladt.io.sdf import iter_sdf_records
+from moladt.io.smiles import molecule_to_smiles
 
 from .common import DEFAULT_SEED, FailureRecord, PROCESSED_DATA_DIR, ensure_directory, extract_archive, find_files, log, log_stage, write_failure_csv
 from .download_data import FreeSolvDownloads, download_freesolv
 from .features import (
-    canonical_smiles_from_mol,
+    FeatureTable,
+    GeometricFeatureTable,
     canonicalize_smiles,
     featurize_moladt_geometry_records,
-    featurize_moladt_records,
-    featurize_moladt_typed_geometry_records,
-    featurize_moladt_typed_records,
     featurize_moladt_smiles_dataframe,
     featurize_sdf_geometry_records,
     featurize_smiles_dataframe,
@@ -34,6 +33,60 @@ class FreeSolvArtifacts:
     failure_csv_paths: tuple[Path, ...]
 
 
+def _align_feature_tables(tables: dict[str, FeatureTable]) -> dict[str, FeatureTable]:
+    non_empty = {name: table for name, table in tables.items() if not table.rows.empty}
+    if not non_empty:
+        return tables
+    common_ids = set.intersection(*(set(table.rows["mol_id"].astype(str)) for table in non_empty.values()))
+    aligned: dict[str, FeatureTable] = {}
+    for name, table in tables.items():
+        if table.rows.empty:
+            aligned[name] = table
+            continue
+        rows = table.rows.copy()
+        rows.loc[:, "mol_id"] = rows["mol_id"].astype(str)
+        rows = rows.loc[rows["mol_id"].isin(common_ids)].reset_index(drop=True)
+        aligned[name] = FeatureTable(
+            rows=rows,
+            feature_names=table.feature_names,
+            feature_groups=table.feature_groups,
+            failures=table.failures,
+        )
+    return aligned
+
+
+def _align_geometric_tables(tables: dict[str, GeometricFeatureTable]) -> dict[str, GeometricFeatureTable]:
+    non_empty = {name: table for name, table in tables.items() if not table.rows.empty}
+    if not non_empty:
+        return tables
+    common_ids = set.intersection(*(set(table.rows["mol_id"].astype(str)) for table in non_empty.values()))
+    aligned: dict[str, GeometricFeatureTable] = {}
+    for name, table in tables.items():
+        if table.rows.empty:
+            aligned[name] = table
+            continue
+        rows = table.rows.copy()
+        rows.loc[:, "mol_id"] = rows["mol_id"].astype(str)
+        mask = rows["mol_id"].isin(common_ids).to_numpy(dtype=bool)
+        filtered_rows = rows.loc[mask].reset_index(drop=True)
+        indices = [index for index, keep in enumerate(mask.tolist()) if keep]
+        filtered_atomic_numbers = tuple(table.atomic_numbers[index] for index in indices)
+        filtered_coordinates = tuple(table.coordinates[index] for index in indices)
+        filtered_global_features = None
+        if table.global_features is not None:
+            filtered_global_features = table.global_features[mask]
+        aligned[name] = GeometricFeatureTable(
+            rows=filtered_rows,
+            atomic_numbers=filtered_atomic_numbers,
+            coordinates=filtered_coordinates,
+            global_feature_names=table.global_feature_names,
+            global_feature_groups=table.global_feature_groups,
+            global_features=filtered_global_features,
+            failures=table.failures,
+        )
+    return aligned
+
+
 def process_freesolv_dataset(
     *,
     seed: int = DEFAULT_SEED,
@@ -47,11 +100,11 @@ def process_freesolv_dataset(
     downloads = download_freesolv(force=force)
     ensure_directory(PROCESSED_DATA_DIR)
     if verbose:
-        log_stage("freesolv", 2, total_stages, "Canonicalizing FreeSolv CSV")
+        log_stage("freesolv", 2, total_stages, "Preparing FreeSolv SMILES boundary strings")
     processed_frame, canonical_failures = _canonicalize_freesolv_csv(downloads)
     if verbose:
         log(
-            f"[freesolv 2/{total_stages}] canonicalized molecules={len(processed_frame)} "
+            f"[freesolv 2/{total_stages}] prepared molecules={len(processed_frame)} "
             f"csv_failures={len(canonical_failures)}"
         )
     processed_csv_path = PROCESSED_DATA_DIR / "freesolv_processed.csv"
@@ -66,7 +119,7 @@ def process_freesolv_dataset(
             "freesolv",
             3,
             total_stages,
-            f"Featurizing FreeSolv SMILES records (molecules={len(processed_frame)})",
+            f"Featurizing FreeSolv string and MolADT-from-SMILES records (molecules={len(processed_frame)})",
         )
     smiles_table = featurize_smiles_dataframe(
         processed_frame,
@@ -78,21 +131,73 @@ def process_freesolv_dataset(
     smiles_feature_failure_path = PROCESSED_DATA_DIR / "freesolv_smiles_feature_failures.csv"
     write_failure_csv(smiles_feature_failure_path, smiles_table.failures)
     failure_paths.append(smiles_feature_failure_path)
-    smiles_export = export_standardized_splits(smiles_table, dataset_name="freesolv", representation="smiles", target_name="expt", seed=seed)
-    if verbose:
-        log(
-            f"[freesolv 3/{total_stages}] smiles_rows={len(smiles_table.rows)} "
-            f"smiles_feature_failures={len(smiles_table.failures)} "
-            f"train={len(smiles_export.y_train)} valid={len(smiles_export.y_valid)} test={len(smiles_export.y_test)}"
+    moladt_export: ExportedDataset | None = None
+    if include_moladt:
+        moladt_table = featurize_moladt_smiles_dataframe(
+            processed_frame,
+            dataset_name="freesolv_moladt",
+            mol_id_column="mol_id",
+            smiles_column="smiles",
+            target_column="expt",
         )
-    tabular_exports: dict[str, ExportedDataset] = {"smiles": smiles_export}
+        moladt_feature_failure_path = PROCESSED_DATA_DIR / "freesolv_moladt_feature_failures.csv"
+        write_failure_csv(moladt_feature_failure_path, moladt_table.failures)
+        failure_paths.append(moladt_feature_failure_path)
+        aligned_tabular = _align_feature_tables({"smiles": smiles_table, "moladt": moladt_table})
+        smiles_table = aligned_tabular["smiles"]
+        moladt_table = aligned_tabular["moladt"]
+        split_partition = None
+        if not smiles_table.rows.empty:
+            from .splits import deterministic_split_partition
+
+            split_partition = deterministic_split_partition(len(smiles_table.rows), seed=seed)
+        smiles_export = export_standardized_splits(
+            smiles_table,
+            dataset_name="freesolv",
+            representation="smiles",
+            target_name="expt",
+            seed=seed,
+            split_partition=split_partition,
+        )
+        moladt_export = export_standardized_splits(
+            moladt_table,
+            dataset_name="freesolv",
+            representation="moladt",
+            target_name="expt",
+            seed=seed,
+            split_partition=split_partition,
+        )
+        if verbose:
+            log(
+                f"[freesolv 3/{total_stages}] shared_tabular_rows={len(smiles_table.rows)} "
+                f"smiles_failures={len(smiles_table.failures)} moladt_failures={len(moladt_table.failures)} "
+                f"train={len(smiles_export.y_train)} valid={len(smiles_export.y_valid)} test={len(smiles_export.y_test)}"
+            )
+        tabular_exports: dict[str, ExportedDataset] = {
+            "smiles": smiles_export,
+            "moladt": moladt_export,
+        }
+    else:
+        smiles_export = export_standardized_splits(
+            smiles_table,
+            dataset_name="freesolv",
+            representation="smiles",
+            target_name="expt",
+            seed=seed,
+        )
+        if verbose:
+            log(
+                f"[freesolv 3/{total_stages}] smiles_rows={len(smiles_table.rows)} "
+                f"smiles_feature_failures={len(smiles_table.failures)} "
+                f"train={len(smiles_export.y_train)} valid={len(smiles_export.y_valid)} test={len(smiles_export.y_test)}"
+            )
+        tabular_exports = {"smiles": smiles_export}
     geometric_exports: dict[str, GeometricDatasetSpec] = {}
 
     moladt_index_path: Path | None = None
-    moladt_export: ExportedDataset | None = None
     if include_moladt:
         if verbose:
-            log_stage("freesolv", 4, total_stages, "Aligning SDF records and building MolADT feature tables")
+            log_stage("freesolv", 4, total_stages, "Aligning SDF records for geometry-backed branches")
         sdf_frame, sdf_failures = _align_freesolv_sdf(downloads, processed_frame)
         sdf_failure_path = PROCESSED_DATA_DIR / "freesolv_sdf_alignment_failures.csv"
         write_failure_csv(sdf_failure_path, sdf_failures)
@@ -104,69 +209,37 @@ def process_freesolv_dataset(
                     f"sdf_alignment_failures={len(sdf_failures)}"
                 )
             moladt_index_path = PROCESSED_DATA_DIR / "freesolv_moladt_index.csv"
-            sdf_frame.drop(columns=["rdkit_mol"]).to_csv(moladt_index_path, index=False)
-            moladt_table = featurize_moladt_records(
-                sdf_frame,
-                dataset_name="freesolv_moladt",
-                mol_id_column="mol_id",
-                mol_column="rdkit_mol",
-                target_column="expt",
-                record_index_column="sdf_record_index",
-            )
-            moladt_feature_failure_path = PROCESSED_DATA_DIR / "freesolv_moladt_feature_failures.csv"
-            write_failure_csv(moladt_feature_failure_path, moladt_table.failures)
-            failure_paths.append(moladt_feature_failure_path)
-            moladt_export = export_standardized_splits(
-                moladt_table,
-                dataset_name="freesolv",
-                representation="moladt",
-                target_name="expt",
-                seed=seed,
-            )
-            tabular_exports["moladt"] = moladt_export
-            if verbose:
-                log(
-                    f"[freesolv 4/{total_stages}] moladt_rows={len(moladt_table.rows)} "
-                    f"moladt_feature_failures={len(moladt_table.failures)} "
-                    f"train={len(moladt_export.y_train)} valid={len(moladt_export.y_valid)} test={len(moladt_export.y_test)}"
-                )
-            moladt_typed_table = featurize_moladt_typed_records(
-                sdf_frame,
-                dataset_name="freesolv_moladt_typed",
-                mol_id_column="mol_id",
-                mol_column="rdkit_mol",
-                target_column="expt",
-                record_index_column="sdf_record_index",
-            )
-            moladt_typed_failure_path = PROCESSED_DATA_DIR / "freesolv_moladt_typed_feature_failures.csv"
-            write_failure_csv(moladt_typed_failure_path, moladt_typed_table.failures)
-            failure_paths.append(moladt_typed_failure_path)
-            if not moladt_typed_table.rows.empty:
-                tabular_exports["moladt_typed"] = export_standardized_splits(
-                    moladt_typed_table,
-                    dataset_name="freesolv",
-                    representation="moladt_typed",
-                    target_name="expt",
-                    seed=seed,
-                )
-                if verbose:
-                    typed_export = tabular_exports["moladt_typed"]
-                    log(
-                        f"[freesolv 4/{total_stages}] moladt_typed_rows={len(moladt_typed_table.rows)} "
-                        f"moladt_typed_feature_failures={len(moladt_typed_table.failures)} "
-                        f"train={len(typed_export.y_train)} valid={len(typed_export.y_valid)} test={len(typed_export.y_test)}"
-                    )
+            sdf_frame.drop(columns=["moladt_molecule"]).to_csv(moladt_index_path, index=False)
             sdf_geom_table = featurize_sdf_geometry_records(
                 sdf_frame,
                 dataset_name="freesolv_sdf_geom",
                 mol_id_column="mol_id",
-                mol_column="rdkit_mol",
+                mol_column="moladt_molecule",
                 target_column="expt",
                 record_index_column="sdf_record_index",
             )
             sdf_geom_failure_path = PROCESSED_DATA_DIR / "freesolv_sdf_geometry_failures.csv"
             write_failure_csv(sdf_geom_failure_path, sdf_geom_table.failures)
             failure_paths.append(sdf_geom_failure_path)
+            moladt_geom_table = featurize_moladt_geometry_records(
+                sdf_frame,
+                dataset_name="freesolv_moladt_geom",
+                mol_id_column="mol_id",
+                mol_column="moladt_molecule",
+                target_column="expt",
+                record_index_column="sdf_record_index",
+            )
+            moladt_geom_failure_path = PROCESSED_DATA_DIR / "freesolv_moladt_geometry_failures.csv"
+            write_failure_csv(moladt_geom_failure_path, moladt_geom_table.failures)
+            failure_paths.append(moladt_geom_failure_path)
+            aligned_geom = _align_geometric_tables({"sdf_geom": sdf_geom_table, "moladt_geom": moladt_geom_table})
+            sdf_geom_table = aligned_geom["sdf_geom"]
+            moladt_geom_table = aligned_geom["moladt_geom"]
+            geom_split_partition = None
+            if not sdf_geom_table.rows.empty:
+                from .splits import deterministic_split_partition
+
+                geom_split_partition = deterministic_split_partition(len(sdf_geom_table.rows), seed=seed)
             if not sdf_geom_table.rows.empty:
                 geometric_exports["sdf_geom"] = export_geometric_splits(
                     sdf_geom_table,
@@ -174,6 +247,7 @@ def process_freesolv_dataset(
                     representation="sdf_geom",
                     target_name="expt",
                     seed=seed,
+                    split_partition=geom_split_partition,
                 )
                 if verbose:
                     geom_export = geometric_exports["sdf_geom"]
@@ -182,17 +256,6 @@ def process_freesolv_dataset(
                         f"sdf_geom_feature_failures={len(sdf_geom_table.failures)} "
                         f"train={len(geom_export.train_indices)} valid={len(geom_export.valid_indices)} test={len(geom_export.test_indices)}"
                     )
-            moladt_geom_table = featurize_moladt_geometry_records(
-                sdf_frame,
-                dataset_name="freesolv_moladt_geom",
-                mol_id_column="mol_id",
-                mol_column="rdkit_mol",
-                target_column="expt",
-                record_index_column="sdf_record_index",
-            )
-            moladt_geom_failure_path = PROCESSED_DATA_DIR / "freesolv_moladt_geometry_failures.csv"
-            write_failure_csv(moladt_geom_failure_path, moladt_geom_table.failures)
-            failure_paths.append(moladt_geom_failure_path)
             if not moladt_geom_table.rows.empty:
                 geometric_exports["moladt_geom"] = export_geometric_splits(
                     moladt_geom_table,
@@ -200,6 +263,7 @@ def process_freesolv_dataset(
                     representation="moladt_geom",
                     target_name="expt",
                     seed=seed,
+                    split_partition=geom_split_partition,
                 )
                 if verbose:
                     geom_export = geometric_exports["moladt_geom"]
@@ -208,63 +272,12 @@ def process_freesolv_dataset(
                         f"moladt_geom_feature_failures={len(moladt_geom_table.failures)} "
                         f"train={len(geom_export.train_indices)} valid={len(geom_export.valid_indices)} test={len(geom_export.test_indices)}"
                     )
-            moladt_typed_geom_table = featurize_moladt_typed_geometry_records(
-                sdf_frame,
-                dataset_name="freesolv_moladt_typed_geom",
-                mol_id_column="mol_id",
-                mol_column="rdkit_mol",
-                target_column="expt",
-                record_index_column="sdf_record_index",
-            )
-            moladt_typed_geom_failure_path = PROCESSED_DATA_DIR / "freesolv_moladt_typed_geometry_failures.csv"
-            write_failure_csv(moladt_typed_geom_failure_path, moladt_typed_geom_table.failures)
-            failure_paths.append(moladt_typed_geom_failure_path)
-            if not moladt_typed_geom_table.rows.empty:
-                geometric_exports["moladt_typed_geom"] = export_geometric_splits(
-                    moladt_typed_geom_table,
-                    dataset_name="freesolv",
-                    representation="moladt_typed_geom",
-                    target_name="expt",
-                    seed=seed,
-                )
-                if verbose:
-                    geom_export = geometric_exports["moladt_typed_geom"]
-                    log(
-                        f"[freesolv 4/{total_stages}] moladt_typed_geom_rows={len(moladt_typed_geom_table.rows)} "
-                        f"moladt_typed_geom_feature_failures={len(moladt_typed_geom_table.failures)} "
-                        f"train={len(geom_export.train_indices)} valid={len(geom_export.valid_indices)} test={len(geom_export.test_indices)}"
-                    )
         else:
             if verbose:
                 log(
                     f"[freesolv 4/{total_stages}] aligned_sdf_records=0 "
-                    f"sdf_alignment_failures={len(sdf_failures)}; falling back to SMILES-derived MolADT features"
+                    f"sdf_alignment_failures={len(sdf_failures)}"
                 )
-            moladt_table = featurize_moladt_smiles_dataframe(
-                processed_frame,
-                dataset_name="freesolv_moladt_smiles_fallback",
-                mol_id_column="mol_id",
-                smiles_column="smiles",
-                target_column="expt",
-            )
-            moladt_feature_failure_path = PROCESSED_DATA_DIR / "freesolv_moladt_feature_failures.csv"
-            write_failure_csv(moladt_feature_failure_path, moladt_table.failures)
-            failure_paths.append(moladt_feature_failure_path)
-            if not moladt_table.rows.empty:
-                moladt_export = export_standardized_splits(
-                    moladt_table,
-                    dataset_name="freesolv",
-                    representation="moladt",
-                    target_name="expt",
-                    seed=seed,
-                )
-                tabular_exports["moladt"] = moladt_export
-                if verbose:
-                    log(
-                        f"[freesolv 4/{total_stages}] moladt_smiles_fallback_rows={len(moladt_table.rows)} "
-                        f"moladt_feature_failures={len(moladt_table.failures)} "
-                        f"train={len(moladt_export.y_train)} valid={len(moladt_export.y_valid)} test={len(moladt_export.y_test)}"
-                    )
     if verbose:
         tabular_keys = ", ".join(sorted(tabular_exports))
         geometric_keys = ", ".join(sorted(geometric_exports)) or "(none)"
@@ -288,12 +301,20 @@ def _canonicalize_freesolv_csv(downloads: FreeSolvDownloads) -> tuple[pd.DataFra
     failures: list[FailureRecord] = []
     for index, record in raw.iterrows():
         mol_id = f"freesolv_{index + 1:04d}"
+        raw_smiles = str(record["smiles"]).strip()
         try:
-            canonical = canonicalize_smiles(str(record["smiles"]))
+            canonical = canonicalize_smiles(raw_smiles)
         except Exception as exc:
             failures.append(FailureRecord(dataset="freesolv", mol_id=mol_id, stage="canonicalize_smiles", error=str(exc)))
             continue
-        rows.append({"mol_id": mol_id, "smiles": canonical, "expt": float(record["expt"])})
+        rows.append(
+            {
+                "mol_id": mol_id,
+                "smiles": raw_smiles,
+                "smiles_canonical": canonical,
+                "expt": float(record["expt"]),
+            }
+        )
     return pd.DataFrame(rows), failures
 
 
@@ -311,20 +332,16 @@ def _align_freesolv_sdf(downloads: FreeSolvDownloads, processed_frame: pd.DataFr
         return pd.DataFrame(), []
     by_smiles: dict[str, list[dict[str, object]]] = {}
     for record in processed_frame.to_dict(orient="records"):
-        by_smiles.setdefault(str(record["smiles"]), []).append(record)
+        by_smiles.setdefault(str(record["smiles_canonical"]), []).append(record)
     aligned_rows: list[dict[str, object]] = []
     failures: list[FailureRecord] = []
     for sdf_path in sdf_paths:
-        supplier = Chem.SDMolSupplier(str(sdf_path), removeHs=False, sanitize=False)
-        for record_index, molecule in enumerate(supplier):
+        for record_index, record in enumerate(iter_sdf_records(sdf_path)):
             mol_id = f"{sdf_path.stem}:{record_index}"
-            if molecule is None:
-                failures.append(FailureRecord(dataset="freesolv", mol_id=mol_id, stage="read_sdf", error="RDKit returned None from SDMolSupplier"))
-                continue
             try:
-                canonical = canonical_smiles_from_mol(molecule)
+                canonical = molecule_to_smiles(record.molecule)
             except Exception as exc:
-                failures.append(FailureRecord(dataset="freesolv", mol_id=mol_id, stage="canonicalize_sdf", error=str(exc)))
+                failures.append(FailureRecord(dataset="freesolv", mol_id=mol_id, stage="render_smiles", error=str(exc)))
                 continue
             matches = by_smiles.get(canonical, [])
             if len(matches) == 1:
@@ -332,11 +349,12 @@ def _align_freesolv_sdf(downloads: FreeSolvDownloads, processed_frame: pd.DataFr
                 aligned_rows.append(
                     {
                         "mol_id": str(match["mol_id"]),
-                        "smiles": canonical,
+                        "smiles": str(match["smiles"]),
+                        "smiles_canonical": canonical,
                         "expt": float(match["expt"]),
                         "sdf_relpath": str(sdf_path.relative_to(downloads.repo_extract_dir)),
                         "sdf_record_index": record_index,
-                        "rdkit_mol": molecule,
+                        "moladt_molecule": record.molecule,
                     }
                 )
             elif len(matches) > 1:

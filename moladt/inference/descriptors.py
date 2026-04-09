@@ -46,13 +46,6 @@ class MolecularDescriptors:
     rotatable_bonds: float
     heavy_atom_degree_mean: float
     heavy_atom_degree_max: float
-    radius_of_gyration: float
-    distance_mean: float
-    distance_std: float
-    distance_max: float
-    inertia_eigenvalue_min: float
-    inertia_eigenvalue_mid: float
-    inertia_eigenvalue_max: float
 
     def to_dict(self) -> dict[str, float]:
         return {
@@ -93,13 +86,6 @@ class MolecularDescriptors:
             "rotatable_bonds": self.rotatable_bonds,
             "heavy_atom_degree_mean": self.heavy_atom_degree_mean,
             "heavy_atom_degree_max": self.heavy_atom_degree_max,
-            "radius_of_gyration": self.radius_of_gyration,
-            "distance_mean": self.distance_mean,
-            "distance_std": self.distance_std,
-            "distance_max": self.distance_max,
-            "inertia_eigenvalue_min": self.inertia_eigenvalue_min,
-            "inertia_eigenvalue_mid": self.inertia_eigenvalue_mid,
-            "inertia_eigenvalue_max": self.inertia_eigenvalue_max,
         }
 
 
@@ -310,7 +296,6 @@ def log1p_positive(value: float) -> float:
 
 
 def compute_descriptors(molecule: Molecule) -> MolecularDescriptors:
-    geometry = coordinate_descriptors(molecule)
     bond_summary = effective_bond_order_summary(molecule)
     degree_summary = heavy_atom_degree_summary(molecule)
     return MolecularDescriptors(
@@ -351,13 +336,6 @@ def compute_descriptors(molecule: Molecule) -> MolecularDescriptors:
         rotatable_bonds=rotatable_bond_count(molecule),
         heavy_atom_degree_mean=degree_summary["heavy_atom_degree_mean"],
         heavy_atom_degree_max=degree_summary["heavy_atom_degree_max"],
-        radius_of_gyration=geometry["radius_of_gyration"],
-        distance_mean=geometry["distance_mean"],
-        distance_std=geometry["distance_std"],
-        distance_max=geometry["distance_max"],
-        inertia_eigenvalue_min=geometry["inertia_eigenvalue_min"],
-        inertia_eigenvalue_mid=geometry["inertia_eigenvalue_mid"],
-        inertia_eigenvalue_max=geometry["inertia_eigenvalue_max"],
     )
 
 

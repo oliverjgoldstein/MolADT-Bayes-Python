@@ -56,6 +56,29 @@ def read_sdf_records(path: str | Path, *, limit: int | None = None) -> list[SDFR
     return parse_sdf_records(Path(path).read_text(encoding="latin-1"), limit=limit)
 
 
+def iter_sdf_records(path: str | Path, *, limit: int | None = None):
+    if limit is not None and limit <= 0:
+        return
+    count = 0
+    block_lines: list[str] = []
+    with Path(path).open("r", encoding="latin-1") as handle:
+        for line in handle:
+            if line.rstrip("\n\r") == "$$$$":
+                block = "".join(block_lines).strip("\n")
+                block_lines.clear()
+                if not block.strip():
+                    continue
+                yield _parse_block(block)
+                count += 1
+                if limit is not None and count >= limit:
+                    return
+                continue
+            block_lines.append(line)
+    block = "".join(block_lines).strip("\n")
+    if block.strip() and (limit is None or count < limit):
+        yield _parse_block(block)
+
+
 def parse_sdf_records(text: str, *, limit: int | None = None) -> list[SDFRecord]:
     if limit is not None and limit <= 0:
         return []
@@ -153,14 +176,20 @@ def _parse_block(block: str) -> SDFRecord:
         )
     local_bonds = frozenset(edge for edge, _ in bonds)
     aromatic_rings = _detect_six_rings(bonds)
-    systems = tuple(
-        (
-            SystemId(index),
-            mk_bonding_system(NonNegative(6), ring_edges, "pi_ring"),
-        )
-        for index, ring_edges in enumerate(aromatic_rings, start=1)
-    )
-    molecule = Molecule(atoms=atom_map, local_bonds=local_bonds, systems=systems)
+    aromatic_ring_edges = frozenset(edge for ring in aromatic_rings for edge in ring)
+    systems: list[tuple[SystemId, BondingSystem]] = []
+    system_index = 1
+    for edge, order in bonds:
+        if order == 2 and edge not in aromatic_ring_edges:
+            systems.append((SystemId(system_index), mk_bonding_system(NonNegative(2), frozenset({edge}))))
+            system_index += 1
+        elif order == 3:
+            systems.append((SystemId(system_index), mk_bonding_system(NonNegative(4), frozenset({edge}))))
+            system_index += 1
+    for ring_edges in aromatic_rings:
+        systems.append((SystemId(system_index), mk_bonding_system(NonNegative(6), ring_edges, "pi_ring")))
+        system_index += 1
+    molecule = Molecule(atoms=atom_map, local_bonds=local_bonds, systems=tuple(systems))
     return SDFRecord(molecule=molecule, properties=properties, title=title)
 
 

@@ -11,24 +11,16 @@ import pandas as pd
 
 from .benchmark_zinc import run_zinc_benchmark
 from .common import DEFAULT_SEED, RESULTS_DIR, display_path, ensure_directory, log, log_stage
-from .geometry_runner import GeometryRunConfig
 from .literature_baselines import literature_baselines_frame
-from .model_errors import OptionalModelDependencyError
 from .model_registry import GEOMETRIC_MODEL_REGISTRY, TABULAR_MODEL_REGISTRY
 from .process_freesolv import FreeSolvArtifacts, process_freesolv_dataset
 from .process_qm9 import QM9Artifacts, process_qm9_dataset
 from .predictive_metrics import aggregate_seed_metrics, build_calibration_rows
 from .report_graphs import (
-    write_calibration_overview,
-    write_inference_sweep_overview,
-    write_metric_comparison_overviews,
-    write_predicted_vs_actual_overview,
-    write_residual_vs_uncertainty_overview,
-    write_review_rmse_overview,
+    write_moleculenet_comparison_overviews,
     write_timing_stage_overview,
 )
 from .stan_runner import ALL_METHODS, StanRunConfig, run_model_suite, write_stan_data_json
-from .tabular_runner import CatBoostRunConfig
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -125,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
         artifacts = process_freesolv_dataset(
             seed=args.seed,
             force=args.force,
-            include_moladt=not args.skip_moladt or args.include_moladt_predictive,
+            include_moladt=True,
             verbose=args.verbose,
         )
         _extend_with_property_results(
@@ -172,16 +164,14 @@ def main(argv: list[str] | None = None) -> int:
             log(
                 "Starting full benchmark "
                 f"(qm9_limit={qm9_limit}, qm9_split_mode={qm9_split_mode}, "
-                f"zinc_dataset_size={args.zinc_dataset_size}, "
-                f"zinc_dataset_dimension={args.zinc_dataset_dimension}, zinc_limit={args.zinc_limit}, "
-                f"include_moladt={args.include_moladt}, extra_models={','.join(extra_models) or '(none)'})"
+                f"MolADT-only Stan comparison, extra_models={','.join(extra_models) or '(none)'})"
             )
             log(f"Results directory: {display_path(RESULTS_DIR)}")
-            log_stage("benchmark", 1, 4, "Running FreeSolv benchmark flow")
+            log_stage("benchmark", 1, 3, "Running FreeSolv benchmark flow")
         freesolv = process_freesolv_dataset(
             seed=args.seed,
             force=args.force,
-            include_moladt=not args.skip_moladt or args.include_moladt_predictive,
+            include_moladt=True,
             verbose=args.verbose,
         )
         _extend_with_property_results(
@@ -195,7 +185,7 @@ def main(argv: list[str] | None = None) -> int:
             args,
         )
         if args.verbose:
-            log_stage("benchmark", 2, 4, "Running QM9 benchmark flow")
+            log_stage("benchmark", 2, 3, "Running QM9 benchmark flow")
         qm9 = process_qm9_dataset(seed=args.seed, force=args.force, limit=qm9_limit, split_mode=qm9_split_mode, verbose=args.verbose)
         _extend_with_property_results(
             qm9,
@@ -206,16 +196,6 @@ def main(argv: list[str] | None = None) -> int:
             model_artifact_rows,
             extra_models,
             args,
-        )
-        if args.verbose:
-            log_stage("benchmark", 3, 4, "Running ZINC timing flow")
-        run_zinc_benchmark(
-            dataset_size=args.zinc_dataset_size,
-            dataset_dimension=args.zinc_dataset_dimension,
-            limit=args.zinc_limit,
-            include_moladt=args.include_moladt,
-            force=args.force,
-            verbose=args.verbose,
         )
     elif args.command == "models":
         qm9_limit = None if args.full_qm9 or args.paper_mode else args.qm9_limit
@@ -231,7 +211,7 @@ def main(argv: list[str] | None = None) -> int:
         freesolv = process_freesolv_dataset(
             seed=args.seed,
             force=args.force,
-            include_moladt=not args.skip_moladt or args.include_moladt_predictive,
+            include_moladt=True,
             verbose=args.verbose,
         )
         _extend_with_property_results(
@@ -262,7 +242,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if metrics_rows:
         if args.verbose:
-            total_stages = 3 if args.command in {"smoke-test", "qm9", "models"} else 4 if args.command == "benchmark" else 1
+            total_stages = 2 if args.command in {"smoke-test", "qm9", "models"} else 3 if args.command == "benchmark" else 1
             log_stage(
                 "benchmark",
                 total_stages,
@@ -304,40 +284,16 @@ def main(argv: list[str] | None = None) -> int:
         baselines_frame.to_csv(baselines_path, index=False)
         generalization = _write_generalization_artifacts(metrics_frame)
         review_frame = _build_simple_review_frame(generalization, baselines_frame=baselines_frame)
-        metric_comparisons = _build_metric_comparison_frame(metrics_frame, baselines_frame=baselines_frame)
-        _write_summary_report(review_frame, timing=_load_timing_results() if args.command in {"zinc-timing", "benchmark"} else pd.DataFrame())
-        _write_model_report(
-            metrics_frame=metrics_frame,
-            coefficients_frame=coefficients_frame,
-            model_artifacts_frame=pd.DataFrame(model_artifact_rows),
-            training_curves_frame=training_curves_frame,
-        )
-        _write_model_folders(
-            metrics_frame=metrics_frame,
-            predictions_frame=predictions_frame,
-            coefficients_frame=coefficients_frame,
-            model_artifacts_frame=pd.DataFrame(model_artifact_rows),
-        )
-        _write_literature_comparison(
-            review_frame=review_frame,
-            baselines_frame=baselines_frame,
-            aggregated_metrics=aggregated_metrics,
-        )
-        write_review_rmse_overview(review_frame, RESULTS_DIR / "rmse_train_test_vs_literature.svg")
-        write_inference_sweep_overview(metrics_frame, RESULTS_DIR / "inference_sweep_overview.svg")
-        figures_dir = ensure_directory(RESULTS_DIR / "figures")
-        write_metric_comparison_overviews(metric_comparisons, figures_dir / "metric_comparisons")
-        selected_predictions = _selected_prediction_rows(predictions_frame, generalization)
-        write_predicted_vs_actual_overview(selected_predictions, figures_dir / "predicted_vs_actual_scatter.svg")
-        write_residual_vs_uncertainty_overview(selected_predictions, figures_dir / "residual_vs_uncertainty.svg")
-        write_calibration_overview(calibration_frame, figures_dir / "coverage_calibration.svg")
+        molecule_net_comparison = _build_moleculenet_comparison_frame(review_frame)
+        molecule_net_comparison.to_csv(_details_dir() / "moleculenet_comparison.csv", index=False)
+        write_moleculenet_comparison_overviews(molecule_net_comparison, RESULTS_DIR)
     else:
         metrics_frame = pd.DataFrame()
         generalization = pd.DataFrame()
         review_frame = pd.DataFrame()
         training_curves_frame = pd.DataFrame()
         calibration_frame = pd.DataFrame()
-    timing = _load_timing_results() if args.command in {"zinc-timing", "benchmark"} else pd.DataFrame()
+    timing = _load_timing_results() if args.command == "zinc-timing" else pd.DataFrame()
     if not timing.empty:
         write_timing_stage_overview(timing, RESULTS_DIR / "timing_overview.svg")
         _write_timing_report(timing)
@@ -376,12 +332,12 @@ def _extend_with_property_results(
         predictive_draws=args.predictive_draws,
         verbose=args.verbose,
     )
-    tabular_exports = dict(getattr(artifacts, "tabular_exports", {}))
-    if not tabular_exports:
-        tabular_exports["smiles"] = artifacts.smiles_export
-        if getattr(artifacts, "moladt_export", None) is not None:
-            tabular_exports["moladt"] = artifacts.moladt_export
-    for bundle in tabular_exports.values():
+    moladt_bundle = getattr(artifacts, "moladt_export", None)
+    if moladt_bundle is None:
+        raise RuntimeError("MolADT export is required for the Stan benchmark")
+    if extra_models and args.verbose:
+        log("Ignoring optional non-Stan models for the MolADT-only benchmark contract.")
+    for bundle in (moladt_bundle,):
         write_stan_data_json(bundle, student_df=config.student_df)
         if args.verbose:
             log(
@@ -396,46 +352,6 @@ def _extend_with_property_results(
             metrics_rows.extend(rows)
             prediction_rows.extend(predictions)
             coefficient_rows.extend(coefficients)
-    extra_seeds = _extra_model_seeds(args.seed, args.num_seeds if args.paper_mode else 1)
-    for model_name in extra_models:
-        if model_name in TABULAR_MODEL_REGISTRY:
-            runner = TABULAR_MODEL_REGISTRY[model_name].runner
-            try:
-                for bundle in tabular_exports.values():
-                    if args.verbose:
-                        log(f"[{bundle.dataset_name}/{bundle.representation}] Running optional model `{model_name}`")
-                    rows, predictions, artifact_rows = runner(
-                        bundle,
-                        config=CatBoostRunConfig(seeds=extra_seeds, verbose=args.verbose),
-                    )
-                    metrics_rows.extend(rows)
-                    prediction_rows.extend(predictions)
-                    model_artifact_rows.extend(artifact_rows)
-            except OptionalModelDependencyError as exc:
-                log(f"Skipping optional model `{model_name}`: {exc}")
-        elif model_name in GEOMETRIC_MODEL_REGISTRY:
-            runner = GEOMETRIC_MODEL_REGISTRY[model_name].runner
-            try:
-                for bundle in getattr(artifacts, "geometric_exports", {}).values():
-                    if args.verbose:
-                        atom_counts = [len(item) for item in bundle.atomic_numbers]
-                        mean_atoms = (sum(atom_counts) / len(atom_counts)) if atom_counts else 0.0
-                        log(
-                            f"[{bundle.dataset_name}/{bundle.representation}] geometry_rows="
-                            f"train={len(bundle.train_indices)} valid={len(bundle.valid_indices)} test={len(bundle.test_indices)} "
-                            f"molecules={len(bundle.rows)} mean_atoms={mean_atoms:.1f}"
-                        )
-                        log(f"[{bundle.dataset_name}/{bundle.representation}] Running geometry model `{model_name}`")
-                    rows, predictions, training_curves, artifact_manifest = runner(
-                        bundle,
-                        config=GeometryRunConfig(model_name=model_name, seeds=extra_seeds, verbose=args.verbose),
-                    )
-                    metrics_rows.extend(rows)
-                    prediction_rows.extend(predictions)
-                    training_curve_rows.extend(training_curves)
-                    model_artifact_rows.extend(artifact_manifest)
-            except OptionalModelDependencyError as exc:
-                log(f"Skipping optional model `{model_name}`: {exc}")
 
 
 def _details_dir() -> Any:
@@ -459,6 +375,21 @@ def _remove_legacy_report_artifacts() -> None:
         "calibration.csv",
         "literature_baselines.csv",
         "literature_comparison.md",
+        "rmse_train_test_vs_literature.svg",
+        "inference_sweep_overview.svg",
+        "predicted_vs_actual_overview.svg",
+        "calibration.csv",
+        "coverage_calibration.svg",
+        "rmse_comparison.svg",
+        "mae_comparison.svg",
+        "r2_comparison.svg",
+        "coverage_90_comparison.svg",
+        "rmse_frontier_comparison.svg",
+        "mae_frontier_comparison.svg",
+        "r2_frontier_comparison.svg",
+        "coverage_90_frontier_comparison.svg",
+        "freesolv_rmse_vs_moleculenet.svg",
+        "qm9_mae_vs_moleculenet.svg",
     )
     for name in legacy_files:
         path = RESULTS_DIR / name
@@ -470,8 +401,17 @@ def _remove_legacy_report_artifacts() -> None:
 
 
 def _select_reviewer_rows(test_rows: pd.DataFrame) -> pd.DataFrame:
-    ranked = test_rows.sort_values(["dataset", "representation", "rmse", "mae", "runtime_seconds", "model", "method"])
-    return ranked.groupby(["dataset", "representation"], sort=True, as_index=False).head(1)
+    rows: list[pd.DataFrame] = []
+    for (dataset, representation), frame in test_rows.groupby(["dataset", "representation"], sort=True):
+        primary_metric, secondary_metric = _metric_priority_for_dataset(str(dataset))
+        ranked = frame.sort_values(
+            [primary_metric, secondary_metric, "runtime_seconds", "model", "method"],
+            kind="stable",
+        )
+        rows.append(ranked.head(1))
+    if not rows:
+        return pd.DataFrame()
+    return pd.concat(rows, ignore_index=True)
 
 
 
@@ -482,6 +422,18 @@ def _best_test_row(test_rows: pd.DataFrame, *, dataset: str, metric: str) -> dic
         return None
     ordered = subset.sort_values([metric, "rmse", "mae", "runtime_seconds", "representation", "model", "method"])
     return ordered.iloc[0].to_dict()
+
+
+def _primary_metric_for_dataset(dataset: str) -> tuple[str, str]:
+    if dataset == "qm9":
+        return ("MAE", "test_mae")
+    return ("RMSE", "test_rmse")
+
+
+def _metric_priority_for_dataset(dataset: str) -> tuple[str, str]:
+    if dataset == "qm9":
+        return ("mae", "rmse")
+    return ("rmse", "mae")
 
 
 def _selected_run_keys(metrics: pd.DataFrame) -> pd.DataFrame:
@@ -566,11 +518,16 @@ def _build_simple_review_frame(generalization: pd.DataFrame, *, baselines_frame:
     for _, row in generalization.iterrows():
         dataset = str(row["dataset"])
         representation = str(row["representation"])
+        local_metric_name, local_metric_column = _primary_metric_for_dataset(dataset)
+        local_metric_value = float(row[local_metric_column])
         baseline = _select_review_baseline(baselines_frame, dataset)
         if baseline is None:
             literature_display = "No external context attached"
             literature_rmse = None
             literature_metric = ""
+            paper_value = float("nan")
+            paper_model_name = ""
+            paper_source_title = ""
             source = ""
             note = "Local result only."
         else:
@@ -584,6 +541,9 @@ def _build_simple_review_frame(generalization: pd.DataFrame, *, baselines_frame:
             literature_display = f"{baseline['model_name']} {(' '.join(metric_bits)).strip()}".strip()
             literature_rmse = float(metric_value) if metric_name == "RMSE" and pd.notna(metric_value) else None
             literature_metric = metric_name
+            paper_value = float(metric_value) if pd.notna(metric_value) else float("nan")
+            paper_model_name = str(baseline.get("model_name", ""))
+            paper_source_title = str(baseline.get("source_title", ""))
             source = str(baseline.get("source_url", ""))
             note = _context_note_for_row(
                 dataset=dataset,
@@ -598,9 +558,12 @@ def _build_simple_review_frame(generalization: pd.DataFrame, *, baselines_frame:
             {
                 "task": f"{dataset} / {representation}",
                 "dataset": dataset,
+                "dataset_label": "FreeSolv" if dataset == "freesolv" else "QM9" if dataset == "qm9" else dataset,
                 "representation": representation,
                 "model": str(row["model"]),
                 "method": str(row["method"]),
+                "local_metric_name": local_metric_name,
+                "local_metric_value": local_metric_value,
                 "train_rmse": float(row["train_rmse"]),
                 "test_rmse": float(row["test_rmse"]),
                 "test_minus_train_rmse": float(row["test_minus_train_rmse"]),
@@ -618,6 +581,10 @@ def _build_simple_review_frame(generalization: pd.DataFrame, *, baselines_frame:
                 "literature_display": literature_display,
                 "literature_rmse": literature_rmse,
                 "literature_metric": literature_metric,
+                "paper_metric_name": literature_metric,
+                "paper_metric_value": paper_value,
+                "paper_model_name": paper_model_name,
+                "paper_source_title": paper_source_title,
                 "directly_comparable": "partial",
                 "note": note,
                 "source": source,
@@ -630,12 +597,10 @@ def _select_review_baseline(baselines_frame: pd.DataFrame, dataset: str) -> pd.S
     subset = baselines_frame.loc[baselines_frame["dataset"] == dataset].copy()
     if subset.empty:
         return None
-    preferred_rmse = subset.loc[(subset["metric_name"] == "RMSE") & subset["metric_value"].notna()]
-    if not preferred_rmse.empty:
-        return preferred_rmse.sort_values(["metric_value", "model_name"]).iloc[0]
-    preferred_numeric = subset.loc[subset["metric_value"].notna()]
-    if not preferred_numeric.empty:
-        return preferred_numeric.sort_values(["model_name"]).iloc[0]
+    metric_name, _ = _primary_metric_for_dataset(dataset)
+    preferred = subset.loc[(subset["metric_name"] == metric_name) & subset["metric_value"].notna()]
+    if not preferred.empty:
+        return preferred.sort_values(["metric_value", "model_name"]).iloc[0]
     return subset.sort_values(["model_name"]).iloc[0]
 
 
@@ -650,7 +615,7 @@ def _context_note_for_row(
     baseline_note: str,
 ) -> str:
     if dataset == "freesolv":
-        return _freesolv_context_note(representation, baseline_note=baseline_note)
+        return _freesolv_context_note(baseline_note=baseline_note)
     if dataset == "qm9":
         return _qm9_review_note(
             split_scheme=split_scheme,
@@ -670,253 +635,29 @@ def _selected_prediction_rows(predictions: pd.DataFrame, generalization: pd.Data
     return merged.loc[merged["split"] == "test"].copy()
 
 
-_METRIC_COMPARISON_SPECS: tuple[dict[str, str], ...] = (
-    {"metric_key": "rmse", "column": "rmse", "label": "Test RMSE", "baseline_metric": "RMSE"},
-    {"metric_key": "mae", "column": "mae", "label": "Test MAE", "baseline_metric": "MAE"},
-    {"metric_key": "r2", "column": "r2", "label": "Test R2", "baseline_metric": ""},
-    {"metric_key": "coverage_90", "column": "coverage_90", "label": "90% Interval Coverage", "baseline_metric": ""},
-)
-_TABULAR_COMPARISON_REPRESENTATIONS = ("smiles", "moladt", "moladt_typed")
-_FRONTIER_COMPARISON_REPRESENTATIONS = ("smiles", "moladt", "moladt_typed", "moladt_typed_geom")
-_COMPARISON_LABELS = {
-    "smiles": "smiles",
-    "moladt": "moladt",
-    "moladt_typed": "moladt+",
-    "moladt_typed_geom": "moladt+ 3D",
-}
-_COMPARISON_SERIES_ORDER = {
-    "paper": 0,
-    "smiles": 1,
-    "moladt": 2,
-    "moladt_typed": 3,
-    "moladt_typed_geom": 4,
-}
-_TABULAR_MODEL_PREFERENCE = (
-    "catboost_uncertainty",
-    "bayes_hierarchical_shrinkage",
-    "bayes_linear_student_t",
-    "visnet_ensemble",
-    "dimenetpp_ensemble",
-)
-_TABULAR_COMPARISON_SUBTITLE = (
-    "Gray is paper context, orange is SMILES, teal is MolADT, and blue is the richer MolADT+ feature model when it is available."
-)
-_FRONTIER_COMPARISON_SUBTITLE = (
-    "This mixed-family frontier adds the rose MolADT+ 3D row. It intentionally compares the best local row per representation even when that switches from tabular to geometry models."
-)
-
-
-def _build_metric_comparison_frame(metrics: pd.DataFrame, *, baselines_frame: pd.DataFrame) -> pd.DataFrame:
-    if metrics.empty:
+def _build_moleculenet_comparison_frame(review_frame: pd.DataFrame) -> pd.DataFrame:
+    if review_frame.empty:
         return pd.DataFrame()
-    frames = [
-        _build_metric_comparison_rows(
-            _selected_local_comparison_rows(metrics),
-            baselines_frame=baselines_frame,
-            comparison_key="tabular",
-            representations=_TABULAR_COMPARISON_REPRESENTATIONS,
-            comparison_subtitle=_TABULAR_COMPARISON_SUBTITLE,
-        ),
-        _build_metric_comparison_rows(
-            _selected_frontier_comparison_rows(metrics),
-            baselines_frame=baselines_frame,
-            comparison_key="frontier",
-            representations=_FRONTIER_COMPARISON_REPRESENTATIONS,
-            comparison_subtitle=_FRONTIER_COMPARISON_SUBTITLE,
-        ),
-    ]
-    frames = [frame for frame in frames if not frame.empty]
-    if not frames:
-        return pd.DataFrame()
-    return pd.concat(frames, ignore_index=True)
-
-
-def _build_metric_comparison_rows(
-    local_rows: pd.DataFrame,
-    *,
-    baselines_frame: pd.DataFrame,
-    comparison_key: str,
-    representations: tuple[str, ...],
-    comparison_subtitle: str,
-) -> pd.DataFrame:
-    if local_rows.empty:
-        return pd.DataFrame()
-    rows: list[dict[str, Any]] = []
-    for spec in _METRIC_COMPARISON_SPECS:
-        metric_key = spec["metric_key"]
-        column = spec["column"]
-        metric_label = spec["label"]
-        baseline_metric = spec["baseline_metric"]
-        for dataset, dataset_frame in local_rows.groupby("dataset", sort=True):
-            if set(dataset_frame["representation"].astype(str)) != set(representations):
-                continue
-            local_context = str(dataset_frame.iloc[0]["comparison_context"])
-            for representation in representations:
-                representation_row = dataset_frame.loc[dataset_frame["representation"] == representation]
-                if representation_row.empty or pd.isna(representation_row.iloc[0].get(column, pd.NA)):
-                    continue
-                rows.append(
-                    {
-                        "comparison_key": comparison_key,
-                        "comparison_subtitle": comparison_subtitle,
-                        "dataset": str(dataset),
-                        "metric_key": metric_key,
-                        "metric_label": metric_label,
-                        "series_key": representation,
-                        "series_label": _COMPARISON_LABELS.get(representation, representation),
-                        "series_order": _COMPARISON_SERIES_ORDER.get(representation, len(_COMPARISON_SERIES_ORDER)),
-                        "value": float(representation_row.iloc[0][column]),
-                        "comparison_context": local_context,
-                        "paper_source_title": "",
-                        "paper_note": "",
-                    }
-                )
-            baseline = _select_metric_baseline(baselines_frame, dataset=str(dataset), metric_name=baseline_metric)
-            if baseline is not None:
-                rows.append(
-                    {
-                        "comparison_key": comparison_key,
-                        "comparison_subtitle": comparison_subtitle,
-                        "dataset": str(dataset),
-                        "metric_key": metric_key,
-                        "metric_label": metric_label,
-                        "series_key": "paper",
-                        "series_label": str(baseline["model_name"]),
-                        "series_order": _COMPARISON_SERIES_ORDER["paper"],
-                        "value": float(baseline["metric_value"]),
-                        "comparison_context": local_context,
-                        "paper_source_title": str(baseline["source_title"]),
-                        "paper_note": str(baseline["note"]),
-                    }
-                )
+    rows: list[dict[str, object]] = []
+    for _, row in review_frame.iterrows():
+        paper_value = row.get("paper_metric_value", pd.NA)
+        if pd.isna(paper_value):
+            continue
+        rows.append(
+            {
+                "dataset": str(row["dataset"]),
+                "dataset_label": str(row.get("dataset_label", row["dataset"])),
+                "metric_name": str(row["local_metric_name"]),
+                "local_value": float(row["local_metric_value"]),
+                "paper_value": float(paper_value),
+                "model": str(row["model"]),
+                "method": str(row["method"]),
+                "paper_model_name": str(row.get("paper_model_name", "")),
+                "paper_source_title": str(row.get("paper_source_title", "")),
+                "note": str(row.get("note", "")),
+            }
+        )
     return pd.DataFrame(rows)
-
-
-def _selected_local_comparison_rows(metrics: pd.DataFrame) -> pd.DataFrame:
-    test_rows = metrics.loc[
-        (metrics["split"] == "test") & metrics["representation"].isin(_TABULAR_COMPARISON_REPRESENTATIONS)
-    ].copy()
-    if test_rows.empty:
-        return pd.DataFrame()
-    rows: list[pd.DataFrame] = []
-    for dataset, dataset_frame in test_rows.groupby("dataset", sort=True):
-        shared_rows = _best_shared_local_rows(dataset_frame)
-        if shared_rows.empty:
-            independent_rows = _select_reviewer_rows(dataset_frame).copy()
-            if set(independent_rows["representation"].astype(str)) != set(_TABULAR_COMPARISON_REPRESENTATIONS):
-                continue
-            independent_rows["comparison_context"] = (
-                "Local rows chosen independently because no shared smiles/MolADT/MolADT+ model family was present."
-            )
-            rows.append(independent_rows)
-            continue
-        rows.append(shared_rows)
-    if not rows:
-        return pd.DataFrame()
-    return pd.concat(rows, ignore_index=True)
-
-
-def _best_shared_local_rows(test_rows: pd.DataFrame) -> pd.DataFrame:
-    candidates: list[tuple[int, float, float, pd.DataFrame]] = []
-    for (_, _), frame in test_rows.groupby(["model", "method"], sort=False):
-        chosen = (
-            frame.sort_values(["representation", "rmse", "mae", "runtime_seconds"])
-            .groupby("representation", sort=False, as_index=False)
-            .head(1)
-            .copy()
-        )
-        if set(chosen["representation"].astype(str)) != set(_TABULAR_COMPARISON_REPRESENTATIONS):
-            continue
-        model_name = str(chosen.iloc[0]["model"])
-        method_name = str(chosen.iloc[0]["method"])
-        chosen["comparison_context"] = f"Local shared family: {model_name} / {method_name}"
-        candidates.append(
-            (
-                _TABULAR_MODEL_PREFERENCE.index(model_name) if model_name in _TABULAR_MODEL_PREFERENCE else len(_TABULAR_MODEL_PREFERENCE),
-                float(chosen["rmse"].mean()),
-                float(chosen["runtime_seconds"].mean()),
-                chosen,
-            )
-        )
-    if not candidates:
-        return pd.DataFrame()
-    candidates.sort(key=lambda item: (item[0], item[1], item[2]))
-    return candidates[0][3].reset_index(drop=True)
-
-
-def _selected_frontier_comparison_rows(metrics: pd.DataFrame) -> pd.DataFrame:
-    test_rows = metrics.loc[
-        (metrics["split"] == "test") & metrics["representation"].isin(_FRONTIER_COMPARISON_REPRESENTATIONS)
-    ].copy()
-    if test_rows.empty:
-        return pd.DataFrame()
-    rows: list[pd.DataFrame] = []
-    for dataset, dataset_frame in test_rows.groupby("dataset", sort=True):
-        chosen_rows: list[dict[str, Any]] = []
-        for representation in _FRONTIER_COMPARISON_REPRESENTATIONS:
-            representation_rows = dataset_frame.loc[dataset_frame["representation"] == representation].copy()
-            if representation_rows.empty:
-                chosen_rows = []
-                break
-            chosen_rows.append(
-                _best_frontier_representation_row(
-                    representation_rows,
-                    dataset=str(dataset),
-                    representation=representation,
-                )
-            )
-        if not chosen_rows:
-            continue
-        chosen_frame = pd.DataFrame(chosen_rows)
-        chosen_frame["comparison_context"] = _frontier_comparison_context(str(dataset))
-        rows.append(chosen_frame)
-    if not rows:
-        return pd.DataFrame()
-    return pd.concat(rows, ignore_index=True)
-
-
-def _best_frontier_representation_row(
-    representation_rows: pd.DataFrame,
-    *,
-    dataset: str,
-    representation: str,
-) -> dict[str, Any]:
-    preference = _frontier_model_preference(dataset=dataset, representation=representation)
-    ranked = representation_rows.copy()
-    ranked["_model_rank"] = ranked["model"].map(
-        lambda model_name: preference.index(str(model_name)) if str(model_name) in preference else len(preference)
-    )
-    ranked = ranked.sort_values(["_model_rank", "rmse", "mae", "runtime_seconds", "model", "method"])
-    return ranked.iloc[0].drop(labels="_model_rank").to_dict()
-
-
-def _frontier_model_preference(*, dataset: str, representation: str) -> tuple[str, ...]:
-    if representation == "moladt_typed_geom":
-        if dataset == "qm9":
-            return ("visnet_ensemble", "dimenetpp_ensemble")
-        return ("dimenetpp_ensemble", "visnet_ensemble")
-    return ("catboost_uncertainty", "bayes_hierarchical_shrinkage", "bayes_linear_student_t")
-
-
-def _frontier_comparison_context(dataset: str) -> str:
-    if dataset == "qm9":
-        return "Mixed-family frontier: QM9 keeps tabular baselines for smiles/MolADT/MolADT+ and ranks MolADT+ 3D with ViSNet first, then DimeNet++."
-    if dataset == "freesolv":
-        return "Mixed-family frontier: FreeSolv keeps tabular baselines for smiles/MolADT/MolADT+ and ranks MolADT+ 3D with DimeNet++ first, then ViSNet."
-    return "Mixed-family frontier: rows are chosen independently so geometry-aware representations can use geometry-aware model families."
-
-
-def _select_metric_baseline(baselines_frame: pd.DataFrame, *, dataset: str, metric_name: str) -> pd.Series | None:
-    if not metric_name:
-        return None
-    subset = baselines_frame.loc[
-        (baselines_frame["dataset"] == dataset)
-        & (baselines_frame["metric_name"] == metric_name)
-        & baselines_frame["metric_value"].notna()
-    ].copy()
-    if subset.empty:
-        return None
-    return subset.sort_values(["metric_value", "model_name"]).iloc[0]
 
 
 def _load_timing_results() -> pd.DataFrame:
@@ -1102,34 +843,14 @@ def _write_results_csv(
     frame.to_csv(RESULTS_DIR / "results.csv", index=False)
 
 
-def _freesolv_context_note(representation: str, *, baseline_note: str = "") -> str:
-    if representation == "moladt":
-        contextual = (
-            "Partial context only: the gray bar is MoleculeNet's neural baseline, while the local MolADT bar "
-            "uses descriptor features computed after an RDKit SDF record is parsed into the ADT."
-        )
-    elif representation == "moladt_typed":
-        contextual = (
-            "Partial context only: the gray bar is MoleculeNet's neural baseline, while the local MolADT+ bar "
-            "uses richer ADT pairwise and bonding-system features computed from the parsed SDF-backed ADT."
-        )
-    else:
-        contextual = "Partial context only: MoleculeNet uses its own random split; this repo uses the local deterministic split."
+def _freesolv_context_note(*, baseline_note: str = "") -> str:
+    contextual = (
+        "MoleculeNet Table 3 is the external baseline here. The local bar is the best Stan MolADT run, "
+        "so the metric matches but the split and model family are still different."
+    )
     if baseline_note:
         return f"{contextual} {baseline_note}"
     return contextual
-
-
-def _qm9_context_note(*, n_train: int, n_eval: int) -> str:
-    if n_train == 110_462 and n_eval == 10_000:
-        return (
-            "Gilmer et al. use the same 110462/10000/10000 split sizes, but their model is a 3D MPNN. "
-            "This repo run matches the counts with a deterministic local split and reports descriptor-based Bayesian baselines."
-        )
-    return (
-        "Gilmer et al. use the full QM9 split with 110462 train / 10000 validation / 10000 test molecules and a 3D MPNN. "
-        "This repo run uses the smaller local subset configuration and reports descriptor-based Bayesian baselines."
-    )
 
 
 def _qm9_review_note(
@@ -1142,11 +863,14 @@ def _qm9_review_note(
 ) -> str:
     if split_scheme.startswith("paper:") or (train_n_eval == 110_462 and valid_n_eval == 10_000 and test_n_eval == 10_000):
         contextual = (
-            "Paper-sized split counts are matched locally, but the model family still differs: "
-            "these are descriptor-based Bayesian baselines rather than Gilmer's 3D message-passing network."
+            "The local run uses paper-sized split counts, but the benchmark still compares the best Stan MolADT run "
+            "against MoleculeNet's DTNN MAE row rather than reproducing the original paper training recipe exactly."
         )
     else:
-        contextual = "Partial context only: the paper reports a different metric and a much larger QM9 split."
+        contextual = (
+            "MoleculeNet Table 3 is the external baseline here. The metric matches MAE, but the local split and Stan "
+            "model family still differ from the original DTNN benchmark."
+        )
     if baseline_note:
         return f"{contextual} {baseline_note}"
     return contextual
@@ -1166,244 +890,6 @@ def _parse_extra_models(args: argparse.Namespace) -> tuple[str, ...]:
     if unknown:
         raise ValueError(f"Unknown extra model(s): {', '.join(unknown)}")
     return ordered
-
-
-def _extra_model_seeds(base_seed: int, count: int) -> tuple[int, ...]:
-    return tuple(base_seed + 101 * index for index in range(max(1, count)))
-
-
-def _write_summary_report(review_frame: pd.DataFrame, *, timing: pd.DataFrame) -> None:
-    lines = ["# Benchmark Summary", ""]
-    if review_frame.empty:
-        lines.append("No predictive runs were recorded.")
-    else:
-        lines.append("## Best Local Test Rows")
-        lines.append("")
-        for _, row in review_frame.iterrows():
-            lines.append(
-                f"- `{row['dataset']}/{row['representation']}`: test RMSE {float(row['test_rmse']):.4f}, "
-                f"test MAE {float(row['test_mae']):.4f}, model `{row['model']}` via `{row['method']}`."
-            )
-        lines.append("")
-    if not timing.empty:
-        lines.append("## Timing")
-        lines.append("")
-        for _, row in timing.iterrows():
-            lines.append(
-                f"- `{row['stage']}`: {float(row['molecules_per_second']):.1f} mol/s, "
-                f"failures {int(row['failure_count'])}, runtime {float(row['total_runtime_seconds']):.3f}s."
-            )
-    (RESULTS_DIR / "summary.md").write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
-
-
-def _write_model_report(
-    *,
-    metrics_frame: pd.DataFrame,
-    coefficients_frame: pd.DataFrame,
-    model_artifacts_frame: pd.DataFrame,
-    training_curves_frame: pd.DataFrame,
-) -> None:
-    lines = ["# Model Report", ""]
-    coefficient_columns = {"dataset_name", "representation", "method", "parameter_type", "parameter_name", "median"}
-    if not coefficients_frame.empty and coefficient_columns.issubset(coefficients_frame.columns):
-        lines.append("## Stan Coefficients")
-        lines.append("")
-        top_rows = coefficients_frame.sort_values(["dataset_name", "representation", "method", "parameter_type", "parameter_name"]).head(20)
-        for _, row in top_rows.iterrows():
-            lines.append(
-                f"- `{row['dataset_name']}/{row['representation']}/{row['method']}` `{row['parameter_name']}` "
-                f"median {float(row['median']):.4f}."
-            )
-        lines.append("")
-    nonlinear = metrics_frame.loc[metrics_frame["model"].isin(["catboost_uncertainty", "visnet_ensemble", "dimenetpp_ensemble"])]
-    if not nonlinear.empty:
-        lines.append("## Non-Linear Models")
-        lines.append("")
-        lines.append("CatBoost and geometry rows do not emit fake coefficient tables. Use the saved artifacts instead.")
-        lines.append("")
-        if not model_artifacts_frame.empty:
-            for _, row in model_artifacts_frame.iterrows():
-                lines.append(f"- `{row['model']}` `{row['artifact_type']}`: `{row['path']}`")
-        if not training_curves_frame.empty:
-            lines.append("")
-            lines.append(f"- Training curves recorded: `{display_path(_details_dir() / 'training_curves.csv')}`")
-    (RESULTS_DIR / "model_report.md").write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
-
-
-def _write_model_folders(
-    *,
-    metrics_frame: pd.DataFrame,
-    predictions_frame: pd.DataFrame,
-    coefficients_frame: pd.DataFrame,
-    model_artifacts_frame: pd.DataFrame,
-) -> None:
-    if metrics_frame.empty:
-        return
-    models_dir = ensure_directory(RESULTS_DIR / "models")
-    index_lines = ["# Models", "", "Each folder contains rows filtered to one model family plus a short explanation of how to read that model against `smiles`, baseline `MolADT`, and richer `MolADT+` where present.", ""]
-    model_names = sorted(metrics_frame["model"].dropna().astype(str).unique().tolist())
-    for model_name in model_names:
-        model_dir = ensure_directory(models_dir / model_name)
-        model_metrics = metrics_frame.loc[metrics_frame["model"] == model_name].copy()
-        model_predictions = predictions_frame.loc[predictions_frame["model"] == model_name].copy()
-        model_metrics.to_csv(model_dir / "predictive_metrics.csv", index=False)
-        model_predictions.to_csv(model_dir / "predictions.csv", index=False)
-        if not coefficients_frame.empty and "model_name" in coefficients_frame.columns:
-            coefficients_frame.loc[coefficients_frame["model_name"] == model_name].to_csv(model_dir / "coefficients.csv", index=False)
-        if not model_artifacts_frame.empty:
-            model_artifacts_frame.loc[model_artifacts_frame["model"] == model_name].to_csv(model_dir / "artifacts.csv", index=False)
-        readme_path = model_dir / "README.md"
-        readme_path.write_text(_model_folder_readme(model_name, model_metrics), encoding="utf-8")
-        index_lines.append(f"- `{model_name}`: see `{display_path(readme_path)}`")
-    (models_dir / "README.md").write_text("\n".join(index_lines).rstrip() + "\n", encoding="utf-8")
-
-
-def _model_folder_readme(model_name: str, model_metrics: pd.DataFrame) -> str:
-    representations = sorted(model_metrics["representation"].dropna().astype(str).unique().tolist())
-    methods = sorted(model_metrics["method"].dropna().astype(str).unique().tolist())
-    lines = [f"# {model_name}", ""]
-    lines.extend(_model_explanation_lines(model_name))
-    lines.append("")
-    lines.append("## Present representations")
-    lines.append("")
-    for representation in representations:
-        lines.append(f"- `{representation}`")
-    lines.append("")
-    lines.append("## Present methods")
-    lines.append("")
-    for method in methods:
-        lines.append(f"- `{method}`")
-    lines.append("")
-    lines.append("## Best test rows")
-    lines.append("")
-    test_rows = model_metrics.loc[model_metrics["split"] == "test"].sort_values(["dataset", "representation", "rmse", "mae"])
-    for _, row in test_rows.groupby(["dataset", "representation"], sort=True).head(1).iterrows():
-        lines.append(
-            f"- `{row['dataset']}/{row['representation']}`: RMSE {float(row['rmse']):.4f}, "
-            f"MAE {float(row['mae']):.4f}, coverage {float(row['coverage_90']):.3f}."
-        )
-    lines.append("")
-    lines.append("Supporting files in this folder:")
-    lines.append("")
-    lines.append("- `predictive_metrics.csv`")
-    lines.append("- `predictions.csv`")
-    if model_name in {"bayes_linear_student_t", "bayes_hierarchical_shrinkage"}:
-        lines.append("- `coefficients.csv`")
-    else:
-        lines.append("- `artifacts.csv`")
-    return "\n".join(lines).rstrip() + "\n"
-
-
-def _model_explanation_lines(model_name: str) -> list[str]:
-    if model_name in {"bayes_linear_student_t", "bayes_hierarchical_shrinkage"}:
-        return [
-            "These are the Stan descriptor baselines.",
-            "",
-            "They compare `smiles`, baseline `MolADT`, and richer `MolADT+` fairly because each branch uses a standardized tabular feature matrix under the same model family.",
-            "Use these folders to answer whether the ADT-derived feature tables help before introducing a different learner.",
-        ]
-    if model_name == "catboost_uncertainty":
-        return [
-            "This is the shared non-linear tabular comparison model.",
-            "",
-            "It is the fairest `smiles` vs `MolADT` vs `MolADT+` comparison in the repo because the learner is held fixed and only the representation changes.",
-            "If `MolADT+` beats both `MolADT` and `smiles` here, that is evidence about the richer ADT feature design rather than about a model-family switch.",
-        ]
-    if model_name in {"visnet_ensemble", "dimenetpp_ensemble"}:
-        return [
-            "This is a geometry-aware model family.",
-            "",
-            "These rows should be read against `sdf_geom`, `moladt_geom`, and `moladt_typed_geom`, not against plain `smiles`.",
-            "They answer a different question from the tabular models: what happens when the model can use coordinates plus optional MolADT global descriptors.",
-        ]
-    return [
-        "Model-specific explanation unavailable.",
-        "",
-        "Read this folder together with the representations listed below.",
-    ]
-
-
-def _write_literature_comparison(
-    *,
-    review_frame: pd.DataFrame,
-    baselines_frame: pd.DataFrame,
-    aggregated_metrics: pd.DataFrame,
-) -> None:
-    comparison_rows = _build_literature_comparison_rows(review_frame, baselines_frame, aggregated_metrics)
-    details_path = RESULTS_DIR / "literature_comparison.md"
-    direct_rows = [row for row in comparison_rows if row["directly_comparable"]]
-    indirect_rows = [row for row in comparison_rows if not row["directly_comparable"]]
-    lines = ["# Literature Comparison", ""]
-    lines.append("## Directly comparable")
-    lines.append("")
-    if direct_rows:
-        for row in direct_rows:
-            lines.append(f"- {row['local_result']} vs {row['baseline_result']} ({row['source_url']})")
-    else:
-        lines.append("- None in the current configuration.")
-    lines.append("")
-    lines.append("## Same dataset/target but different split/training protocol")
-    lines.append("")
-    if indirect_rows:
-        for row in indirect_rows:
-            lines.append(f"- {row['local_result']} vs {row['baseline_result']}. {row['note']} Source: {row['source_url']}")
-    else:
-        lines.append("- None.")
-    details_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
-    pd.DataFrame(comparison_rows).to_csv(_details_dir() / "literature_comparison.csv", index=False)
-
-
-def _build_literature_comparison_rows(
-    review_frame: pd.DataFrame,
-    baselines_frame: pd.DataFrame,
-    aggregated_metrics: pd.DataFrame,
-) -> list[dict[str, object]]:
-    rows: list[dict[str, object]] = []
-    aggregate_test = aggregated_metrics.loc[aggregated_metrics["split"] == "test"].copy() if not aggregated_metrics.empty else pd.DataFrame()
-    for _, review_row in review_frame.iterrows():
-        dataset = str(review_row["dataset"])
-        local_metric_row = aggregate_test.loc[
-            (aggregate_test["dataset"] == dataset)
-            & (aggregate_test["representation"] == review_row["representation"])
-            & (aggregate_test["model"] == review_row["model"])
-            & (aggregate_test["method"] == review_row["method"])
-        ]
-        if local_metric_row.empty:
-            local_result = (
-                f"{dataset}/{review_row['representation']} local best test RMSE {float(review_row['test_rmse']):.4f}"
-            )
-            local_split = str(review_row.get("split_scheme", ""))
-        else:
-            metric_row = local_metric_row.iloc[0]
-            local_result = (
-                f"{dataset}/{review_row['representation']} aggregated test RMSE {float(metric_row['rmse_mean']):.4f}"
-                + (f" ± {float(metric_row['rmse_std']):.4f}" if pd.notna(metric_row.get("rmse_std", pd.NA)) else "")
-            )
-            local_split = str(metric_row.get("split_scheme", ""))
-        dataset_baselines = baselines_frame.loc[baselines_frame["dataset"] == dataset]
-        for _, baseline in dataset_baselines.iterrows():
-            metric_name = str(baseline.get("metric_name", "")).strip()
-            metric_value = baseline.get("metric_value", pd.NA)
-            if metric_name and pd.notna(metric_value):
-                baseline_result = f"{baseline['model_name']} {metric_name} {float(metric_value):.4f}"
-            else:
-                baseline_result = f"{baseline['model_name']} (context row only)"
-            rows.append(
-                {
-                    "dataset": dataset,
-                    "representation": review_row["representation"],
-                    "model": review_row["model"],
-                    "method": review_row["method"],
-                    "split_scheme": local_split,
-                    "local_result": local_result,
-                    "baseline_result": baseline_result,
-                    "baseline_split_protocol": baseline["split_protocol"],
-                    "source_url": baseline["source_url"],
-                    "directly_comparable": bool(baseline["directly_comparable"]) and local_split == baseline["split_protocol"],
-                    "note": baseline["note"],
-                }
-            )
-    return rows
 
 
 def _write_timing_report(timing: pd.DataFrame) -> None:

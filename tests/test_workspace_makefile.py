@@ -33,6 +33,7 @@ def test_workspace_makefile_benchmark_uses_timestamped_results_directory(tmp_pat
     )
 
     assert re.search(r"MOLADT_RESULTS_DIR=results/run_\d{8}_\d{6}", result.stdout)
+    assert "Running workspace combined MolADT benchmark bundle." in result.stdout
 
 
 def test_workspace_makefile_paper_benchmark_uses_paper_results_directory(tmp_path: Path) -> None:
@@ -69,3 +70,4 @@ def test_workspace_makefile_showcase_passes_results_subdir(tmp_path: Path) -> No
     )
 
     assert re.search(r"--results-subdir run_\d{8}_\d{6}", result.stdout)
+    assert "Running workspace showcase bundle." in result.stdout
