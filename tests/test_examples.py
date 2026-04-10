@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from scripts.features import compute_moladt_typed_descriptors
+
 from moladt.chem.validate import validate_molecule
 from moladt.examples import diborane_pretty, ferrocene_pretty, morphine_pretty
 
@@ -10,6 +12,13 @@ def test_diborane_constructs_a_valid_molecule() -> None:
 
 def test_ferrocene_constructs_a_valid_molecule() -> None:
     assert validate_molecule(ferrocene_pretty) == ferrocene_pretty
+
+
+def test_ferrocene_typed_descriptors_use_canonical_dietz_edges() -> None:
+    descriptors = compute_moladt_typed_descriptors(ferrocene_pretty)
+
+    assert descriptors["system_shared_electrons_sum"] == 18.0
+    assert descriptors["system_member_edges_max"] == 10.0
 
 
 def test_morphine_constructs_a_valid_molecule() -> None:

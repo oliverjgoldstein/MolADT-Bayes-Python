@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 
+from moladt.chem.dietz import mk_edge
 from moladt.chem.molecule import AtomicSymbol, Molecule, effective_order
 from moladt.inference import compute_descriptors as compute_moladt_descriptors
 from moladt.inference.descriptors import coordinate_descriptors
@@ -796,13 +797,15 @@ def _moladt_atomic_numbers(molecule: Molecule) -> dict[Any, float]:
     }
 
 
-def _moladt_edge_orders(molecule: Molecule) -> dict[tuple[Any, Any], float]:
-    edge_orders: dict[tuple[Any, Any], float] = {}
-    for edge in _unique_moladt_edges(molecule):
-        order = float(effective_order(molecule, edge))
-        edge_orders[(edge.a, edge.b)] = order
-        edge_orders[(edge.b, edge.a)] = order
-    return edge_orders
+def _moladt_edge_order_map(molecule: Molecule) -> dict[Any, float]:
+    return {
+        edge: float(effective_order(molecule, edge))
+        for edge in _unique_moladt_edges(molecule)
+    }
+
+
+def _moladt_edge_order(edge_orders: dict[Any, float], left: Any, right: Any) -> float:
+    return float(edge_orders[mk_edge(left, right)])
 
 
 def _moladt_adjacency(molecule: Molecule) -> dict[Any, tuple[Any, ...]]:
@@ -935,7 +938,7 @@ def _typed_angle_features(molecule: Molecule) -> dict[str, float]:
     adjacency = _moladt_adjacency(molecule)
     coordinates = _moladt_coordinate_map(molecule)
     atomic_numbers = _moladt_atomic_numbers(molecule)
-    edge_orders = _moladt_edge_orders(molecule)
+    edge_orders = _moladt_edge_order_map(molecule)
     for center_id, neighbors in adjacency.items():
         if len(neighbors) < 2:
             continue
@@ -954,7 +957,11 @@ def _typed_angle_features(molecule: Molecule) -> dict[str, float]:
                     (atomic_numbers[left_id] * atomic_numbers[right_id]) / max(left_distance * right_distance, 1e-6)
                 )
                 order_weight = float(
-                    0.5 * (edge_orders[(center_id, left_id)] + edge_orders[(center_id, right_id)])
+                    0.5
+                    * (
+                        _moladt_edge_order(edge_orders, center_id, left_id)
+                        + _moladt_edge_order(edge_orders, center_id, right_id)
+                    )
                 )
                 for radial_center in _ANGLE_CENTERS_DEGREES:
                     channel = math.exp(-((angle_degrees - radial_center) ** 2) / (2.0 * (_ANGLE_SIGMA_DEGREES ** 2)))
@@ -973,13 +980,13 @@ def _typed_torsion_features(molecule: Molecule) -> dict[str, float]:
     adjacency = _moladt_adjacency(molecule)
     coordinates = _moladt_coordinate_map(molecule)
     atomic_numbers = _moladt_atomic_numbers(molecule)
-    edge_orders = _moladt_edge_orders(molecule)
+    edge_orders = _moladt_edge_order_map(molecule)
     for edge in _unique_moladt_edges(molecule):
         left_neighbors = [atom_id for atom_id in adjacency[edge.a] if atom_id != edge.b]
         right_neighbors = [atom_id for atom_id in adjacency[edge.b] if atom_id != edge.a]
         if not left_neighbors or not right_neighbors:
             continue
-        central_order = float(edge_orders[(edge.a, edge.b)])
+        central_order = _moladt_edge_order(edge_orders, edge.a, edge.b)
         for terminal_left in left_neighbors:
             for terminal_right in right_neighbors:
                 if terminal_left == terminal_right:

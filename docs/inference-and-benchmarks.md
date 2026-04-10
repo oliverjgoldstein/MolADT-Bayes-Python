@@ -5,6 +5,7 @@ This repo owns the main benchmark run. It prepares datasets, exports aligned Mol
 ## Main Commands
 
 ```bash
+make python-cmdstan-install
 make freesolv
 make qm9
 make timing
@@ -16,6 +17,7 @@ make timing
 - `make freesolv` runs the FreeSolv MolADT sweep and compares the best local Stan run against MoleculeNet Table 3 on RMSE
 - `make qm9` runs the QM9 `mu` MolADT sweep and compares the best local Stan run against MoleculeNet Table 3 on MAE
 - `make timing` runs the separate ZINC timing/interoperability pass
+- `make python-cmdstan-install` is the one-time local CmdStan install step required before the Stan benchmark targets
 
 ## Benchmark Contract
 

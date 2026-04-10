@@ -116,7 +116,7 @@ help:
 	@printf "%s\n" \
 	"Python repo targets:" \
 	"  make python-setup           Create .venv and install the package plus model deps" \
-	"  make python-cmdstan-install Install CmdStan into .cmdstan" \
+	"  make python-cmdstan-install Install CmdStan into .cmdstan (run once before Stan benchmarks)" \
 	"  make python-test            Run the pytest suite" \
 	"  make python-typecheck       Run mypy on the package" \
 	"  make python-activate        Print the command that activates the local venv" \
@@ -386,6 +386,7 @@ python-benchmark-smoke:
 	@printf "%s\n" \
 	"Running FreeSolv smoke benchmark." \
 	"  repo: MolADT-Bayes-Python" \
+	"  first benchmark run prerequisite: make python-cmdstan-install" \
 	"  command: scripts.run_all smoke-test" \
 	"  dataset: FreeSolv" \
 	"  results_dir: $(RESULTS_ROOT)" \
@@ -404,6 +405,7 @@ python-benchmark-qm9:
 	@printf "%s\n" \
 	"Running QM9 benchmark export and Stan sweep." \
 	"  repo: MolADT-Bayes-Python" \
+	"  first benchmark run prerequisite: make python-cmdstan-install" \
 	"  command: scripts.run_all qm9" \
 	"  dataset: QM9 (mu task, MolADT only)" \
 	"  results_dir: $(RESULTS_ROOT)" \
@@ -424,6 +426,7 @@ python-benchmark-zinc:
 	@printf "%s\n" \
 	"Running ZINC timing benchmark." \
 	"  repo: MolADT-Bayes-Python" \
+	"  first benchmark run prerequisite: make python-cmdstan-install" \
 	"  command: scripts.run_all zinc-timing" \
 	"  dataset: ZINC" \
 	"  results_dir: $(RESULTS_ROOT)" \
@@ -440,6 +443,7 @@ freesolv:
 	@printf "%s\n" \
 	"Running reviewer-facing FreeSolv comparison." \
 	"  repo: MolADT-Bayes-Python" \
+	"  first benchmark run prerequisite: make python-cmdstan-install" \
 	"  command: scripts.run_all smoke-test" \
 	"  dataset: FreeSolv" \
 	"  results_dir: results/$(FREESOLV_RESULTS_SUBDIR)" \
@@ -455,6 +459,7 @@ qm9:
 	@printf "%s\n" \
 	"Running reviewer-facing QM9 comparison." \
 	"  repo: MolADT-Bayes-Python" \
+	"  first benchmark run prerequisite: make python-cmdstan-install" \
 	"  command: scripts.run_all qm9" \
 	"  dataset: QM9 (mu task, MolADT only)" \
 	"  results_dir: results/$(QM9_RESULTS_SUBDIR)" \
@@ -472,6 +477,7 @@ benchmark:
 	@printf "%s\n" \
 	"Running combined MolADT benchmark bundle." \
 	"  repo: MolADT-Bayes-Python" \
+	"  first benchmark run prerequisite: make python-cmdstan-install" \
 	"  command: scripts.run_all benchmark" \
 	"  datasets: FreeSolv RMSE + QM9 mu MAE" \
 	"  results_dir: $(RESULTS_ROOT)" \
@@ -515,6 +521,7 @@ timing:
 	@printf "%s\n" \
 	"Running MolADT timing benchmark." \
 	"  repo: MolADT-Bayes-Python" \
+	"  first benchmark run prerequisite: make python-cmdstan-install" \
 	"  command: scripts.run_all zinc-timing --include-moladt" \
 	"  results_dir: results/$(TIMING_RESULTS_SUBDIR)" \
 	"  dataset_size: $(ZINC_DATASET_SIZE)" \

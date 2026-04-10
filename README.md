@@ -20,6 +20,24 @@ Those are useful boundary strings, but they are weak central objects.
 
 MolADT keeps that chemistry as typed atoms, local bonds, bonding systems, and stereo annotations. That is the point of the repo: a molecular object that respects meaningful invariances and is easier to sample over, featurize, and compare than a string-first representation.
 
+## Quick Start
+
+```bash
+make python-setup
+./.venv/bin/python -m moladt.cli parse-smiles "c1ccccc1"
+```
+
+If you plan to run benchmarks, install CmdStan once first:
+
+```bash
+make python-cmdstan-install
+```
+
+`Molecule` is immutable and destructures as:
+`atoms, local_bonds, systems, smiles_stereochemistry = molecule`
+
+For probabilistic proposals or local graph surgery, use `MutableMolecule` as a writable scratch state and call `freeze()` to return to canonical `Molecule`.
+
 ## Benchmark Outputs
 
 The repo does not ship precomputed benchmark results. `results/` is meant to stay empty in git and only be populated by real non-dry benchmark runs on your machine.
@@ -27,6 +45,7 @@ The repo does not ship precomputed benchmark results. `results/` is meant to sta
 Run:
 
 ```bash
+make python-cmdstan-install
 make freesolv
 make qm9
 ```
@@ -43,18 +62,6 @@ The comparison is deliberately narrow:
 
 Those outputs are local benchmark artifacts, not committed front-page snapshots. The metric matches the MoleculeNet row; the local split and Stan model family still differ from the paper.
 
-## Quick Start
-
-```bash
-make python-setup
-./.venv/bin/python -m moladt.cli parse-smiles "c1ccccc1"
-```
-
-`Molecule` is immutable and destructures as:
-`atoms, local_bonds, systems, smiles_stereochemistry = molecule`
-
-For probabilistic proposals or local graph surgery, use `MutableMolecule` as a writable scratch state and call `freeze()` to return to canonical `Molecule`.
-
 ## What This Repo Contains
 
 - the Python MolADT types, parser, renderer, and pretty-printer
@@ -64,6 +71,7 @@ For probabilistic proposals or local graph surgery, use `MutableMolecule` as a w
 ## Benchmarking
 
 ```bash
+make python-cmdstan-install
 make freesolv
 make qm9
 make timing

@@ -47,8 +47,9 @@ def ensure_cmdstan_ready() -> None:
         cmdstanpy.cmdstan_path()
     except Exception as exc:
         raise RuntimeError(
-            "CmdStan is not installed. Install it with "
-            "`python -c \"import cmdstanpy; cmdstanpy.install_cmdstan(dir='MolADT-Bayes-Python/.cmdstan')\"` "
+            "CmdStan is not installed. From the repo root, run `make python-cmdstan-install` once, "
+            "or install it manually with "
+            "`python -c \"import cmdstanpy; cmdstanpy.install_cmdstan(dir='MolADT-Bayes-Python/.cmdstan')\"`, "
             "or point CmdStanPy at an existing installation via set_cmdstan_path()."
         ) from exc
 
