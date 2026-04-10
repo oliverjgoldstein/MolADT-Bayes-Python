@@ -8,6 +8,7 @@ The repo vendors the small subset actually needed by `make freesolv`:
 
 - `data/raw/freesolv/SAMPL.csv`
 - `data/raw/freesolv/sdffiles/*.sdf`
+- `data/raw/freesolv/FreeSolv-master/FreeSolv-master/database.json`
 
 Upstream sources:
 
@@ -16,7 +17,9 @@ Upstream sources:
 - Upstream data repo: https://github.com/MobleyLab/FreeSolv
 - CSV URL used by the downloader: https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/SAMPL.csv
 
-The repo does not vendor the rest of the upstream simulation archives because the benchmark code here only needs the hydration targets and the SDF structures.
+The benchmark now keys FreeSolv rows from the `642` vendored SDF files and joins targets and names from the bundled FreeSolv metadata, rather than trying to recover identity by re-rendering SDF files back into CSV SMILES text.
+
+The repo does not need the rest of the upstream simulation archives for the benchmark itself, even though the vendored FreeSolv snapshot still includes several of them.
 
 ## QM9
 

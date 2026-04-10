@@ -84,7 +84,7 @@ def test_makefile_freesolv_target_prints_verbose_context(tmp_path: Path) -> None
 
     assert "Running reviewer-facing FreeSolv comparison." in result.stdout
     assert "paper baseline: MoleculeNet MPNN RMSE 1.15" in result.stdout
-    assert "./.venv/bin/python -m scripts.run_all smoke-test" in result.stdout
+    assert "./.venv/bin/python -m scripts.run_all freesolv" in result.stdout
 
 
 def test_makefile_benchmark_defaults_to_timestamped_results_directory(tmp_path: Path) -> None:

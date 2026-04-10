@@ -328,10 +328,11 @@ def test_process_freesolv_creates_processed_directory_before_writing(tmp_path, m
     monkeypatch.setattr(process_freesolv, "download_freesolv", lambda force=False: FakeDownloads())
     monkeypatch.setattr(
         process_freesolv,
-        "_canonicalize_freesolv_csv",
+        "_load_freesolv_sdf_dataset",
         lambda downloads: (
             pd.DataFrame([{"mol_id": "freesolv_0001", "smiles": "O", "expt": -1.0}]),
             [],
+            1,
         ),
     )
     monkeypatch.setattr(

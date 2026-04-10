@@ -27,11 +27,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m scripts.run_all")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    smoke = subparsers.add_parser("smoke-test", help="Run the FreeSolv smoke test benchmark")
-    _add_common_benchmark_args(smoke)
-    smoke.add_argument("--include-moladt-predictive", action="store_true")
-    smoke.add_argument("--skip-moladt", dest="skip_moladt", action="store_true")
-    smoke.add_argument("--skip-sdf", dest="skip_moladt", action="store_true", help=argparse.SUPPRESS)
+    freesolv = subparsers.add_parser("freesolv", aliases=["smoke-test"], help="Run the FreeSolv benchmark")
+    _add_common_benchmark_args(freesolv)
+    freesolv.add_argument("--include-moladt-predictive", action="store_true")
+    freesolv.add_argument("--skip-moladt", dest="skip_moladt", action="store_true")
+    freesolv.add_argument("--skip-sdf", dest="skip_moladt", action="store_true", help=argparse.SUPPRESS)
 
     qm9 = subparsers.add_parser("qm9", help="Run the QM9 benchmark")
     _add_common_benchmark_args(qm9)
@@ -109,9 +109,9 @@ def main(argv: list[str] | None = None) -> int:
     training_curve_rows: list[dict[str, object]] = []
     model_artifact_rows: list[dict[str, object]] = []
 
-    if args.command == "smoke-test":
+    if args.command in {"freesolv", "smoke-test"}:
         if args.verbose:
-            log("Starting FreeSolv smoke benchmark")
+            log("Starting FreeSolv benchmark")
             log(f"Results directory: {display_path(RESULTS_DIR)}")
             log_stage("benchmark", 1, 3, "Preparing FreeSolv exports")
         artifacts = process_freesolv_dataset(
@@ -242,7 +242,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if metrics_rows:
         if args.verbose:
-            total_stages = 2 if args.command in {"smoke-test", "qm9", "models"} else 3 if args.command == "benchmark" else 1
+            total_stages = 2 if args.command in {"freesolv", "smoke-test", "qm9", "models"} else 3 if args.command == "benchmark" else 1
             log_stage(
                 "benchmark",
                 total_stages,

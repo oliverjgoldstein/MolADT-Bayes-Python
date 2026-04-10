@@ -56,7 +56,7 @@ make timing
 make benchmark-small
 ```
 
-- `make freesolv` runs the long FreeSolv benchmark and writes a `Training` / `Test` / `Paper` comparison figure
+- `make freesolv` runs the long FreeSolv benchmark from the full local `642`-molecule SDF set and writes a `Training` / `Test` / `Paper` comparison figure
 - `make qm9` runs the long QM9 benchmark on the full local download with the paper-sized split and writes the same `Training` / `Test` / `Paper` figure
 - `make timing` runs the separate ingest/interoperability timing pass, including raw source reads, manifest CSV field materialization, local SMILES parsing, and MolADT file parsing
 - `make benchmark-small` keeps the older lighter 2,000-row QM9 subset path around for a faster local sanity check

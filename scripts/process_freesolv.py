@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -100,26 +101,26 @@ def process_freesolv_dataset(
     downloads = download_freesolv(force=force)
     ensure_directory(PROCESSED_DATA_DIR)
     if verbose:
-        log_stage("freesolv", 2, total_stages, "Preparing FreeSolv SMILES boundary strings")
-    processed_frame, canonical_failures = _canonicalize_freesolv_csv(downloads)
+        log_stage("freesolv", 2, total_stages, "Importing FreeSolv molecules from SDF files")
+    processed_frame, import_failures, source_sdf_count = _load_freesolv_sdf_dataset(downloads)
     if verbose:
         log(
-            f"[freesolv 2/{total_stages}] prepared molecules={len(processed_frame)} "
-            f"csv_failures={len(canonical_failures)}"
+            f"[freesolv 2/{total_stages}] source_sdf_files={source_sdf_count} "
+            f"imported_rows={len(processed_frame)} import_failures={len(import_failures)}"
         )
     processed_csv_path = PROCESSED_DATA_DIR / "freesolv_processed.csv"
-    processed_frame.to_csv(processed_csv_path, index=False)
+    processed_frame.drop(columns=["moladt_molecule"], errors="ignore").to_csv(processed_csv_path, index=False)
     failure_paths: list[Path] = []
-    canonical_failure_path = PROCESSED_DATA_DIR / "freesolv_processing_failures.csv"
-    write_failure_csv(canonical_failure_path, canonical_failures)
-    failure_paths.append(canonical_failure_path)
+    import_failure_path = PROCESSED_DATA_DIR / "freesolv_sdf_import_failures.csv"
+    write_failure_csv(import_failure_path, import_failures)
+    failure_paths.append(import_failure_path)
 
     if verbose:
         log_stage(
             "freesolv",
             3,
             total_stages,
-            f"Featurizing FreeSolv string and MolADT-from-SMILES records (molecules={len(processed_frame)})",
+            f"Featurizing FreeSolv boundary strings with SDF-backed molecules (molecules={len(processed_frame)})",
         )
     smiles_table = featurize_smiles_dataframe(
         processed_frame,
@@ -171,7 +172,8 @@ def process_freesolv_dataset(
             log(
                 f"[freesolv 3/{total_stages}] shared_tabular_rows={len(smiles_table.rows)} "
                 f"smiles_failures={len(smiles_table.failures)} moladt_failures={len(moladt_table.failures)} "
-                f"train={len(smiles_export.y_train)} valid={len(smiles_export.y_valid)} test={len(smiles_export.y_test)}"
+                f"train={len(smiles_export.y_train)} valid={len(smiles_export.y_valid)} test={len(smiles_export.y_test)} "
+                f"(usable_rows_from_sdf={len(smiles_table.rows)}/{source_sdf_count})"
             )
         tabular_exports: dict[str, ExportedDataset] = {
             "smiles": smiles_export,
@@ -189,7 +191,8 @@ def process_freesolv_dataset(
             log(
                 f"[freesolv 3/{total_stages}] smiles_rows={len(smiles_table.rows)} "
                 f"smiles_feature_failures={len(smiles_table.failures)} "
-                f"train={len(smiles_export.y_train)} valid={len(smiles_export.y_valid)} test={len(smiles_export.y_test)}"
+                f"train={len(smiles_export.y_train)} valid={len(smiles_export.y_valid)} test={len(smiles_export.y_test)} "
+                f"(usable_rows_from_sdf={len(smiles_table.rows)}/{source_sdf_count})"
             )
         tabular_exports = {"smiles": smiles_export}
     geometric_exports: dict[str, GeometricDatasetSpec] = {}
@@ -197,16 +200,16 @@ def process_freesolv_dataset(
     moladt_index_path: Path | None = None
     if include_moladt:
         if verbose:
-            log_stage("freesolv", 4, total_stages, "Aligning SDF records for geometry-backed branches")
-        sdf_frame, sdf_failures = _align_freesolv_sdf(downloads, processed_frame)
-        sdf_failure_path = PROCESSED_DATA_DIR / "freesolv_sdf_alignment_failures.csv"
-        write_failure_csv(sdf_failure_path, sdf_failures)
-        failure_paths.append(sdf_failure_path)
+            log_stage("freesolv", 4, total_stages, "Exporting geometry-backed branches from SDF inputs")
+        sdf_frame = processed_frame.loc[
+            :,
+            ["mol_id", "smiles", "smiles_canonical", "expt", "sdf_relpath", "sdf_record_index", "moladt_molecule"],
+        ].copy()
         if not sdf_frame.empty:
             if verbose:
                 log(
                     f"[freesolv 4/{total_stages}] aligned_sdf_records={len(sdf_frame)} "
-                    f"sdf_alignment_failures={len(sdf_failures)}"
+                    f"sdf_alignment_failures=0"
                 )
             moladt_index_path = PROCESSED_DATA_DIR / "freesolv_moladt_index.csv"
             sdf_frame.drop(columns=["moladt_molecule"]).to_csv(moladt_index_path, index=False)
@@ -276,7 +279,7 @@ def process_freesolv_dataset(
             if verbose:
                 log(
                     f"[freesolv 4/{total_stages}] aligned_sdf_records=0 "
-                    f"sdf_alignment_failures={len(sdf_failures)}"
+                    f"sdf_alignment_failures=0"
                 )
     if verbose:
         tabular_keys = ", ".join(sorted(tabular_exports))
@@ -291,6 +294,115 @@ def process_freesolv_dataset(
         moladt_export=moladt_export,
         failure_csv_paths=tuple(failure_paths),
     )
+
+
+def _candidate_freesolv_roots(root: Path) -> tuple[Path, ...]:
+    candidates: list[Path] = []
+    for candidate in (root, root / "FreeSolv-master", root / "FreeSolv-master" / "FreeSolv-master"):
+        if candidate.is_dir() and candidate not in candidates:
+            candidates.append(candidate)
+    return tuple(candidates)
+
+
+def _find_freesolv_database_json(downloads: FreeSolvDownloads) -> Path:
+    for root in _candidate_freesolv_roots(downloads.repo_extract_dir):
+        candidate = root / "database.json"
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError("Could not find FreeSolv database.json alongside the SDF files")
+
+
+def _find_freesolv_sdf_dir(downloads: FreeSolvDownloads) -> Path:
+    for root in _candidate_freesolv_roots(downloads.repo_extract_dir):
+        candidate = root / "sdffiles"
+        if candidate.is_dir() and any(candidate.glob("*.sdf")):
+            return candidate
+    raise FileNotFoundError("Could not find FreeSolv sdffiles/ with SDF records")
+
+
+def _load_freesolv_metadata(downloads: FreeSolvDownloads) -> dict[str, dict[str, object]]:
+    database_path = _find_freesolv_database_json(downloads)
+    payload = json.loads(database_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("FreeSolv database.json must decode to an object keyed by compound id")
+    return {str(key): value for key, value in payload.items() if isinstance(value, dict)}
+
+
+def _load_freesolv_sdf_dataset(
+    downloads: FreeSolvDownloads,
+) -> tuple[pd.DataFrame, list[FailureRecord], int]:
+    metadata_by_id = _load_freesolv_metadata(downloads)
+    sdf_dir = _find_freesolv_sdf_dir(downloads)
+    sdf_paths = sorted(sdf_dir.glob("*.sdf"))
+    rows: list[dict[str, object]] = []
+    failures: list[FailureRecord] = []
+    for sdf_path in sdf_paths:
+        compound_id = sdf_path.stem
+        metadata = metadata_by_id.get(compound_id)
+        if metadata is None:
+            failures.append(
+                FailureRecord(
+                    dataset="freesolv",
+                    mol_id=compound_id,
+                    stage="load_sdf_metadata",
+                    error="No matching FreeSolv metadata row for SDF compound id",
+                )
+            )
+            continue
+        try:
+            record_iterator = iter_sdf_records(sdf_path)
+            record = next(record_iterator)
+        except StopIteration:
+            failures.append(FailureRecord(dataset="freesolv", mol_id=compound_id, stage="read_sdf", error="SDF file had no records"))
+            continue
+        except Exception as exc:
+            failures.append(FailureRecord(dataset="freesolv", mol_id=compound_id, stage="read_sdf", error=str(exc)))
+            continue
+        source_smiles = str(metadata.get("smiles", "")).strip()
+        if not source_smiles:
+            failures.append(
+                FailureRecord(
+                    dataset="freesolv",
+                    mol_id=compound_id,
+                    stage="load_sdf_metadata",
+                    error="FreeSolv metadata row had an empty SMILES string",
+                )
+            )
+            continue
+        try:
+            canonical_smiles = canonicalize_smiles(source_smiles)
+        except Exception as exc:
+            failures.append(FailureRecord(dataset="freesolv", mol_id=compound_id, stage="canonicalize_metadata_smiles", error=str(exc)))
+            continue
+        iupac = str(metadata.get("iupac") or metadata.get("nickname") or "").strip()
+        expt = metadata.get("expt")
+        try:
+            expt_value = float(expt)
+        except Exception as exc:
+            failures.append(
+                FailureRecord(
+                    dataset="freesolv",
+                    mol_id=compound_id,
+                    stage="load_sdf_metadata",
+                    error=f"Invalid experimental value {expt!r}: {exc}",
+                )
+            )
+            continue
+        rows.append(
+            {
+                "mol_id": compound_id,
+                "compound_id": compound_id,
+                "smiles": source_smiles,
+                "smiles_canonical": canonical_smiles,
+                "source_smiles": source_smiles,
+                "iupac": iupac,
+                "expt": expt_value,
+                "sdf_relpath": str(Path("sdffiles") / sdf_path.name),
+                "sdf_record_index": 0,
+                "moladt_molecule": record.molecule,
+            }
+        )
+    return pd.DataFrame(rows).sort_values("mol_id").reset_index(drop=True), failures, len(sdf_paths)
 
 
 def _canonicalize_freesolv_csv(downloads: FreeSolvDownloads) -> tuple[pd.DataFrame, list[FailureRecord]]:

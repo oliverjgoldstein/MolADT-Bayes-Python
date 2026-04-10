@@ -69,7 +69,7 @@ Shared modeling assumptions that matter for interop:
 1. Produce or refresh the Python-side exports:
 
    ```bash
-   ./.venv/bin/python -m scripts.run_all smoke-test
+   ./.venv/bin/python -m scripts.run_all freesolv
    ./.venv/bin/python -m scripts.run_all qm9 --limit 2000 --split-mode subset
    ```
 

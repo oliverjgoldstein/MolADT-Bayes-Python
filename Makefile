@@ -388,7 +388,7 @@ python-benchmark-smoke:
 	"Running FreeSolv smoke benchmark." \
 	"  repo: MolADT-Bayes-Python" \
 	"  first benchmark run prerequisite: make python-cmdstan-install" \
-	"  command: scripts.run_all smoke-test" \
+	"  command: scripts.run_all freesolv" \
 	"  dataset: FreeSolv" \
 	"  results_dir: $(RESULTS_ROOT)" \
 	"  inference_preset: $(INFERENCE_PRESET)" \
@@ -400,7 +400,7 @@ python-benchmark-smoke:
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
 	"  toolchain_env: $(if $(DARWIN_SDKROOT),apple-xcrun,default)" \
 	"  expected outputs: $(RESULTS_ROOT)/results.csv and $(RESULTS_ROOT)/details/"
-	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all smoke-test $(VERBOSE_ARG) $(BENCHMARK_ARGS)
+	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all freesolv $(VERBOSE_ARG) $(BENCHMARK_ARGS)
 
 python-benchmark-qm9:
 	@printf "%s\n" \
@@ -445,7 +445,7 @@ freesolv:
 	"Running reviewer-facing FreeSolv comparison." \
 	"  repo: MolADT-Bayes-Python" \
 	"  first benchmark run prerequisite: make python-cmdstan-install" \
-	"  command: scripts.run_all smoke-test" \
+	"  command: scripts.run_all freesolv" \
 	"  dataset: FreeSolv" \
 	"  results_dir: results/$(FREESOLV_RESULTS_SUBDIR)" \
 	"  paper baseline: MoleculeNet MPNN RMSE 1.15" \
@@ -454,7 +454,7 @@ freesolv:
 	"  models: $(MODELS)" \
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
 	"  expected figure: results/$(FREESOLV_RESULTS_SUBDIR)/freesolv_rmse_vs_moleculenet.svg"
-	MOLADT_RESULTS_DIR=results/$(FREESOLV_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all smoke-test $(VERBOSE_ARG) $(BENCHMARK_ARGS)
+	MOLADT_RESULTS_DIR=results/$(FREESOLV_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all freesolv $(VERBOSE_ARG) $(BENCHMARK_ARGS)
 
 qm9:
 	@printf "%s\n" \

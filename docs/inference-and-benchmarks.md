@@ -10,12 +10,12 @@ make freesolv
 make qm9
 make benchmark-small
 make timing
-./.venv/bin/python -m scripts.run_all smoke-test --verbose
+./.venv/bin/python -m scripts.run_all freesolv --verbose
 ./.venv/bin/python -m scripts.run_all qm9 --paper-mode --verbose
 ./.venv/bin/python -m scripts.run_all benchmark --paper-mode --verbose
 ```
 
-- `make freesolv` runs the long FreeSolv MolADT sweep and compares the validation-selected local Stan run against MoleculeNet Table 3 on RMSE
+- `make freesolv` runs the long FreeSolv MolADT sweep, imports all `642` vendored SDF structures as the molecule source, and compares the validation-selected local Stan run against MoleculeNet Table 3 on RMSE
 - `make qm9` runs the long QM9 `mu` MolADT sweep on the full local download with the paper-sized split and compares the validation-selected local Stan run against MoleculeNet Table 3 on MAE
 - `make benchmark-small` keeps the older lighter `QM9_LIMIT=2000` subset path available for a faster local check
 - `make timing` runs the separate ZINC timing/interoperability pass
