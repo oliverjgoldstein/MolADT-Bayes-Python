@@ -38,30 +38,6 @@ make python-cmdstan-install
 
 For probabilistic proposals or local graph surgery, use `MutableMolecule` as a writable scratch state and call `freeze()` to return to canonical `Molecule`.
 
-## Benchmark Outputs
-
-The repo does not ship precomputed benchmark results. `results/` is meant to stay empty in git and only be populated by real non-dry benchmark runs on your machine.
-
-Run:
-
-```bash
-make python-cmdstan-install
-make freesolv
-make qm9
-```
-
-That writes:
-
-- `results/freesolv/run_.../freesolv_rmse_vs_moleculenet.svg`
-- `results/qm9/run_.../qm9_mae_vs_moleculenet.svg`
-
-The comparison is deliberately narrow:
-
-- FreeSolv compares the local MolADT RMSE to the MoleculeNet MPNN RMSE row `1.15`
-- QM9 `mu` compares the local MolADT MAE to the MoleculeNet DTNN MAE row `2.35`
-
-Those outputs are local benchmark artifacts, not committed front-page snapshots. The metric matches the MoleculeNet row; the local split and Stan model family still differ from the paper.
-
 ## What This Repo Contains
 
 - the Python MolADT types, parser, renderer, and pretty-printer
@@ -69,6 +45,8 @@ Those outputs are local benchmark artifacts, not committed front-page snapshots.
 - Stan-oriented feature generation and local benchmark tooling
 
 ## Benchmarking
+
+The repo does not ship precomputed benchmark results. `results/` is meant to stay empty in git and only be populated by real non-dry benchmark runs on your machine.
 
 ```bash
 make python-cmdstan-install
@@ -81,7 +59,19 @@ make timing
 - `make qm9` writes the QM9 MoleculeNet comparison figure
 - `make timing` runs the separate ingest/interoperability timing pass, including raw source reads, manifest CSV field materialization, local SMILES parsing, and MolADT file parsing
 
-Outputs are written under `results/`. If a required raw file is too large for GitHub, the repo downloads it on demand and shows live progress for large transfers and archive extraction.
+Main outputs:
+
+- `results/freesolv/run_.../freesolv_rmse_vs_moleculenet.svg`
+- `results/qm9/run_.../qm9_mae_vs_moleculenet.svg`
+
+The predictive comparison is deliberately narrow:
+
+- FreeSolv compares the local MolADT RMSE to the MoleculeNet MPNN RMSE row `1.15`
+- QM9 `mu` compares the local MolADT MAE to the MoleculeNet DTNN MAE row `2.35`
+
+These are local benchmark artifacts, not committed front-page snapshots. The metric matches the MoleculeNet row, but the local split and Stan model family still differ from the paper.
+
+If a required raw file is too large for GitHub, the repo downloads it on demand and shows live progress for large transfers and archive extraction.
 
 ## Read More
 

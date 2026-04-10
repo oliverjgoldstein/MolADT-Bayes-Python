@@ -73,6 +73,8 @@ That is useful as a boundary string, but it breaks the sandwich into disconnecte
 
 The built-in ferrocene object is intentionally almost identical in Python and Haskell. Same atom ids, same sigma framework, same three Dietz systems.
 
+The compact snippets below use `mk_edge` or `mkEdge` for canonical undirected edges. The long-form versions underneath spell the same object out without that helper. In both styles, the important structural point is the same: the Cp `C-C` edges and Fe-Cp edges are reused across multiple Dietz systems, but they are not duplicated into a fake parallel-edge multigraph.
+
 Python:
 
 ```python
@@ -95,6 +97,102 @@ ferrocene_pretty = Molecule(
         (SystemId(1), mk_bonding_system(NonNegative(6), frozenset(mk_edge(a, b) for a, b in fe_to_ring1 + ring1_cc), "cp1_pi")),
         (SystemId(2), mk_bonding_system(NonNegative(6), frozenset(mk_edge(a, b) for a, b in fe_to_ring2 + ring2_cc), "cp2_pi")),
         (SystemId(3), mk_bonding_system(NonNegative(6), frozenset(mk_edge(a, b) for a, b in fe_to_ring1 + fe_to_ring2), "fe_backdonation")),
+    ),
+)
+```
+
+Long-form Python without `mk_edge`:
+
+```python
+ferrocene_pretty = Molecule(
+    local_bonds=frozenset(
+        {
+            Edge(AtomId(2), AtomId(3)),
+            Edge(AtomId(3), AtomId(4)),
+            Edge(AtomId(4), AtomId(5)),
+            Edge(AtomId(5), AtomId(6)),
+            Edge(AtomId(2), AtomId(6)),
+            Edge(AtomId(7), AtomId(8)),
+            Edge(AtomId(8), AtomId(9)),
+            Edge(AtomId(9), AtomId(10)),
+            Edge(AtomId(10), AtomId(11)),
+            Edge(AtomId(7), AtomId(11)),
+            Edge(AtomId(2), AtomId(12)),
+            Edge(AtomId(3), AtomId(13)),
+            Edge(AtomId(4), AtomId(14)),
+            Edge(AtomId(5), AtomId(15)),
+            Edge(AtomId(6), AtomId(16)),
+            Edge(AtomId(7), AtomId(17)),
+            Edge(AtomId(8), AtomId(18)),
+            Edge(AtomId(9), AtomId(19)),
+            Edge(AtomId(10), AtomId(20)),
+            Edge(AtomId(11), AtomId(21)),
+        }
+    ),
+    systems=(
+        (
+            SystemId(1),
+            mk_bonding_system(
+                NonNegative(6),
+                frozenset(
+                    {
+                        Edge(AtomId(1), AtomId(2)),
+                        Edge(AtomId(1), AtomId(3)),
+                        Edge(AtomId(1), AtomId(4)),
+                        Edge(AtomId(1), AtomId(5)),
+                        Edge(AtomId(1), AtomId(6)),
+                        Edge(AtomId(2), AtomId(3)),
+                        Edge(AtomId(3), AtomId(4)),
+                        Edge(AtomId(4), AtomId(5)),
+                        Edge(AtomId(5), AtomId(6)),
+                        Edge(AtomId(2), AtomId(6)),
+                    }
+                ),
+                "cp1_pi",
+            ),
+        ),
+        (
+            SystemId(2),
+            mk_bonding_system(
+                NonNegative(6),
+                frozenset(
+                    {
+                        Edge(AtomId(1), AtomId(7)),
+                        Edge(AtomId(1), AtomId(8)),
+                        Edge(AtomId(1), AtomId(9)),
+                        Edge(AtomId(1), AtomId(10)),
+                        Edge(AtomId(1), AtomId(11)),
+                        Edge(AtomId(7), AtomId(8)),
+                        Edge(AtomId(8), AtomId(9)),
+                        Edge(AtomId(9), AtomId(10)),
+                        Edge(AtomId(10), AtomId(11)),
+                        Edge(AtomId(7), AtomId(11)),
+                    }
+                ),
+                "cp2_pi",
+            ),
+        ),
+        (
+            SystemId(3),
+            mk_bonding_system(
+                NonNegative(6),
+                frozenset(
+                    {
+                        Edge(AtomId(1), AtomId(2)),
+                        Edge(AtomId(1), AtomId(3)),
+                        Edge(AtomId(1), AtomId(4)),
+                        Edge(AtomId(1), AtomId(5)),
+                        Edge(AtomId(1), AtomId(6)),
+                        Edge(AtomId(1), AtomId(7)),
+                        Edge(AtomId(1), AtomId(8)),
+                        Edge(AtomId(1), AtomId(9)),
+                        Edge(AtomId(1), AtomId(10)),
+                        Edge(AtomId(1), AtomId(11)),
+                    }
+                ),
+                "fe_backdonation",
+            ),
+        ),
     ),
 )
 ```
@@ -125,13 +223,97 @@ ferrocenePretty = Molecule
   }
 ```
 
+Long-form Haskell without `mkEdge`:
+
+```haskell
+ferrocenePretty = Molecule
+  { localBonds =
+      S.fromList
+        [ Edge (AtomId 2) (AtomId 3)
+        , Edge (AtomId 3) (AtomId 4)
+        , Edge (AtomId 4) (AtomId 5)
+        , Edge (AtomId 5) (AtomId 6)
+        , Edge (AtomId 2) (AtomId 6)
+        , Edge (AtomId 7) (AtomId 8)
+        , Edge (AtomId 8) (AtomId 9)
+        , Edge (AtomId 9) (AtomId 10)
+        , Edge (AtomId 10) (AtomId 11)
+        , Edge (AtomId 7) (AtomId 11)
+        , Edge (AtomId 2) (AtomId 12)
+        , Edge (AtomId 3) (AtomId 13)
+        , Edge (AtomId 4) (AtomId 14)
+        , Edge (AtomId 5) (AtomId 15)
+        , Edge (AtomId 6) (AtomId 16)
+        , Edge (AtomId 7) (AtomId 17)
+        , Edge (AtomId 8) (AtomId 18)
+        , Edge (AtomId 9) (AtomId 19)
+        , Edge (AtomId 10) (AtomId 20)
+        , Edge (AtomId 11) (AtomId 21)
+        ]
+  , systems =
+      [ ( SystemId 1
+        , mkBondingSystem
+            (NonNegative 6)
+            (S.fromList
+              [ Edge (AtomId 1) (AtomId 2)
+              , Edge (AtomId 1) (AtomId 3)
+              , Edge (AtomId 1) (AtomId 4)
+              , Edge (AtomId 1) (AtomId 5)
+              , Edge (AtomId 1) (AtomId 6)
+              , Edge (AtomId 2) (AtomId 3)
+              , Edge (AtomId 3) (AtomId 4)
+              , Edge (AtomId 4) (AtomId 5)
+              , Edge (AtomId 5) (AtomId 6)
+              , Edge (AtomId 2) (AtomId 6)
+              ])
+            (Just "cp1_pi")
+        )
+      , ( SystemId 2
+        , mkBondingSystem
+            (NonNegative 6)
+            (S.fromList
+              [ Edge (AtomId 1) (AtomId 7)
+              , Edge (AtomId 1) (AtomId 8)
+              , Edge (AtomId 1) (AtomId 9)
+              , Edge (AtomId 1) (AtomId 10)
+              , Edge (AtomId 1) (AtomId 11)
+              , Edge (AtomId 7) (AtomId 8)
+              , Edge (AtomId 8) (AtomId 9)
+              , Edge (AtomId 9) (AtomId 10)
+              , Edge (AtomId 10) (AtomId 11)
+              , Edge (AtomId 7) (AtomId 11)
+              ])
+            (Just "cp2_pi")
+        )
+      , ( SystemId 3
+        , mkBondingSystem
+            (NonNegative 6)
+            (S.fromList
+              [ Edge (AtomId 1) (AtomId 2)
+              , Edge (AtomId 1) (AtomId 3)
+              , Edge (AtomId 1) (AtomId 4)
+              , Edge (AtomId 1) (AtomId 5)
+              , Edge (AtomId 1) (AtomId 6)
+              , Edge (AtomId 1) (AtomId 7)
+              , Edge (AtomId 1) (AtomId 8)
+              , Edge (AtomId 1) (AtomId 9)
+              , Edge (AtomId 1) (AtomId 10)
+              , Edge (AtomId 1) (AtomId 11)
+              ])
+            (Just "fe_backdonation")
+        )
+      ]
+  }
+```
+
 The close alignment is deliberate:
 
 - atom `#1` is `Fe` in both repos
 - atoms `#2..#6` and `#7..#11` are the two Cp rings in both repos
 - `local_bonds` or `localBonds` contains only the localized `C-C` and `C-H` sigma framework
 - the same three six-electron Dietz systems appear in both repos: `cp1_pi`, `cp2_pi`, and `fe_backdonation`
-- both repos use canonical undirected Dietz edges via `mk_edge` or `mkEdge`; the representation is not turned into a duplicated multigraph just to make downstream helpers easier
+- the long-form versions above keep canonical undirected edges explicitly, with the smaller atom id written first in the Haskell `Edge` constructor because `mkEdge` is not doing that normalization for us there
+- the same undirected edge can appear in `local_bonds` and again inside one or more bonding systems; that edge reuse is the intended Dietz structure, and it is not the same thing as duplicating edges into a fake multigraph
 
 ## Morphine and Ring Closures
 
