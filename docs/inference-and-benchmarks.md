@@ -50,7 +50,7 @@ The benchmark graph keeps only the best local MolADT row from that Stan sweep.
 
 `make timing` is not the same question as the predictive benchmark.
 
-It writes a ZINC timing bundle under `results/timing/run_<timestamp>/` and reports ingest/runtime stages, including the optional local MolADT-library path. Treat it as an interoperability/runtime benchmark, not as the central representation-quality comparison.
+It writes a ZINC timing bundle under `results/timing/run_<timestamp>/` and reports ingest/runtime stages, including raw file IO, manifest CSV field materialization as plain strings, the local SMILES parser path, and the optional local MolADT-library path. Treat it as an interoperability/runtime benchmark, not as the central representation-quality comparison.
 
 ## Outputs
 

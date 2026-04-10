@@ -75,7 +75,7 @@ def run_zinc_benchmark(
     force: bool = False,
     verbose: bool = False,
 ) -> list[TimingStageResult]:
-    total_stages = 6 if include_moladt else 3
+    total_stages = 7 if include_moladt else 3
     if verbose:
         log(
             "Starting ZINC timing benchmark "
@@ -135,6 +135,7 @@ def run_zinc_benchmark(
             source_path=downloads.source_path,
             force=force,
             verbose=verbose,
+            log_label=f"4/{total_stages}",
         )
         stages.append(library_stage)
         if verbose:
@@ -142,30 +143,45 @@ def run_zinc_benchmark(
             log(f"[zinc] timing library root: {display_path(library.library_root)}")
         library_manifest = _read_timing_library_manifest(library)
         if verbose:
-            log_stage("zinc", 5, total_stages, f"Parsing local SMILES timing library (molecules={len(library_manifest)})")
+            log_stage("zinc", 5, total_stages, f"Materializing manifest CSV SMILES strings (molecules={len(library_manifest)})")
+        csv_string_item_rows, csv_string_stage = _measure_smiles_csv_string_parse(
+            library,
+            manifest=library_manifest,
+            dataset_size=dataset_size,
+            dataset_dimension=dataset_dimension,
+            verbose=verbose,
+            log_label=f"5/{total_stages}",
+        )
+        item_rows.extend(csv_string_item_rows)
+        stages.append(csv_string_stage)
+        if verbose:
+            _log_stage_result(csv_string_stage, stage_index=5, total_stages=total_stages)
+            log_stage("zinc", 6, total_stages, f"Parsing local SMILES timing library (molecules={len(library_manifest)})")
         smiles_item_rows, smiles_stage = _measure_smiles_library_parse(
             library,
             manifest=library_manifest,
             dataset_size=dataset_size,
             dataset_dimension=dataset_dimension,
             verbose=verbose,
+            log_label=f"6/{total_stages}",
         )
         item_rows.extend(smiles_item_rows)
         stages.append(smiles_stage)
         if verbose:
-            _log_stage_result(smiles_stage, stage_index=5, total_stages=total_stages)
-            log_stage("zinc", 6, total_stages, f"Parsing local MolADT timing library (molecules={len(library_manifest)})")
+            _log_stage_result(smiles_stage, stage_index=6, total_stages=total_stages)
+            log_stage("zinc", 7, total_stages, f"Parsing local MolADT timing library (molecules={len(library_manifest)})")
         moladt_item_rows, moladt_stage = _measure_moladt_library_parse(
             library,
             manifest=library_manifest,
             dataset_size=dataset_size,
             dataset_dimension=dataset_dimension,
             verbose=verbose,
+            log_label=f"7/{total_stages}",
         )
         item_rows.extend(moladt_item_rows)
         stages.append(moladt_stage)
         if verbose:
-            _log_stage_result(moladt_stage, stage_index=6, total_stages=total_stages)
+            _log_stage_result(moladt_stage, stage_index=7, total_stages=total_stages)
     details_dir = ensure_directory(RESULTS_DIR / "details")
     results_frame = pd.DataFrame([stage.to_dict() for stage in stages])
     results_csv = details_dir / "zinc_timing.csv"
@@ -194,6 +210,7 @@ def _prepare_timing_library(
     source_path: Path,
     force: bool,
     verbose: bool = False,
+    log_label: str = "4/6",
 ) -> tuple[TimingLibraryPaths, TimingStageResult]:
     library_root = _timing_library_root(dataset_size, dataset_dimension, limit)
     smiles_path = library_root / "smiles_library.smi"
@@ -256,7 +273,7 @@ def _prepare_timing_library(
             if verbose and source_index % 500 == 0:
                 peak_rss = max(peak_rss, process.memory_info().rss)
                 log(
-                    f"[zinc 4/6] built timing library molecules={format_progress(source_index, len(molecules))} "
+                    f"[zinc {log_label}] built timing library molecules={format_progress(source_index, len(molecules))} "
                     f"success={success_count} failure={failure_count}"
                 )
     manifest = pd.DataFrame(records)
@@ -291,6 +308,7 @@ def _measure_smiles_library_parse(
     dataset_size: str,
     dataset_dimension: str,
     verbose: bool = False,
+    log_label: str = "5/6",
 ) -> tuple[list[TimingItemResult], TimingStageResult]:
     latencies: list[float] = []
     item_rows: list[TimingItemResult] = []
@@ -332,7 +350,7 @@ def _measure_smiles_library_parse(
         if verbose and row_index % 500 == 0:
             peak_rss = max(peak_rss, process.memory_info().rss)
             log(
-                f"[zinc 5/6] parsed SMILES library molecules={format_progress(row_index, len(manifest))} "
+                f"[zinc {log_label}] parsed SMILES library molecules={format_progress(row_index, len(manifest))} "
                 f"success={success_count} failure={failure_count}"
             )
     elapsed = time.perf_counter() - start_total
@@ -361,6 +379,7 @@ def _measure_moladt_library_parse(
     dataset_size: str,
     dataset_dimension: str,
     verbose: bool = False,
+    log_label: str = "6/6",
 ) -> tuple[list[TimingItemResult], TimingStageResult]:
     latencies: list[float] = []
     item_rows: list[TimingItemResult] = []
@@ -404,7 +423,7 @@ def _measure_moladt_library_parse(
         if verbose and row_index % 500 == 0:
             peak_rss = max(peak_rss, process.memory_info().rss)
             log(
-                f"[zinc 6/6] parsed MolADT library molecules={format_progress(row_index, len(manifest))} "
+                f"[zinc {log_label}] parsed MolADT library molecules={format_progress(row_index, len(manifest))} "
                 f"success={success_count} failure={failure_count}"
             )
     elapsed = time.perf_counter() - start_total
@@ -492,6 +511,85 @@ def _load_smiles_with_timing(
         peak_rss_mb=peak_rss / (1024.0 * 1024.0),
     )
     return smiles_strings, stage
+
+
+def _csv_smiles_text_to_string(smiles_text: Any) -> str:
+    if pd.isna(smiles_text):
+        raise ValueError("Missing SMILES text")
+    smiles = str(smiles_text).strip()
+    if not smiles:
+        raise ValueError("Empty SMILES text")
+    return smiles
+
+
+def _measure_smiles_csv_string_parse(
+    library: TimingLibraryPaths,
+    *,
+    manifest: pd.DataFrame,
+    dataset_size: str,
+    dataset_dimension: str,
+    verbose: bool = False,
+    log_label: str = "5/7",
+) -> tuple[list[TimingItemResult], TimingStageResult]:
+    latencies: list[float] = []
+    item_rows: list[TimingItemResult] = []
+    success_count = 0
+    failure_count = 0
+    process = psutil.Process()
+    peak_rss = process.memory_info().rss
+    start_total = time.perf_counter()
+    for row_index, row in enumerate(manifest.itertuples(index=False), start=1):
+        start_item = time.perf_counter_ns()
+        error = ""
+        success = True
+        try:
+            _csv_smiles_text_to_string(row.canonical_smiles)
+        except Exception as exc:
+            success = False
+            error = str(exc)
+        latency_us = (time.perf_counter_ns() - start_item) / 1_000.0
+        latencies.append(latency_us)
+        if success:
+            success_count += 1
+        else:
+            failure_count += 1
+        item_rows.append(
+            TimingItemResult(
+                dataset_size=dataset_size,
+                dataset_dimension=dataset_dimension,
+                stage="smiles_csv_string_parse",
+                mol_id=str(row.mol_id),
+                item_kind="smiles_csv_field",
+                item_path=f"{library.manifest_path}#{row_index}",
+                item_size_bytes=int(row.smiles_size_bytes),
+                success=success,
+                latency_us=latency_us,
+                error=error,
+            )
+        )
+        if verbose and row_index % 500 == 0:
+            peak_rss = max(peak_rss, process.memory_info().rss)
+            log(
+                f"[zinc {log_label}] materialized manifest CSV SMILES={format_progress(row_index, len(manifest))} "
+                f"success={success_count} failure={failure_count}"
+            )
+    elapsed = time.perf_counter() - start_total
+    stage = TimingStageResult(
+        dataset_size=dataset_size,
+        dataset_dimension=dataset_dimension,
+        stage="smiles_csv_string_parse",
+        description="Materialized each canonical SMILES field from the matched manifest CSV as a plain Python string without chemistry parsing.",
+        source_path=str(library.manifest_path),
+        molecule_count=len(item_rows),
+        success_count=success_count,
+        failure_count=failure_count,
+        total_runtime_seconds=elapsed,
+        molecules_per_second=(len(item_rows) / elapsed) if elapsed > 0 else 0.0,
+        median_latency_us=_median(latencies),
+        p95_latency_us=_percentile(latencies, 95.0),
+        peak_rss_mb=peak_rss / (1024.0 * 1024.0),
+    )
+    return item_rows, stage
 
 
 def _measure_stage(

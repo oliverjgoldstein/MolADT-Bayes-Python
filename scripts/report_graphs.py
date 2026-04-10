@@ -208,6 +208,7 @@ def write_timing_stage_overview(timing: pd.DataFrame, destination: Path) -> None
         "smiles_parse_sanitize",
         "smiles_canonicalization",
         "timing_library_prepare",
+        "smiles_csv_string_parse",
         "smiles_library_parse",
         "moladt_file_parse",
         "moladt_parse_render",

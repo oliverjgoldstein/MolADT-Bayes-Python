@@ -54,7 +54,7 @@ make timing
 
 - `make freesolv` is the best first end-to-end check and writes `freesolv_rmse_vs_moleculenet.svg`.
 - `make qm9` runs the focused dipole benchmark and writes `qm9_mae_vs_moleculenet.svg`.
-- `make timing` builds the matched ADT/SMILES timing corpus.
+- `make timing` builds the matched ADT/SMILES timing corpus and reports the CSV-string baseline alongside SMILES and MolADT parse stages.
 
 If a required raw dataset file is too large for GitHub, the repo fetches it on demand. Large downloads and archive extractions show live byte counts, entry counts, throughput, and elapsed time.
 

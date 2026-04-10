@@ -184,6 +184,18 @@ def test_timing_stage_overview_writes_svg(tmp_path) -> None:
                 "peak_rss_mb": 12.0,
             },
             {
+                "stage": "smiles_csv_string_parse",
+                "description": "Read manifest CSV SMILES as strings.",
+                "molecule_count": 100,
+                "success_count": 100,
+                "failure_count": 0,
+                "total_runtime_seconds": 0.25,
+                "molecules_per_second": 400.0,
+                "median_latency_us": 5.0,
+                "p95_latency_us": 9.0,
+                "peak_rss_mb": 10.0,
+            },
+            {
                 "stage": "moladt_file_parse",
                 "description": "Parse MolADT files.",
                 "molecule_count": 100,
@@ -203,6 +215,7 @@ def test_timing_stage_overview_writes_svg(tmp_path) -> None:
     svg = output.read_text(encoding="utf-8")
     assert "Local timing overview" in svg
     assert "raw_file_read" in svg
+    assert "smiles_csv_string_parse" in svg
     assert "moladt_file_parse" in svg
 
 

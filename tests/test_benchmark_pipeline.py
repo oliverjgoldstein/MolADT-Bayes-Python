@@ -8,6 +8,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from scripts.benchmark_zinc import (
+    _measure_smiles_csv_string_parse,
     _measure_moladt_library_parse,
     _measure_smiles_library_parse,
     _moladt_parse_render_from_rdkit_mol,
@@ -282,6 +283,12 @@ def test_timing_library_parse_stages_succeed_on_matched_entries(tmp_path, monkey
     )
     manifest = _read_timing_library_manifest(library)
 
+    csv_string_items, csv_string_stage = _measure_smiles_csv_string_parse(
+        library,
+        manifest=manifest,
+        dataset_size="demo",
+        dataset_dimension="2D",
+    )
     smiles_items, smiles_stage = _measure_smiles_library_parse(
         library,
         manifest=manifest,
@@ -295,10 +302,13 @@ def test_timing_library_parse_stages_succeed_on_matched_entries(tmp_path, monkey
         dataset_dimension="2D",
     )
 
+    assert csv_string_stage.failure_count == 0
     assert smiles_stage.failure_count == 0
     assert moladt_stage.failure_count == 0
+    assert len(csv_string_items) == len(manifest)
     assert len(smiles_items) == len(manifest)
     assert len(moladt_items) == len(manifest)
+    assert all(item.success for item in csv_string_items)
     assert all(item.success for item in smiles_items)
     assert all(item.success for item in moladt_items)
 

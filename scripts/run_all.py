@@ -908,7 +908,7 @@ def _write_timing_report(timing: pd.DataFrame) -> None:
             lines.append("")
             lines.append("## Slowest Parse Items")
             lines.append("")
-            for stage_name in ("smiles_library_parse", "moladt_file_parse"):
+            for stage_name in ("smiles_csv_string_parse", "smiles_library_parse", "moladt_file_parse"):
                 stage_items = items.loc[items["stage"] == stage_name].sort_values("latency_us", ascending=False).head(5)
                 if stage_items.empty:
                     continue

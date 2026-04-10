@@ -22,6 +22,8 @@ Timing runs also write:
 
 - `timing_overview.svg`
 - `details/zinc_timing.csv`
+- `details/zinc_timing_items.csv`
+- `details/zinc_timing_library_manifest.csv`
 
 ## The Two Comparison Figures
 
@@ -44,3 +46,5 @@ Use the files in this order:
 1. `results.csv` for the summary row view
 2. `freesolv_rmse_vs_moleculenet.svg` and `qm9_mae_vs_moleculenet.svg` for the paper comparison
 3. `details/` when you need raw rows for analysis or plotting
+
+For timing runs specifically, `details/zinc_timing.csv` now separates the manifest CSV field-to-string baseline (`smiles_csv_string_parse`) from the local SMILES parser and MolADT file parser.

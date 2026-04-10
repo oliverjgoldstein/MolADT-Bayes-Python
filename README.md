@@ -79,7 +79,7 @@ make timing
 
 - `make freesolv` writes the FreeSolv MoleculeNet comparison figure
 - `make qm9` writes the QM9 MoleculeNet comparison figure
-- `make timing` runs the separate ingest/interoperability timing pass
+- `make timing` runs the separate ingest/interoperability timing pass, including raw source reads, manifest CSV field materialization, local SMILES parsing, and MolADT file parsing
 
 Outputs are written under `results/`. If a required raw file is too large for GitHub, the repo downloads it on demand and shows live progress for large transfers and archive extraction.
 
