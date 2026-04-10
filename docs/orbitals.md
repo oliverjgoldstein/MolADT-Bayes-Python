@@ -21,6 +21,39 @@ The core types live in [`moladt/chem/orbital.py`](../moladt/chem/orbital.py):
 
 Atoms then carry `shells`, so the orbital layer is attached directly to the chemistry object rather than being hidden in a side table.
 
+## Worked Example
+
+There are two useful ways to read the orbital layer: inspect a real atom definition already shipped in the library, or build one orbital value directly.
+
+The built-in `CARBON` value already includes a typed valence-shell picture:
+
+```python
+from moladt.chem.orbital import CARBON
+
+core_shell = CARBON[0]     # 1s^2
+valence_shell = CARBON[1]  # 2s^2, 2p^2
+```
+
+That second shell contains one filled `2s` orbital plus two singly occupied directional `p` orbitals, so the ADT is storing local electronic structure explicitly rather than deriving it later from the element symbol.
+
+If you want to state one orbital directly, the shape is just as explicit:
+
+```python
+from moladt.chem.orbital import Orbital, P, PurePOrbital, PureSOrbital, So, ang_coord
+
+sp2_like_px = Orbital(
+    orbital_type=P.PX,
+    electron_count=1,
+    orientation=ang_coord(1.0, 0.0, 0.0),
+    hybrid_components=(
+        (1.0 / (3.0**0.5), PureSOrbital(So.S)),
+        ((2.0 / 3.0) ** 0.5, PurePOrbital(P.PX)),
+    ),
+)
+```
+
+This is still one orbital value. `orientation` says where the directional character points, and `hybrid_components` records that the orbital is being described as a local `s`/`p` mixture instead of as a purely atomic `px`.
+
 ## Why The Types Fit Theoretical Chemistry
 
 The important point is that the typing follows the chemistry.

@@ -64,6 +64,8 @@ class Orbital(Generic[SubshellType]):
     orbital_type: SubshellType
     electron_count: int
     orientation: Coordinate | None = None
+    # Example: an sp2-like local orbital can mix PureSOrbital(So.S)
+    # with PurePOrbital(P.PX) while still remaining one orbital value.
     hybrid_components: tuple[tuple[float, PureOrbital], ...] | None = None
 
     def __post_init__(self) -> None:
