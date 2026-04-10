@@ -38,20 +38,26 @@ def write_moleculenet_comparison_overviews(comparison_frame: pd.DataFrame, desti
         dataset = str(row["dataset"])
         metric_name = str(row["metric_name"])
         destination = destination_dir / f"{dataset}_{metric_name.lower()}_vs_moleculenet.svg"
-        value_max = max(float(row["local_value"]), float(row["paper_value"]), 1e-6) * 1.2
-        width = 520
-        height = 320
+        train_value = float(row.get("train_value", row["local_value"]))
+        test_value = float(row.get("test_value", row["local_value"]))
+        paper_value = float(row["paper_value"])
+        selection_split = str(row.get("selection_split", "valid"))
+        selection_label = "Validation" if selection_split == "valid" else selection_split.title()
+        value_max = max(train_value, test_value, paper_value, 1e-6) * 1.2
+        width = 640
+        height = 332
         x0 = 24
         y0 = 24
         plot_x = x0 + 56
         plot_y = y0 + 104
         plot_width = width - 112
         plot_height = 124
-        bar_width = 86
-        bar_gap = 94
+        bar_width = 92
+        bar_gap = 48
         bars = [
-            ("MolADT", float(row["local_value"]), SERIES_COLORS["moladt"]),
-            (str(row["paper_model_name"]), float(row["paper_value"]), SERIES_COLORS["paper"]),
+            ("Training", train_value, SPLIT_COLORS["train"]),
+            ("Test", test_value, SPLIT_COLORS["test"]),
+            ("Paper", paper_value, SERIES_COLORS["paper"]),
         ]
         parts = [_svg_header(width, height)]
         parts.append(f'<rect width="{width}" height="{height}" fill="{BACKGROUND}" />')
@@ -63,7 +69,7 @@ def write_moleculenet_comparison_overviews(comparison_frame: pd.DataFrame, desti
         )
         parts.append(
             f'<text x="{x0 + 20}" y="{y0 + 50}" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">'
-            "Best local Stan MolADT run against the MoleculeNet Table 3 graph-based baseline."
+            "Training and held-out test scores from the validation-selected local Stan MolADT run, plus the cited MoleculeNet Table 3 baseline."
             "</text>"
         )
         parts.append(
@@ -73,7 +79,7 @@ def write_moleculenet_comparison_overviews(comparison_frame: pd.DataFrame, desti
         )
         parts.append(
             f'<text x="{x0 + 20}" y="{y0 + 84}" font-size="11" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">'
-            f"Paper: {escape(str(row['paper_model_name']))} from MoleculeNet"
+            f"Selection: {escape(selection_label)} {escape(metric_name)}; Paper: {escape(str(row['paper_model_name']))} from MoleculeNet"
             "</text>"
         )
         for step in range(5):

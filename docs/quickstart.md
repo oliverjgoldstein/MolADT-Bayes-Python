@@ -42,18 +42,20 @@ make python-cmdstan-install
 Then start with the lightest path:
 
 ```bash
-make freesolv
+make benchmark-small
 ```
 
 Then, when that works:
 
 ```bash
 make qm9
+make freesolv
 make timing
 ```
 
-- `make freesolv` is the best first end-to-end check and writes `freesolv_rmse_vs_moleculenet.svg`.
-- `make qm9` runs the focused dipole benchmark and writes `qm9_mae_vs_moleculenet.svg`.
+- `make benchmark-small` is the quickest end-to-end benchmark check and keeps the older 2,000-row QM9 subset path.
+- `make qm9` now runs the long full-data QM9 benchmark and writes `qm9_mae_vs_moleculenet.svg`.
+- `make freesolv` runs the long FreeSolv comparison and writes `freesolv_rmse_vs_moleculenet.svg`.
 - `make timing` builds the matched ADT/SMILES timing corpus and reports the CSV-string baseline alongside SMILES and MolADT parse stages.
 
 If a required raw dataset file is too large for GitHub, the repo fetches it on demand. Large downloads and archive extractions show live byte counts, entry counts, throughput, and elapsed time.

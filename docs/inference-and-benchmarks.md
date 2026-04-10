@@ -8,14 +8,16 @@ This repo owns the main benchmark run. It prepares datasets, exports aligned Mol
 make python-cmdstan-install
 make freesolv
 make qm9
+make benchmark-small
 make timing
 ./.venv/bin/python -m scripts.run_all smoke-test --verbose
-./.venv/bin/python -m scripts.run_all qm9 --limit 2000 --split-mode subset --verbose
-./.venv/bin/python -m scripts.run_all benchmark --qm9-limit 2000 --qm9-split-mode subset --verbose
+./.venv/bin/python -m scripts.run_all qm9 --paper-mode --verbose
+./.venv/bin/python -m scripts.run_all benchmark --paper-mode --verbose
 ```
 
-- `make freesolv` runs the FreeSolv MolADT sweep and compares the best local Stan run against MoleculeNet Table 3 on RMSE
-- `make qm9` runs the QM9 `mu` MolADT sweep and compares the best local Stan run against MoleculeNet Table 3 on MAE
+- `make freesolv` runs the long FreeSolv MolADT sweep and compares the validation-selected local Stan run against MoleculeNet Table 3 on RMSE
+- `make qm9` runs the long QM9 `mu` MolADT sweep on the full local download with the paper-sized split and compares the validation-selected local Stan run against MoleculeNet Table 3 on MAE
+- `make benchmark-small` keeps the older lighter `QM9_LIMIT=2000` subset path available for a faster local check
 - `make timing` runs the separate ZINC timing/interoperability pass
 - `make python-cmdstan-install` is the one-time local CmdStan install step required before the Stan benchmark targets
 
@@ -25,7 +27,8 @@ The benchmark contract is deliberately narrow:
 
 - `moladt`
   The same boundary SMILES is parsed into the typed MolADT object and featurized from that object.
-- the local bar is the single best Stan model/inference-method pair found on the MolADT export for that dataset
+- the local run is selected by validation RMSE or MAE, not by test-set peeking
+- each reviewer figure shows `Training`, `Test`, then `Paper`
 - the paper bar is the matching MoleculeNet row only
 - FreeSolv uses RMSE
 - QM9 `mu` uses MAE
@@ -39,12 +42,14 @@ The aligned Stan models are:
 - [`bayes_linear_student_t`](../stan/bayes_linear_student_t.stan)
 - [`bayes_hierarchical_shrinkage`](../stan/bayes_hierarchical_shrinkage.stan)
 
-The benchmark graph keeps only the best local MolADT row from that Stan sweep.
+The benchmark graph keeps the training and held-out test metrics from the validation-selected local MolADT row from that Stan sweep.
 
 ## Dataset Meaning
 
 - FreeSolv compares the best local MolADT RMSE against the MoleculeNet Table 3 MPNN RMSE row `1.15`.
 - QM9 `mu` compares the best local MolADT MAE against the MoleculeNet Table 3 DTNN MAE row `2.35`.
+
+By default the top-level `make freesolv`, `make qm9`, and `make benchmark` targets use the long `paper` inference preset. `make qm9` is therefore expected to take hours after CmdStan is already built.
 
 ## Timing
 

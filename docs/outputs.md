@@ -5,8 +5,8 @@ Each focused run writes a small timestamped bundle under `results/`.
 ## Main Locations
 
 - FreeSolv: `results/freesolv/run_<timestamp>/`
-- QM9: `results/qm9/run_<timestamp>/`
-- combined benchmark: `results/run_<timestamp>/` or `results/paper/run_<timestamp>/`
+- QM9: `results/qm9/paper/run_<timestamp>/` for the default long run, or `results/qm9/run_<timestamp>/` for explicit lighter overrides
+- combined benchmark: `results/paper/run_<timestamp>/` for the default long run, or `results/run_<timestamp>/` for explicit lighter overrides
 - ZINC timing: `results/timing/run_<timestamp>/`
 
 ## What You See First
@@ -31,6 +31,8 @@ Each predictive run writes only the two reviewer-facing MoleculeNet comparisons:
 
 - `freesolv_rmse_vs_moleculenet.svg`
 - `qm9_mae_vs_moleculenet.svg`
+
+Each figure now shows the validation-selected local `Training` and `Test` metrics first, followed by the cited `Paper` baseline.
 
 ## Other Useful Files
 

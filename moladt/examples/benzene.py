@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ..chem.constants import element_attributes, element_shells
 from ..chem.coordinate import Coordinate, mk_angstrom
-from ..chem.dietz import AtomId, NonNegative, SystemId, mk_bonding_system, mk_edge
+from ..chem.dietz import AtomId, Edge, NonNegative, SystemId, mk_bonding_system
 from ..chem.molecule import Atom, AtomicSymbol, Molecule
 
 
@@ -33,6 +33,10 @@ def _atom(atom_index: int, symbol: AtomicSymbol, x: float, y: float, z: float) -
     )
 
 
+def _edge_from_index_pair(atom_pair: tuple[int, int]) -> Edge:
+    return Edge(AtomId(atom_pair[0]), AtomId(atom_pair[1]))
+
+
 ring_carbon_ids = tuple(range(1, 7))
 hydrogen_ids = tuple(range(7, 13))
 ring_edges = tuple(zip(ring_carbon_ids, ring_carbon_ids[1:] + ring_carbon_ids[:1]))
@@ -43,13 +47,13 @@ benzene = Molecule(
         AtomId(atom_index): _atom(atom_index, symbol, x, y, z)
         for atom_index, symbol, x, y, z in _ATOMS_DATA
     },
-    local_bonds=frozenset(mk_edge(AtomId(a), AtomId(b)) for a, b in sigma_edges),
+    local_bonds=frozenset(_edge_from_index_pair(atom_pair) for atom_pair in sigma_edges),
     systems=(
         (
             SystemId(1),
             mk_bonding_system(
                 NonNegative(len(ring_carbon_ids)),
-                frozenset(mk_edge(AtomId(a), AtomId(b)) for a, b in ring_edges),
+                frozenset(_edge_from_index_pair(atom_pair) for atom_pair in ring_edges),
                 "pi_ring",
             ),
         ),
@@ -57,4 +61,3 @@ benzene = Molecule(
 )
 
 benzene_pretty = benzene
-

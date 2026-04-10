@@ -53,23 +53,28 @@ make python-cmdstan-install
 make freesolv
 make qm9
 make timing
+make benchmark-small
 ```
 
-- `make freesolv` writes the FreeSolv MoleculeNet comparison figure
-- `make qm9` writes the QM9 MoleculeNet comparison figure
+- `make freesolv` runs the long FreeSolv benchmark and writes a `Training` / `Test` / `Paper` comparison figure
+- `make qm9` runs the long QM9 benchmark on the full local download with the paper-sized split and writes the same `Training` / `Test` / `Paper` figure
 - `make timing` runs the separate ingest/interoperability timing pass, including raw source reads, manifest CSV field materialization, local SMILES parsing, and MolADT file parsing
+- `make benchmark-small` keeps the older lighter 2,000-row QM9 subset path around for a faster local sanity check
 
 Main outputs:
 
 - `results/freesolv/run_.../freesolv_rmse_vs_moleculenet.svg`
-- `results/qm9/run_.../qm9_mae_vs_moleculenet.svg`
+- `results/qm9/paper/run_.../qm9_mae_vs_moleculenet.svg`
 
 The predictive comparison is deliberately narrow:
 
-- FreeSolv compares the local MolADT RMSE to the MoleculeNet MPNN RMSE row `1.15`
-- QM9 `mu` compares the local MolADT MAE to the MoleculeNet DTNN MAE row `2.35`
+- each figure shows the training score and held-out test score from the validation-selected local Stan MolADT run, then the cited MoleculeNet paper baseline
+- FreeSolv compares local MolADT RMSE to the MoleculeNet MPNN RMSE row `1.15`
+- QM9 `mu` compares local MolADT MAE to the MoleculeNet DTNN MAE row `2.35`
 
-These are local benchmark artifacts, not committed front-page snapshots. The metric matches the MoleculeNet row, but the local split and Stan model family still differ from the paper.
+The default benchmark targets now use the long `paper` inference preset. After CmdStan is built, `make qm9` is expected to take hours, not minutes. Use `make benchmark-small` or override `INFERENCE_PRESET=default QM9_LIMIT=2000 QM9_SPLIT_MODE=subset` when you want the older lighter run.
+
+These are local benchmark artifacts, not committed front-page snapshots. The metric matches the MoleculeNet row, but the Stan model family still differs from the paper, and FreeSolv still uses the repo's own split.
 
 If a required raw file is too large for GitHub, the repo downloads it on demand and shows live progress for large transfers and archive extraction.
 

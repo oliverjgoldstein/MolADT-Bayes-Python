@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ..chem.constants import element_attributes, element_shells
 from ..chem.coordinate import Coordinate, mk_angstrom
-from ..chem.dietz import AtomId, NonNegative, SystemId, mk_bonding_system, mk_edge
+from ..chem.dietz import AtomId, Edge, NonNegative, SystemId, mk_bonding_system
 from ..chem.molecule import Atom, AtomicSymbol, Molecule
 
 
@@ -18,6 +18,10 @@ def _atom(atom_id: AtomId, symbol: AtomicSymbol, x: float, y: float, z: float) -
         shells=element_shells(symbol),
         formal_charge=0,
     )
+
+
+def _edge(atom_a: AtomId, atom_b: AtomId) -> Edge:
+    return Edge(atom_a, atom_b)
 
 
 b1 = AtomId(1)
@@ -43,22 +47,21 @@ diborane_pretty = Molecule(
     },
     local_bonds=frozenset(
         {
-            mk_edge(b1, b2),
-            mk_edge(b1, h5),
-            mk_edge(b1, h6),
-            mk_edge(b2, h7),
-            mk_edge(b2, h8),
+            _edge(b1, b2),
+            _edge(b1, h5),
+            _edge(b1, h6),
+            _edge(b2, h7),
+            _edge(b2, h8),
         }
     ),
     systems=(
         (
             SystemId(1),
-            mk_bonding_system(NonNegative(2), frozenset({mk_edge(b1, h3), mk_edge(b2, h3)}), "bridge_h3_3c2e"),
+            mk_bonding_system(NonNegative(2), frozenset({_edge(b1, h3), _edge(b2, h3)}), "bridge_h3_3c2e"),
         ),
         (
             SystemId(2),
-            mk_bonding_system(NonNegative(2), frozenset({mk_edge(b1, h4), mk_edge(b2, h4)}), "bridge_h4_3c2e"),
+            mk_bonding_system(NonNegative(2), frozenset({_edge(b1, h4), _edge(b2, h4)}), "bridge_h4_3c2e"),
         ),
     ),
 )
-

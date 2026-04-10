@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ..chem.constants import element_attributes, element_shells
 from ..chem.coordinate import Coordinate, mk_angstrom
-from ..chem.dietz import AtomId, NonNegative, SystemId, mk_bonding_system, mk_edge
+from ..chem.dietz import AtomId, Edge, NonNegative, SystemId, mk_bonding_system
 from ..chem.molecule import (
     Atom,
     AtomicSymbol,
@@ -109,18 +109,22 @@ def _atom(atom_index: int, symbol: AtomicSymbol, x: float, y: float, z: float) -
     )
 
 
+def _edge_from_index_pair(atom_pair: tuple[int, int]) -> Edge:
+    return Edge(AtomId(atom_pair[0]), AtomId(atom_pair[1]))
+
+
 morphine_pretty = Molecule(
     atoms={
         AtomId(atom_index): _atom(atom_index, symbol, x, y, z)
         for atom_index, symbol, x, y, z in _ATOMS_DATA
     },
-    local_bonds=frozenset(mk_edge(AtomId(a), AtomId(b)) for a, b in _SIGMA_EDGES),
+    local_bonds=frozenset(_edge_from_index_pair(atom_pair) for atom_pair in _SIGMA_EDGES),
     systems=(
         (
             SystemId(1),
             mk_bonding_system(
                 NonNegative(2),
-                frozenset(mk_edge(AtomId(a), AtomId(b)) for a, b in _ALKENE_EDGES),
+                frozenset(_edge_from_index_pair(atom_pair) for atom_pair in _ALKENE_EDGES),
                 "alkene_bridge",
             ),
         ),
@@ -128,7 +132,7 @@ morphine_pretty = Molecule(
             SystemId(2),
             mk_bonding_system(
                 NonNegative(6),
-                frozenset(mk_edge(AtomId(a), AtomId(b)) for a, b in _PHENYL_PI_RING_EDGES),
+                frozenset(_edge_from_index_pair(atom_pair) for atom_pair in _PHENYL_PI_RING_EDGES),
                 "phenyl_pi_ring",
             ),
         ),

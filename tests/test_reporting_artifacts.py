@@ -26,7 +26,7 @@ def test_literature_baselines_frame_keeps_only_moleculenet_rows() -> None:
     assert baselines.loc[1, "metric_value"] == pytest.approx(2.35)
 
 
-def test_build_generalization_frame_uses_dataset_primary_metric() -> None:
+def test_build_generalization_frame_uses_validation_selection_and_dataset_primary_metric() -> None:
     metrics = pd.DataFrame(
         [
             {"dataset": "freesolv", "representation": "moladt", "model": "bayes_linear_student_t", "method": "sample", "split": "train", "n_eval": 8, "rmse": 1.00, "mae": 0.80, "r2": 0.80, "mean_log_predictive_density": -1.0, "runtime_seconds": 5.0, "split_scheme": "subset:fractional_0.8/0.1/0.1", "source_row_count": 20, "used_row_count": 20},
@@ -39,7 +39,7 @@ def test_build_generalization_frame_uses_dataset_primary_metric() -> None:
             {"dataset": "qm9", "representation": "moladt", "model": "bayes_linear_student_t", "method": "sample", "split": "valid", "n_eval": 1, "rmse": 0.061, "mae": 0.041, "r2": 0.89, "mean_log_predictive_density": -0.61, "runtime_seconds": 6.0, "split_scheme": "paper:110462/10000/10000", "source_row_count": 133885, "used_row_count": 130462},
             {"dataset": "qm9", "representation": "moladt", "model": "bayes_linear_student_t", "method": "sample", "split": "test", "n_eval": 1, "rmse": 0.062, "mae": 0.042, "r2": 0.88, "mean_log_predictive_density": -0.62, "runtime_seconds": 6.0, "split_scheme": "paper:110462/10000/10000", "source_row_count": 133885, "used_row_count": 130462},
             {"dataset": "qm9", "representation": "moladt", "model": "bayes_hierarchical_shrinkage", "method": "pathfinder", "split": "train", "n_eval": 8, "rmse": 0.050, "mae": 0.044, "r2": 0.91, "mean_log_predictive_density": -0.5, "runtime_seconds": 3.0, "split_scheme": "paper:110462/10000/10000", "source_row_count": 133885, "used_row_count": 130462},
-            {"dataset": "qm9", "representation": "moladt", "model": "bayes_hierarchical_shrinkage", "method": "pathfinder", "split": "valid", "n_eval": 1, "rmse": 0.051, "mae": 0.045, "r2": 0.90, "mean_log_predictive_density": -0.51, "runtime_seconds": 3.0, "split_scheme": "paper:110462/10000/10000", "source_row_count": 133885, "used_row_count": 130462},
+            {"dataset": "qm9", "representation": "moladt", "model": "bayes_hierarchical_shrinkage", "method": "pathfinder", "split": "valid", "n_eval": 1, "rmse": 0.051, "mae": 0.040, "r2": 0.90, "mean_log_predictive_density": -0.51, "runtime_seconds": 3.0, "split_scheme": "paper:110462/10000/10000", "source_row_count": 133885, "used_row_count": 130462},
             {"dataset": "qm9", "representation": "moladt", "model": "bayes_hierarchical_shrinkage", "method": "pathfinder", "split": "test", "n_eval": 1, "rmse": 0.052, "mae": 0.046, "r2": 0.89, "mean_log_predictive_density": -0.52, "runtime_seconds": 3.0, "split_scheme": "paper:110462/10000/10000", "source_row_count": 133885, "used_row_count": 130462},
         ]
     )
@@ -50,9 +50,9 @@ def test_build_generalization_frame_uses_dataset_primary_metric() -> None:
     qm9 = generalization.loc[generalization["dataset"] == "qm9"].iloc[0]
     assert freesolv["method"] == "optimize"
     assert freesolv["test_rmse"] == pytest.approx(1.10)
-    assert qm9["method"] == "sample"
-    assert qm9["test_mae"] == pytest.approx(0.042)
-    assert qm9["test_rmse"] == pytest.approx(0.062)
+    assert qm9["method"] == "pathfinder"
+    assert qm9["test_mae"] == pytest.approx(0.046)
+    assert qm9["test_rmse"] == pytest.approx(0.052)
 
 
 def test_build_simple_review_frame_attaches_moleculenet_context() -> None:
@@ -113,6 +113,10 @@ def test_build_simple_review_frame_attaches_moleculenet_context() -> None:
 
     assert freesolv["local_metric_name"] == "RMSE"
     assert freesolv["local_metric_value"] == pytest.approx(1.10)
+    assert freesolv["train_metric_value"] == pytest.approx(1.00)
+    assert freesolv["valid_metric_value"] == pytest.approx(1.05)
+    assert freesolv["test_metric_value"] == pytest.approx(1.10)
+    assert freesolv["selection_split"] == "valid"
     assert freesolv["paper_model_name"] == "MPNN"
     assert freesolv["paper_metric_name"] == "RMSE"
     assert freesolv["paper_metric_value"] == pytest.approx(1.15)
@@ -120,6 +124,10 @@ def test_build_simple_review_frame_attaches_moleculenet_context() -> None:
 
     assert qm9["local_metric_name"] == "MAE"
     assert qm9["local_metric_value"] == pytest.approx(0.042)
+    assert qm9["train_metric_value"] == pytest.approx(0.040)
+    assert qm9["valid_metric_value"] == pytest.approx(0.041)
+    assert qm9["test_metric_value"] == pytest.approx(0.042)
+    assert qm9["selection_split"] == "valid"
     assert qm9["paper_model_name"] == "DTNN"
     assert qm9["paper_metric_name"] == "MAE"
     assert qm9["paper_metric_value"] == pytest.approx(2.35)
@@ -133,10 +141,14 @@ def test_moleculenet_comparison_graphs_write_expected_svg_files(tmp_path) -> Non
                 "dataset": "freesolv",
                 "dataset_label": "FreeSolv",
                 "local_metric_name": "RMSE",
+                "train_metric_value": 1.00,
+                "valid_metric_value": 1.05,
+                "test_metric_value": 1.10,
                 "local_metric_value": 1.10,
                 "model": "bayes_hierarchical_shrinkage",
                 "method": "optimize",
                 "paper_metric_value": 1.15,
+                "selection_split": "valid",
                 "paper_model_name": "MPNN",
                 "paper_source_title": "MoleculeNet: a benchmark for molecular machine learning",
                 "note": "Local split differs from the paper split.",
@@ -145,10 +157,14 @@ def test_moleculenet_comparison_graphs_write_expected_svg_files(tmp_path) -> Non
                 "dataset": "qm9",
                 "dataset_label": "QM9",
                 "local_metric_name": "MAE",
+                "train_metric_value": 0.040,
+                "valid_metric_value": 0.041,
+                "test_metric_value": 0.042,
                 "local_metric_value": 0.042,
                 "model": "bayes_linear_student_t",
                 "method": "sample",
                 "paper_metric_value": 2.35,
+                "selection_split": "valid",
                 "paper_model_name": "DTNN",
                 "paper_source_title": "MoleculeNet: a benchmark for molecular machine learning",
                 "note": "Local split differs from the paper split.",
@@ -162,9 +178,14 @@ def test_moleculenet_comparison_graphs_write_expected_svg_files(tmp_path) -> Non
     freesolv_svg = (tmp_path / "freesolv_rmse_vs_moleculenet.svg").read_text(encoding="utf-8")
     qm9_svg = (tmp_path / "qm9_mae_vs_moleculenet.svg").read_text(encoding="utf-8")
     assert "FreeSolv: RMSE" in freesolv_svg
-    assert "MolADT" in freesolv_svg
+    assert "Training" in freesolv_svg
+    assert "Test" in freesolv_svg
+    assert "Paper" in freesolv_svg
     assert "MPNN" in freesolv_svg
     assert "QM9: MAE" in qm9_svg
+    assert "Training" in qm9_svg
+    assert "Test" in qm9_svg
+    assert "Paper" in qm9_svg
     assert "DTNN" in qm9_svg
 
 

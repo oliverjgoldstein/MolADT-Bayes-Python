@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ..chem.constants import element_attributes, element_shells
 from ..chem.coordinate import Coordinate, mk_angstrom
-from ..chem.dietz import AtomId, NonNegative, SystemId, mk_bonding_system, mk_edge
+from ..chem.dietz import AtomId, Edge, NonNegative, SystemId, mk_bonding_system
 from ..chem.molecule import Atom, AtomicSymbol, Molecule
 
 
@@ -18,6 +18,10 @@ def _atom(atom_id: AtomId, symbol: AtomicSymbol, x: float, y: float, z: float) -
         shells=element_shells(symbol),
         formal_charge=0,
     )
+
+
+def _edge_set(atom_pairs: tuple[tuple[AtomId, AtomId], ...]) -> frozenset[Edge]:
+    return frozenset(Edge(atom_a, atom_b) for atom_a, atom_b in atom_pairs)
 
 
 fe = AtomId(1)
@@ -76,19 +80,19 @@ ferrocene_pretty = Molecule(
         **{atom_id: _atom(atom_id, AtomicSymbol.H, *xyz) for atom_id, xyz in zip(ring1_h, _RING1_HYDROGEN_COORDS)},
         **{atom_id: _atom(atom_id, AtomicSymbol.H, *xyz) for atom_id, xyz in zip(ring2_h, _RING2_HYDROGEN_COORDS)},
     },
-    local_bonds=frozenset(mk_edge(a, b) for a, b in ring1_cc + ring2_cc + ring1_ch + ring2_ch),
+    local_bonds=_edge_set(ring1_cc + ring2_cc + ring1_ch + ring2_ch),
     systems=(
         (
             SystemId(1),
-            mk_bonding_system(NonNegative(6), frozenset(mk_edge(a, b) for a, b in fe_to_ring1 + ring1_cc), "cp1_pi"),
+            mk_bonding_system(NonNegative(6), _edge_set(fe_to_ring1 + ring1_cc), "cp1_pi"),
         ),
         (
             SystemId(2),
-            mk_bonding_system(NonNegative(6), frozenset(mk_edge(a, b) for a, b in fe_to_ring2 + ring2_cc), "cp2_pi"),
+            mk_bonding_system(NonNegative(6), _edge_set(fe_to_ring2 + ring2_cc), "cp2_pi"),
         ),
         (
             SystemId(3),
-            mk_bonding_system(NonNegative(6), frozenset(mk_edge(a, b) for a, b in fe_to_ring1 + fe_to_ring2), "fe_backdonation"),
+            mk_bonding_system(NonNegative(6), _edge_set(fe_to_ring1 + fe_to_ring2), "fe_backdonation"),
         ),
     ),
 )

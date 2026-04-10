@@ -16,9 +16,9 @@ AUTO_INSTALL_VENV ?= 1
 AUTO_FIX_PROMPT ?= 1
 AUTO_APPROVE_FIXES ?= 0
 
-INFERENCE_PRESET ?= default
-QM9_LIMIT ?= 2000
-QM9_SPLIT_MODE ?= subset
+INFERENCE_PRESET ?= paper
+QM9_LIMIT ?=
+QM9_SPLIT_MODE ?= paper
 ZINC_DATASET_SIZE ?= 250K
 ZINC_DATASET_DIMENSION ?= 2D
 ZINC_LIMIT ?=
@@ -124,14 +124,15 @@ help:
 	"  make python-parse-smiles    Parse c1ccccc1" \
 	"  make python-to-smiles       Render molecules/benzene.sdf to SMILES" \
 		"  make python-pretty-example  Render EXAMPLE=ferrocene or EXAMPLE=diborane" \
-		"  make freesolv              Run the FreeSolv MolADT-vs-MoleculeNet Stan comparison" \
-		"  make qm9                   Run the QM9 MolADT-vs-MoleculeNet Stan comparison" \
+		"  make freesolv              Run the long FreeSolv MolADT-vs-MoleculeNet Stan comparison" \
+		"  make qm9                   Run the long QM9 MolADT-vs-MoleculeNet Stan comparison" \
 		"  make benchmark              Run the combined FreeSolv + QM9 MolADT Stan comparison bundle" \
-		"  make benchmark-small        Run the default 2000-row QM9 subset comparison" \
-		"  make benchmark-paper        Run the paper-sized QM9 split (110462/10000/10000)" \
+		"  make benchmark-small        Run the lighter 2000-row QM9 subset comparison" \
+		"  make benchmark-paper        Re-run the paper-sized QM9 split (110462/10000/10000) explicitly" \
 		"  make benchmark-bg           Run the benchmark in the foreground and mirror output to the active results directory" \
 		"  make timing                 Build the local ZINC timing corpus and compare SMILES vs MolADT parse times" \
-		"  full long run: make benchmark-paper" \
+		"  default long run: make benchmark" \
+		"  quicker subset run: make benchmark-small" \
 		"  quieter run: BENCHMARK_VERBOSE=0 make benchmark" \
 		"" \
 		"Current inference configuration:" \
@@ -420,7 +421,7 @@ python-benchmark-qm9:
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
 	"  toolchain_env: $(if $(DARWIN_SDKROOT),apple-xcrun,default)" \
 	"  expected outputs: $(RESULTS_ROOT)/results.csv and $(RESULTS_ROOT)/details/"
-	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 $(QM9_LIMIT_QM9_ARG) --split-mode $(QM9_SPLIT_MODE) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
+	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 $(QM9_LIMIT_QM9_ARG) --split-mode $(QM9_SPLIT_MODE) $(if $(filter paper,$(INFERENCE_PRESET)),--paper-mode,) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
 
 python-benchmark-zinc:
 	@printf "%s\n" \
@@ -452,7 +453,7 @@ freesolv:
 	"  methods: $(METHODS)" \
 	"  models: $(MODELS)" \
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
-	"  expected figure: results/$(FREESOLV_RESULTS_SUBDIR)/details/freesolv_rmse_vs_moleculenet.svg"
+	"  expected figure: results/$(FREESOLV_RESULTS_SUBDIR)/freesolv_rmse_vs_moleculenet.svg"
 	MOLADT_RESULTS_DIR=results/$(FREESOLV_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all smoke-test $(VERBOSE_ARG) $(BENCHMARK_ARGS)
 
 qm9:
@@ -470,7 +471,7 @@ qm9:
 	"  methods: $(METHODS)" \
 	"  models: $(MODELS)" \
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
-	"  expected figure: results/$(QM9_RESULTS_SUBDIR)/details/qm9_mae_vs_moleculenet.svg"
+	"  expected figure: results/$(QM9_RESULTS_SUBDIR)/qm9_mae_vs_moleculenet.svg"
 	MOLADT_RESULTS_DIR=results/$(QM9_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 $(QM9_LIMIT_QM9_ARG) --split-mode $(QM9_SPLIT_MODE) $(if $(filter paper,$(INFERENCE_PRESET)),--paper-mode,) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
 
 benchmark:
@@ -492,11 +493,11 @@ benchmark:
 	"  optimize_iterations=$(OPTIMIZE_ITERATIONS) pathfinder_paths=$(PATHFINDER_PATHS) predictive_draws=$(PREDICTIVE_DRAWS)" \
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
 	"  paper baselines: FreeSolv RMSE 1.15; QM9 DTNN MAE 2.35" \
-	"  expected outputs: $(RESULTS_ROOT)/results.csv, $(RESULTS_ROOT)/details/freesolv_rmse_vs_moleculenet.svg, $(RESULTS_ROOT)/details/qm9_mae_vs_moleculenet.svg"
+	"  expected outputs: $(RESULTS_ROOT)/results.csv, $(RESULTS_ROOT)/freesolv_rmse_vs_moleculenet.svg, $(RESULTS_ROOT)/qm9_mae_vs_moleculenet.svg"
 	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all benchmark $(QM9_LIMIT_BENCHMARK_ARG) --qm9-split-mode $(QM9_SPLIT_MODE) $(if $(filter paper,$(INFERENCE_PRESET)),--paper-mode,) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
 
 benchmark-small:
-	@$(MAKE) --no-print-directory benchmark QM9_LIMIT=2000 QM9_SPLIT_MODE=subset
+	@$(MAKE) --no-print-directory benchmark INFERENCE_PRESET=default QM9_LIMIT=2000 QM9_SPLIT_MODE=subset
 
 benchmark-paper:
 	@$(MAKE) --no-print-directory benchmark INFERENCE_PRESET=paper QM9_LIMIT= QM9_SPLIT_MODE=paper

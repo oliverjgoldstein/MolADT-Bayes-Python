@@ -75,11 +75,13 @@ The reporting layer keeps the best local MolADT run from that Stan sweep and com
 ```bash
 make freesolv
 make qm9
+make benchmark-small
 make timing
 ```
 
-- `make freesolv` writes `freesolv_rmse_vs_moleculenet.svg`
-- `make qm9` writes `qm9_mae_vs_moleculenet.svg`
+- `make freesolv` writes the long-run `Training` / `Test` / `Paper` FreeSolv figure
+- `make qm9` writes the long-run `Training` / `Test` / `Paper` QM9 figure
+- `make benchmark-small` keeps the lighter subset benchmark path available
 - `make timing` is the separate ingest/interoperability timing path
 
 For the broader protocol and result bundle, see [Inference and benchmarks](inference-and-benchmarks.md).

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ..chem.constants import element_attributes, element_shells
 from ..chem.coordinate import Coordinate, mk_angstrom
-from ..chem.dietz import AtomId, mk_edge
+from ..chem.dietz import AtomId, Edge
 from ..chem.molecule import Atom, AtomicSymbol, Molecule
 
 
@@ -17,12 +17,16 @@ def _atom(atom_index: int, symbol: AtomicSymbol, x: float, y: float, z: float) -
     )
 
 
+def _edge(atom_a: int, atom_b: int) -> Edge:
+    return Edge(AtomId(atom_a), AtomId(atom_b))
+
+
 hydrogen = Molecule(
     atoms={
         AtomId(1): _atom(1, AtomicSymbol.H, 0.0, 0.0, 0.0),
         AtomId(2): _atom(2, AtomicSymbol.H, 0.74, 0.0, 0.0),
     },
-    local_bonds=frozenset({mk_edge(AtomId(1), AtomId(2))}),
+    local_bonds=frozenset({_edge(1, 2)}),
     systems=(),
 )
 
@@ -32,7 +36,7 @@ oxygen = Molecule(
         AtomId(1): _atom(1, AtomicSymbol.O, 0.0, 0.0, 0.0),
         AtomId(2): _atom(2, AtomicSymbol.O, 1.21, 0.0, 0.0),
     },
-    local_bonds=frozenset({mk_edge(AtomId(1), AtomId(2))}),
+    local_bonds=frozenset({_edge(1, 2)}),
     systems=(),
 )
 
@@ -43,7 +47,7 @@ water = Molecule(
         AtomId(2): _atom(2, AtomicSymbol.H, 0.96, 0.0, 0.0),
         AtomId(3): _atom(3, AtomicSymbol.H, -0.32, 0.90, 0.0),
     },
-    local_bonds=frozenset({mk_edge(AtomId(1), AtomId(2)), mk_edge(AtomId(1), AtomId(3))}),
+    local_bonds=frozenset({_edge(1, 2), _edge(1, 3)}),
     systems=(),
 )
 
@@ -58,12 +62,11 @@ methane = Molecule(
     },
     local_bonds=frozenset(
         {
-            mk_edge(AtomId(1), AtomId(2)),
-            mk_edge(AtomId(1), AtomId(3)),
-            mk_edge(AtomId(1), AtomId(4)),
-            mk_edge(AtomId(1), AtomId(5)),
+            _edge(1, 2),
+            _edge(1, 3),
+            _edge(1, 4),
+            _edge(1, 5),
         }
     ),
     systems=(),
 )
-

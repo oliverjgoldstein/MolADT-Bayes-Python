@@ -65,8 +65,9 @@ def test_makefile_benchmark_defaults_to_verbose_output(tmp_path: Path) -> None:
 
     assert "./.venv/bin/python -m scripts.run_all benchmark" in result.stdout
     assert "Running combined MolADT benchmark bundle." in result.stdout
-    assert "--qm9-limit 2000" in result.stdout
-    assert "--qm9-split-mode subset" in result.stdout
+    assert "--paper-mode" in result.stdout
+    assert "--qm9-split-mode paper" in result.stdout
+    assert "--qm9-limit 2000" not in result.stdout
     assert "--verbose" in result.stdout
 
 
@@ -97,7 +98,7 @@ def test_makefile_benchmark_defaults_to_timestamped_results_directory(tmp_path: 
         check=True,
     )
 
-    assert re.search(r"MOLADT_RESULTS_DIR=results/run_\d{8}_\d{6}", result.stdout)
+    assert re.search(r"MOLADT_RESULTS_DIR=results/paper/run_\d{8}_\d{6}", result.stdout)
 
 
 def test_makefile_paper_benchmark_uses_timestamped_paper_subdirectory(tmp_path: Path) -> None:
@@ -133,7 +134,7 @@ def test_makefile_benchmark_small_target_uses_qm9_subset_mode(tmp_path: Path) ->
         check=True,
     )
 
-    assert "benchmark QM9_LIMIT=2000 QM9_SPLIT_MODE=subset" in result.stdout
+    assert "benchmark INFERENCE_PRESET=default QM9_LIMIT=2000 QM9_SPLIT_MODE=subset" in result.stdout
 
 
 def test_makefile_benchmark_paper_target_enables_paper_split(tmp_path: Path) -> None:
@@ -161,7 +162,7 @@ def test_makefile_catboost_geom_model_target_writes_model_results_subdirectory(t
         check=True,
     )
 
-    assert re.search(r"MOLADT_RESULTS_DIR=results/models/run_\d{8}_\d{6}", result.stdout)
+    assert re.search(r"MOLADT_RESULTS_DIR=results/models/paper/run_\d{8}_\d{6}", result.stdout)
     assert "./.venv/bin/python -m scripts.run_all models" in result.stdout
 
 
@@ -191,7 +192,7 @@ def test_makefile_timing_target_writes_timing_results_subdirectory(tmp_path: Pat
         check=True,
     )
 
-    assert re.search(r"MOLADT_RESULTS_DIR=results/timing/run_\d{8}_\d{6}", result.stdout)
+    assert re.search(r"MOLADT_RESULTS_DIR=results/timing/paper/run_\d{8}_\d{6}", result.stdout)
     assert "./.venv/bin/python -m scripts.run_all zinc-timing" in result.stdout
     assert "--include-moladt" in result.stdout
 

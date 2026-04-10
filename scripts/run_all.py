@@ -400,9 +400,9 @@ def _remove_legacy_report_artifacts() -> None:
             shutil.rmtree(path, ignore_errors=True)
 
 
-def _select_reviewer_rows(test_rows: pd.DataFrame) -> pd.DataFrame:
+def _select_reviewer_rows(selection_rows: pd.DataFrame) -> pd.DataFrame:
     rows: list[pd.DataFrame] = []
-    for (dataset, representation), frame in test_rows.groupby(["dataset", "representation"], sort=True):
+    for (dataset, representation), frame in selection_rows.groupby(["dataset", "representation"], sort=True):
         primary_metric, secondary_metric = _metric_priority_for_dataset(str(dataset))
         ranked = frame.sort_values(
             [primary_metric, secondary_metric, "runtime_seconds", "model", "method"],
@@ -437,8 +437,8 @@ def _metric_priority_for_dataset(dataset: str) -> tuple[str, str]:
 
 
 def _selected_run_keys(metrics: pd.DataFrame) -> pd.DataFrame:
-    test_rows = metrics.loc[metrics["split"] == "test"].copy()
-    selected = _select_reviewer_rows(test_rows)
+    valid_rows = metrics.loc[metrics["split"] == "valid"].copy()
+    selected = _select_reviewer_rows(valid_rows)
     # `seed` is not a stable run identifier here because the benchmark records
     # different split-level predictive seeds for train/valid/test rows.
     return selected.loc[:, ["dataset", "representation", "model", "method"]].drop_duplicates().reset_index(drop=True)
@@ -519,7 +519,12 @@ def _build_simple_review_frame(generalization: pd.DataFrame, *, baselines_frame:
         dataset = str(row["dataset"])
         representation = str(row["representation"])
         local_metric_name, local_metric_column = _primary_metric_for_dataset(dataset)
-        local_metric_value = float(row[local_metric_column])
+        train_metric_column = "train_mae" if dataset == "qm9" else "train_rmse"
+        valid_metric_column = "valid_mae" if dataset == "qm9" else "valid_rmse"
+        train_metric_value = float(row[train_metric_column])
+        valid_metric_value = float(row[valid_metric_column])
+        test_metric_value = float(row[local_metric_column])
+        local_metric_value = test_metric_value
         baseline = _select_review_baseline(baselines_frame, dataset)
         if baseline is None:
             literature_display = "No external context attached"
@@ -564,12 +569,18 @@ def _build_simple_review_frame(generalization: pd.DataFrame, *, baselines_frame:
                 "method": str(row["method"]),
                 "local_metric_name": local_metric_name,
                 "local_metric_value": local_metric_value,
+                "train_metric_value": train_metric_value,
+                "valid_metric_value": valid_metric_value,
+                "test_metric_value": test_metric_value,
+                "selection_split": "valid",
                 "train_rmse": float(row["train_rmse"]),
                 "test_rmse": float(row["test_rmse"]),
                 "test_minus_train_rmse": float(row["test_minus_train_rmse"]),
                 "train_mae": float(row.get("train_mae", float("nan"))),
+                "valid_mae": float(row.get("valid_mae", float("nan"))),
                 "test_mae": float(row.get("test_mae", float("nan"))),
                 "train_r2": float(row.get("train_r2", float("nan"))),
+                "valid_r2": float(row.get("valid_r2", float("nan"))),
                 "test_r2": float(row.get("test_r2", float("nan"))),
                 "fit_runtime_seconds": float(row.get("fit_runtime_seconds", float("nan"))),
                 "split_scheme": str(row.get("split_scheme", "")),
@@ -648,10 +659,14 @@ def _build_moleculenet_comparison_frame(review_frame: pd.DataFrame) -> pd.DataFr
                 "dataset": str(row["dataset"]),
                 "dataset_label": str(row.get("dataset_label", row["dataset"])),
                 "metric_name": str(row["local_metric_name"]),
+                "train_value": float(row.get("train_metric_value", row["local_metric_value"])),
+                "valid_value": float(row.get("valid_metric_value", row["local_metric_value"])),
+                "test_value": float(row.get("test_metric_value", row["local_metric_value"])),
                 "local_value": float(row["local_metric_value"]),
                 "paper_value": float(paper_value),
                 "model": str(row["model"]),
                 "method": str(row["method"]),
+                "selection_split": str(row.get("selection_split", "valid")),
                 "paper_model_name": str(row.get("paper_model_name", "")),
                 "paper_source_title": str(row.get("paper_source_title", "")),
                 "note": str(row.get("note", "")),
