@@ -1,6 +1,6 @@
 # Orbitals
 
-This page explains the orbital layer in the Python MolADT and why its types fit theoretical chemistry rather than just software bookkeeping.
+This page covers the orbital layer in the Python MolADT and why its types fit theoretical chemistry rather than just software bookkeeping.
 
 ## What Is In The ADT
 

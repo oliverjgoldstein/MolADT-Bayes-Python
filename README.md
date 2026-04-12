@@ -6,7 +6,7 @@ MolADT is a typed molecular data format for Bayesian work over molecules. It kee
 
 ## Why MolADT
 
-Diborane, ferrocene, and morphine show the point quickly.
+Diborane, ferrocene, and morphine are useful examples.
 
 - diborane in standard SMILES: `[BH2]1[H][BH2][H]1`
 - ferrocene in standard SMILES: `[CH-]1C=CC=C1.[CH-]1C=CC=C1.[Fe+2]`
@@ -18,18 +18,14 @@ Those are useful boundary strings, but they are weak central objects.
 - ferrocene wants shared Cp/metal bonding systems
 - morphine pushes fused-ring structure and stereo flags into a linear notation
 
-MolADT keeps that chemistry as typed atoms, local bonds, bonding systems, and stereo annotations. That is the point of the repo: a molecular object that respects meaningful invariances and is easier to sample over, featurize, and compare than a string-first representation.
+MolADT keeps that chemistry as typed atoms, local bonds, bonding systems, and stereo annotations. The repo is built around that object so that functions over molecules can respect the invariances of the molecular structure, rather than the accidental choices made by a boundary string syntax.
 
 ## Quick Start
 
 ```bash
 make python-setup
 ./.venv/bin/python -m moladt.cli parse-smiles "c1ccccc1"
-```
-
-If you plan to run benchmarks, install CmdStan once first:
-
-```bash
+# once, before Stan benchmarks
 make python-cmdstan-install
 ```
 
@@ -46,37 +42,45 @@ For probabilistic proposals or local graph surgery, use `MutableMolecule` as a w
 
 ## Benchmarking
 
-The repo does not ship precomputed benchmark results. `results/` is meant to stay empty in git and only be populated by real non-dry benchmark runs on your machine.
+Benchmark outputs stay local. `results/` is generated on your machine rather than committed.
 
 ```bash
-make python-cmdstan-install
 make freesolv
 make qm9
 make timing
 make benchmark-small
 ```
 
-- `make freesolv` runs the long FreeSolv benchmark from the full local `642`-molecule SDF set and writes a `Training` / `Test` / `Paper` comparison figure
-- `make qm9` runs the long QM9 benchmark on the full local download with the paper-sized split and writes the same `Training` / `Test` / `Paper` figure
-- `make timing` runs the separate ingest/interoperability timing pass, including raw source reads, manifest CSV field materialization, local SMILES parsing, and MolADT file parsing
-- `make benchmark-small` keeps the older lighter 2,000-row QM9 subset path around for a faster local sanity check
+Current benchmark sizes:
 
-Main outputs:
+- FreeSolv benchmark path: the SDF-backed `moladt_featurized` export uses all `642` local SDF molecules and splits them into `513` train / `64` validation / `65` test
+- QM9 default long run: `110,462` train / `10,000` validation / `10,000` test
+- `benchmark-small`: the lighter QM9 subset path uses `1,600` train / `200` validation / `200` test
 
-- `results/freesolv/run_.../freesolv_rmse_vs_moleculenet.svg`
-- `results/qm9/paper/run_.../qm9_mae_vs_moleculenet.svg`
-
-The predictive comparison is deliberately narrow:
-
-- each figure shows the training score and held-out test score from the validation-selected local Stan MolADT run, then the cited MoleculeNet paper baseline
+- `make freesolv` writes `results/freesolv/run_.../freesolv_rmse_vs_moleculenet.svg`
+- `make qm9` writes `results/qm9/paper/run_.../qm9_mae_vs_moleculenet.svg`
+- `make timing` writes `results/timing/paper/run_.../timing_overview.svg`
+- the FreeSolv figure shows `Training`, `Validation`, `Test`, then `Paper`
+- the QM9 figure shows `Training`, `Test`, then `Paper`
+- `make freesolv` runs one fixed benchmark path: `moladt_featurized` with `bayes_gp_rbf_screened` fit by `laplace`
 - FreeSolv compares local MolADT RMSE to the MoleculeNet MPNN RMSE row `1.15`
 - QM9 `mu` compares local MolADT MAE to the MoleculeNet DTNN MAE row `2.35`
 
-The default benchmark targets now use the long `paper` inference preset. After CmdStan is built, `make qm9` is expected to take hours, not minutes. Use `make benchmark-small` or override `INFERENCE_PRESET=default QM9_LIMIT=2000 QM9_SPLIT_MODE=subset` when you want the older lighter run.
+The default benchmark targets use the long `paper` inference preset. After CmdStan is built, `make qm9` is expected to take hours, not minutes. Use `make benchmark-small` or override `INFERENCE_PRESET=default QM9_LIMIT=2000 QM9_SPLIT_MODE=subset` for a lighter run.
 
-These are local benchmark artifacts, not committed front-page snapshots. The metric matches the MoleculeNet row, but the Stan model family still differs from the paper, and FreeSolv still uses the repo's own split.
+The metric matches the cited MoleculeNet row, but the Stan model family still differs from the paper, and FreeSolv still uses the repo's own split. Large raw files are downloaded on demand when they are not already vendored.
 
-If a required raw file is too large for GitHub, the repo downloads it on demand and shows live progress for large transfers and archive extraction.
+Read the timing overview as a pipeline rather than as one aggregate score:
+
+- `raw_file_read`: how fast the benchmark can pull SMILES text out of the ZINC source file without doing chemistry work
+- `smiles_parse_sanitize`: how fast an external chemistry toolkit can parse each SMILES string into a molecular graph
+- `smiles_canonicalization`: how fast that toolkit can re-render those molecules into one canonical SMILES form
+- `timing_library_prepare`: the one-time cost to build the matched local timing corpus, so later stages use the same molecule count on both sides
+- `smiles_csv_string_parse`: the plain-string baseline, where the canonical SMILES field is only materialized from CSV into a Python string
+- `smiles_library_parse`: the local MolADT SMILES parser running on those same canonical strings
+- `moladt_file_parse`: the local MolADT JSON file reader running on the paired MolADT files
+
+In practice, `smiles_csv_string_parse` is the near-zero "just hand me the string" floor, `smiles_library_parse` is the cost of building a MolADT object from SMILES text, and `moladt_file_parse` is the cost of reading the already-structured MolADT form from disk.
 
 ## Read More
 

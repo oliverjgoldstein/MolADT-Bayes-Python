@@ -134,12 +134,76 @@ def test_build_simple_review_frame_attaches_moleculenet_context() -> None:
     assert "MoleculeNet" in qm9["note"]
 
 
+def test_build_simple_review_frame_prefers_best_validation_representation_per_dataset() -> None:
+    generalization = pd.DataFrame(
+        [
+            {
+                "dataset": "freesolv",
+                "representation": "moladt",
+                "model": "bayes_hierarchical_shrinkage",
+                "method": "laplace",
+                "split_scheme": "fractional:0.800/0.100/0.100",
+                "source_row_count": 637,
+                "used_row_count": 637,
+                "train_n_eval": 509,
+                "valid_n_eval": 63,
+                "test_n_eval": 65,
+                "train_rmse": 0.98,
+                "valid_rmse": 1.31,
+                "test_rmse": 1.22,
+                "test_minus_train_rmse": 0.24,
+                "train_mae": 0.74,
+                "valid_mae": 0.99,
+                "test_mae": 0.95,
+                "train_r2": 0.82,
+                "valid_r2": 0.78,
+                "test_r2": 0.76,
+                "fit_runtime_seconds": 12.0,
+            },
+            {
+                "dataset": "freesolv",
+                "representation": "moladt_featurized",
+                "model": "bayes_gp_rbf_screened",
+                "method": "laplace",
+                "split_scheme": "fractional:0.800/0.100/0.100",
+                "source_row_count": 642,
+                "used_row_count": 642,
+                "train_n_eval": 513,
+                "valid_n_eval": 64,
+                "test_n_eval": 65,
+                "train_rmse": 0.51,
+                "valid_rmse": 1.12,
+                "test_rmse": 0.74,
+                "test_minus_train_rmse": 0.23,
+                "train_mae": 0.33,
+                "valid_mae": 0.77,
+                "test_mae": 0.53,
+                "train_r2": 0.98,
+                "valid_r2": 0.94,
+                "test_r2": 0.94,
+                "fit_runtime_seconds": 20.0,
+            },
+        ]
+    )
+
+    review = _build_simple_review_frame(generalization, baselines_frame=literature_baselines_frame())
+
+    assert len(review) == 1
+    freesolv = review.iloc[0]
+    assert freesolv["representation"] == "moladt_featurized"
+    assert freesolv["model"] == "bayes_gp_rbf_screened"
+    assert freesolv["method"] == "laplace"
+    assert freesolv["valid_metric_value"] == pytest.approx(1.12)
+    assert freesolv["test_metric_value"] == pytest.approx(0.74)
+
+
 def test_moleculenet_comparison_graphs_write_expected_svg_files(tmp_path) -> None:
     review = pd.DataFrame(
         [
             {
                 "dataset": "freesolv",
                 "dataset_label": "FreeSolv",
+                "representation": "moladt_featurized",
                 "local_metric_name": "RMSE",
                 "train_metric_value": 1.00,
                 "valid_metric_value": 1.05,
@@ -156,6 +220,7 @@ def test_moleculenet_comparison_graphs_write_expected_svg_files(tmp_path) -> Non
             {
                 "dataset": "qm9",
                 "dataset_label": "QM9",
+                "representation": "moladt",
                 "local_metric_name": "MAE",
                 "train_metric_value": 0.040,
                 "valid_metric_value": 0.041,
@@ -179,11 +244,14 @@ def test_moleculenet_comparison_graphs_write_expected_svg_files(tmp_path) -> Non
     qm9_svg = (tmp_path / "qm9_mae_vs_moleculenet.svg").read_text(encoding="utf-8")
     assert "FreeSolv: RMSE" in freesolv_svg
     assert "Training" in freesolv_svg
+    assert ">Validation</text>" in freesolv_svg
     assert "Test" in freesolv_svg
     assert "Paper" in freesolv_svg
+    assert "moladt_featurized" in freesolv_svg
     assert "MPNN" in freesolv_svg
     assert "QM9: MAE" in qm9_svg
     assert "Training" in qm9_svg
+    assert ">Validation</text>" not in qm9_svg
     assert "Test" in qm9_svg
     assert "Paper" in qm9_svg
     assert "DTNN" in qm9_svg

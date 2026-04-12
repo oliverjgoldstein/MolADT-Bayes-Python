@@ -1,6 +1,6 @@
 # Inference and Benchmarks
 
-This repo owns the main benchmark run. It prepares datasets, exports aligned MolADT matrices, fits the Stan baselines, and writes the reviewer-facing comparison bundle.
+This repo prepares the benchmark datasets, exports aligned MolADT matrices, fits the Stan models, and writes the comparison bundle.
 
 ## Main Commands
 
@@ -28,7 +28,9 @@ The benchmark contract is deliberately narrow:
 - `moladt`
   The same boundary SMILES is parsed into the typed MolADT object and featurized from that object.
 - the local run is selected by validation RMSE or MAE, not by test-set peeking
-- each reviewer figure shows `Training`, `Test`, then `Paper`
+- the FreeSolv figure shows `Training`, `Validation`, `Test`, then `Paper`
+- the QM9 figure shows `Training`, `Test`, then `Paper`
+- FreeSolv uses one fixed benchmark path: `moladt_featurized` with `bayes_gp_rbf_screened` fit by `laplace`
 - the paper bar is the matching MoleculeNet row only
 - FreeSolv uses RMSE
 - QM9 `mu` uses MAE
@@ -41,8 +43,9 @@ The aligned Stan models are:
 
 - [`bayes_linear_student_t`](../stan/bayes_linear_student_t.stan)
 - [`bayes_hierarchical_shrinkage`](../stan/bayes_hierarchical_shrinkage.stan)
+- [`bayes_gp_rbf_screened`](../stan/bayes_gp_rbf_screened.stan)
 
-The benchmark graph keeps the training and held-out test metrics from the validation-selected local MolADT row from that Stan sweep.
+The benchmark graph uses the fixed FreeSolv run and the validation-selected QM9 row.
 
 ## Dataset Meaning
 

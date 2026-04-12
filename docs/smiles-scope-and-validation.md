@@ -59,9 +59,9 @@ That is why:
 
 ## Benchmarking Boundary
 
-The predictive benchmarks now use MolADT as the benchmark object. Boundary SMILES still matter because they are one of the ways the repo builds the typed molecule, but the published benchmark graphs compare the best local MolADT Stan run against MoleculeNet rather than running a separate SMILES benchmark row.
+The predictive benchmarks use MolADT as the benchmark object. Boundary SMILES still matter because they are one of the ways the repo builds the typed molecule, but the published benchmark graphs compare the best local MolADT Stan run against MoleculeNet rather than running a separate SMILES benchmark row.
 
-The ZINC timing benchmark is an interoperability/runtime benchmark rather than the central representation comparison. It keeps its own ingest-path measurements and matched local MolADT corpus, and it now breaks out the manifest CSV field-to-string baseline before the local SMILES and MolADT parse stages.
+The ZINC timing benchmark is an interoperability/runtime benchmark rather than the central representation comparison. It keeps its own ingest-path measurements and matched local MolADT corpus, and it breaks out the manifest CSV field-to-string baseline before the local SMILES and MolADT parse stages.
 
 ## Related Files
 

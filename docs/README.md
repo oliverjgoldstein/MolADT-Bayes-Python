@@ -1,12 +1,12 @@
 # Python Docs
 
-The main README is now the short front door. This folder keeps the rest.
+The main README is the short entry point. This folder keeps the rest.
 
 ## Our Approach
 
 - represent the molecule as a typed MolADT object
 - derive MolADT descriptor matrices from that object
-- run the local Stan sweep on FreeSolv and QM9
+- run the local Stan benchmarks on FreeSolv and QM9
 - compare the best local MolADT result to MoleculeNet only
 
 For the shortest path, start with [Quickstart](quickstart.md). For the benchmark story, go straight to [Inference and benchmarks](inference-and-benchmarks.md).

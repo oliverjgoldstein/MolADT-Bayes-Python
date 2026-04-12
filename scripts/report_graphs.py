@@ -11,6 +11,7 @@ from .common import ensure_directory
 
 SPLIT_COLORS = {
     "train": "#2563eb",
+    "valid": "#059669",
     "test": "#dc2626",
 }
 BACKGROUND = "#fcfbf7"
@@ -39,11 +40,13 @@ def write_moleculenet_comparison_overviews(comparison_frame: pd.DataFrame, desti
         metric_name = str(row["metric_name"])
         destination = destination_dir / f"{dataset}_{metric_name.lower()}_vs_moleculenet.svg"
         train_value = float(row.get("train_value", row["local_value"]))
+        valid_value = float(row.get("valid_value", row["local_value"]))
         test_value = float(row.get("test_value", row["local_value"]))
         paper_value = float(row["paper_value"])
         selection_split = str(row.get("selection_split", "valid"))
         selection_label = "Validation" if selection_split == "valid" else selection_split.title()
-        value_max = max(train_value, test_value, paper_value, 1e-6) * 1.2
+        include_validation_bar = dataset == "freesolv"
+        value_max = max(train_value, valid_value if include_validation_bar else 0.0, test_value, paper_value, 1e-6) * 1.2
         width = 640
         height = 332
         x0 = 24
@@ -53,12 +56,21 @@ def write_moleculenet_comparison_overviews(comparison_frame: pd.DataFrame, desti
         plot_width = width - 112
         plot_height = 124
         bar_width = 92
-        bar_gap = 48
-        bars = [
-            ("Training", train_value, SPLIT_COLORS["train"]),
-            ("Test", test_value, SPLIT_COLORS["test"]),
-            ("Paper", paper_value, SERIES_COLORS["paper"]),
-        ]
+        bars: list[tuple[str, float, str]] = [("Training", train_value, SPLIT_COLORS["train"])]
+        if include_validation_bar:
+            bars.append(("Validation", valid_value, SPLIT_COLORS["valid"]))
+        bars.extend(
+            [
+                ("Test", test_value, SPLIT_COLORS["test"]),
+                ("Paper", paper_value, SERIES_COLORS["paper"]),
+            ]
+        )
+        bar_gap = 28 if len(bars) == 4 else 48
+        summary_text = (
+            "Training, validation, and held-out test scores from the selected local MolADT run, plus the cited MoleculeNet Table 3 baseline."
+            if include_validation_bar
+            else "Training and held-out test scores from the validation-selected local MolADT run, plus the cited MoleculeNet Table 3 baseline."
+        )
         parts = [_svg_header(width, height)]
         parts.append(f'<rect width="{width}" height="{height}" fill="{BACKGROUND}" />')
         parts.append(f'<rect x="{x0}" y="{y0}" width="{width - 48}" height="{height - 48}" rx="18" fill="{CARD_FILL}" stroke="{CARD_STROKE}" />')
@@ -69,12 +81,12 @@ def write_moleculenet_comparison_overviews(comparison_frame: pd.DataFrame, desti
         )
         parts.append(
             f'<text x="{x0 + 20}" y="{y0 + 50}" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">'
-            "Training and held-out test scores from the validation-selected local Stan MolADT run, plus the cited MoleculeNet Table 3 baseline."
+            f"{summary_text}"
             "</text>"
         )
         parts.append(
             f'<text x="{x0 + 20}" y="{y0 + 68}" font-size="11" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">'
-            f"Local: {escape(str(row['model']))} / {escape(str(row['method']))}"
+            f"Local: {escape(str(row.get('representation', 'moladt')))} / {escape(str(row['model']))} / {escape(str(row['method']))}"
             "</text>"
         )
         parts.append(

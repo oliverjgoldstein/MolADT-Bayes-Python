@@ -26,6 +26,7 @@ INCLUDE_MOLADT ?= 0
 BENCHMARK_VERBOSE ?= 1
 EXAMPLE ?= ferrocene
 MODELS ?= bayes_linear_student_t,bayes_hierarchical_shrinkage
+FREESOLV_MODELS ?= bayes_gp_rbf_screened
 PYTHON_EXTRAS ?= dev,ml,geom
 RESULTS_SUBDIR ?=
 RUN_TIMESTAMP ?= $(shell date +%Y%m%d_%H%M%S)
@@ -78,6 +79,7 @@ RESULTS_ENV := MOLADT_RESULTS_DIR=$(RESULTS_ROOT)
 BENCHMARK_LOG ?= $(RESULTS_ROOT)/benchmark.out
 
 METHODS ?= $(METHODS_DEFAULT)
+FREESOLV_METHODS ?= laplace
 SAMPLE_CHAINS ?= $(SAMPLE_CHAINS_DEFAULT)
 SAMPLE_WARMUP ?= $(SAMPLE_WARMUP_DEFAULT)
 SAMPLE_DRAWS ?= $(SAMPLE_DRAWS_DEFAULT)
@@ -88,6 +90,7 @@ PATHFINDER_PATHS ?= $(PATHFINDER_PATHS_DEFAULT)
 PREDICTIVE_DRAWS ?= $(PREDICTIVE_DRAWS_DEFAULT)
 
 BENCHMARK_ARGS := --methods $(METHODS) --models $(MODELS) --sample-chains $(SAMPLE_CHAINS) --sample-warmup $(SAMPLE_WARMUP) --sample-draws $(SAMPLE_DRAWS) --approximation-draws $(APPROXIMATION_DRAWS) --variational-iterations $(VARIATIONAL_ITERATIONS) --optimize-iterations $(OPTIMIZE_ITERATIONS) --pathfinder-paths $(PATHFINDER_PATHS) --predictive-draws $(PREDICTIVE_DRAWS)
+FREESOLV_BENCHMARK_ARGS := --methods $(FREESOLV_METHODS) --models $(FREESOLV_MODELS) --sample-chains $(SAMPLE_CHAINS) --sample-warmup $(SAMPLE_WARMUP) --sample-draws $(SAMPLE_DRAWS) --approximation-draws $(APPROXIMATION_DRAWS) --variational-iterations $(VARIATIONAL_ITERATIONS) --optimize-iterations $(OPTIMIZE_ITERATIONS) --pathfinder-paths $(PATHFINDER_PATHS) --predictive-draws $(PREDICTIVE_DRAWS)
 QM9_LIMIT_QM9_ARG := $(if $(QM9_LIMIT),--limit $(QM9_LIMIT),)
 QM9_LIMIT_BENCHMARK_ARG := $(if $(QM9_LIMIT),--qm9-limit $(QM9_LIMIT),)
 ZINC_LIMIT_BENCHMARK_ARG := $(if $(ZINC_LIMIT),--zinc-limit $(ZINC_LIMIT),)
@@ -110,7 +113,7 @@ TIMING_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),timing/paper/r
 FREESOLV_RESULTS_SUBDIR := freesolv/run_$(RUN_TIMESTAMP)
 QM9_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),qm9/paper/run_$(RUN_TIMESTAMP),qm9/run_$(RUN_TIMESTAMP))
 
-.PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-activate python-parse python-parse-smiles python-to-smiles python-pretty-example python-benchmark-smoke python-benchmark-qm9 python-benchmark-zinc freesolv qm9 benchmark benchmark-small benchmark-paper benchmark-bg timing catboost-geom-model catboost-geom-model-paper model
+.PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-activate python-parse python-parse-smiles python-to-smiles python-pretty-example python-benchmark-qm9 python-benchmark-zinc freesolv qm9 benchmark benchmark-small benchmark-paper benchmark-bg timing catboost-geom-model catboost-geom-model-paper model
 
 help:
 	@printf "%s\n" \
@@ -383,25 +386,6 @@ python-to-smiles:
 python-pretty-example:
 	$(PYTHON_CMD) -m moladt.cli pretty-example $(EXAMPLE)
 
-python-benchmark-smoke:
-	@printf "%s\n" \
-	"Running FreeSolv smoke benchmark." \
-	"  repo: MolADT-Bayes-Python" \
-	"  first benchmark run prerequisite: make python-cmdstan-install" \
-	"  command: scripts.run_all freesolv" \
-	"  dataset: FreeSolv" \
-	"  results_dir: $(RESULTS_ROOT)" \
-	"  inference_preset: $(INFERENCE_PRESET)" \
-	"  methods: $(METHODS)" \
-	"  models: $(MODELS)" \
-	"  sample_chains=$(SAMPLE_CHAINS) sample_warmup=$(SAMPLE_WARMUP) sample_draws=$(SAMPLE_DRAWS)" \
-	"  approximation_draws=$(APPROXIMATION_DRAWS) variational_iterations=$(VARIATIONAL_ITERATIONS)" \
-	"  optimize_iterations=$(OPTIMIZE_ITERATIONS) pathfinder_paths=$(PATHFINDER_PATHS) predictive_draws=$(PREDICTIVE_DRAWS)" \
-	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
-	"  toolchain_env: $(if $(DARWIN_SDKROOT),apple-xcrun,default)" \
-	"  expected outputs: $(RESULTS_ROOT)/results.csv and $(RESULTS_ROOT)/details/"
-	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all freesolv $(VERBOSE_ARG) $(BENCHMARK_ARGS)
-
 python-benchmark-qm9:
 	@printf "%s\n" \
 	"Running QM9 benchmark export and Stan sweep." \
@@ -450,11 +434,11 @@ freesolv:
 	"  results_dir: results/$(FREESOLV_RESULTS_SUBDIR)" \
 	"  paper baseline: MoleculeNet MPNN RMSE 1.15" \
 	"  inference_preset: $(INFERENCE_PRESET)" \
-	"  methods: $(METHODS)" \
-	"  models: $(MODELS)" \
+	"  methods: $(FREESOLV_METHODS)" \
+	"  models: $(FREESOLV_MODELS)" \
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
 	"  expected figure: results/$(FREESOLV_RESULTS_SUBDIR)/freesolv_rmse_vs_moleculenet.svg"
-	MOLADT_RESULTS_DIR=results/$(FREESOLV_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all freesolv $(VERBOSE_ARG) $(BENCHMARK_ARGS)
+	MOLADT_RESULTS_DIR=results/$(FREESOLV_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all freesolv $(VERBOSE_ARG) $(FREESOLV_BENCHMARK_ARGS)
 
 qm9:
 	@printf "%s\n" \

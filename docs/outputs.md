@@ -27,12 +27,13 @@ Timing runs also write:
 
 ## The Two Comparison Figures
 
-Each predictive run writes only the two reviewer-facing MoleculeNet comparisons:
+Each predictive run writes only the two MoleculeNet comparison figures:
 
 - `freesolv_rmse_vs_moleculenet.svg`
 - `qm9_mae_vs_moleculenet.svg`
 
-Each figure now shows the validation-selected local `Training` and `Test` metrics first, followed by the cited `Paper` baseline.
+The FreeSolv figure shows local `Training`, `Validation`, and `Test` metrics, followed by the cited `Paper` baseline.
+The QM9 figure shows local `Training` and `Test` metrics, followed by the cited `Paper` baseline.
 
 ## Other Useful Files
 
@@ -49,4 +50,4 @@ Use the files in this order:
 2. `freesolv_rmse_vs_moleculenet.svg` and `qm9_mae_vs_moleculenet.svg` for the paper comparison
 3. `details/` when you need raw rows for analysis or plotting
 
-For timing runs specifically, `details/zinc_timing.csv` now separates the manifest CSV field-to-string baseline (`smiles_csv_string_parse`) from the local SMILES parser and MolADT file parser.
+For timing runs specifically, `details/zinc_timing.csv` separates the manifest CSV field-to-string baseline (`smiles_csv_string_parse`) from the local SMILES parser and MolADT file parser.

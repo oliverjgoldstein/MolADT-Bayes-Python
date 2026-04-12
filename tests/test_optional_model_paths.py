@@ -9,7 +9,7 @@ import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
-from scripts.features import FeatureTable, featurize_moladt_geometry_records, featurize_moladt_typed_geometry_records
+from scripts.features import FeatureTable, featurize_moladt_featurized_geometry_records, featurize_moladt_geometry_records
 from scripts.geometry_runner import _import_geometry_stack
 from scripts.model_errors import OptionalModelDependencyError
 from scripts.model_registry import RegisteredModel
@@ -91,7 +91,7 @@ def test_moladt_geometry_export_creation(tmp_path, monkeypatch) -> None:
     assert exported.metadata_path.exists()
 
 
-def test_moladt_typed_geometry_export_creation(tmp_path, monkeypatch) -> None:
+def test_moladt_featurized_geometry_export_creation(tmp_path, monkeypatch) -> None:
     import scripts.splits as splits
 
     monkeypatch.setattr(splits, "PROCESSED_DATA_DIR", tmp_path)
@@ -104,9 +104,9 @@ def test_moladt_typed_geometry_export_creation(tmp_path, monkeypatch) -> None:
         ]
     )
 
-    geometry_table = featurize_moladt_typed_geometry_records(
+    geometry_table = featurize_moladt_featurized_geometry_records(
         frame,
-        dataset_name="demo_geom_typed",
+        dataset_name="demo_geom_featurized",
         mol_id_column="mol_id",
         mol_column="rdkit_mol",
         target_column="mu",
@@ -115,12 +115,12 @@ def test_moladt_typed_geometry_export_creation(tmp_path, monkeypatch) -> None:
     exported = export_geometric_splits(
         geometry_table,
         dataset_name="demo",
-        representation="moladt_typed_geom",
+        representation="moladt_featurized_geom",
         target_name="mu",
         seed=7,
     )
 
-    assert exported.representation == "moladt_typed_geom"
+    assert exported.representation == "moladt_featurized_geom"
     assert exported.global_features is not None
     assert "pair_count_c_o" in exported.global_feature_names
     assert "aprdf_all_1p5a" in exported.global_feature_names

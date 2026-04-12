@@ -22,12 +22,19 @@ from .report_graphs import (
 )
 from .stan_runner import ALL_METHODS, StanRunConfig, run_model_suite, write_stan_data_json
 
+DEFAULT_STAN_METHODS = tuple(ALL_METHODS)
+DEFAULT_STAN_METHODS_ARG = ",".join(DEFAULT_STAN_METHODS)
+DEFAULT_STAN_MODELS = ("bayes_linear_student_t", "bayes_hierarchical_shrinkage")
+DEFAULT_STAN_MODELS_ARG = ",".join(DEFAULT_STAN_MODELS)
+DEFAULT_FREESOLV_STAN_METHODS = ("laplace",)
+DEFAULT_FREESOLV_STAN_MODELS = ("bayes_gp_rbf_screened",)
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m scripts.run_all")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    freesolv = subparsers.add_parser("freesolv", aliases=["smoke-test"], help="Run the FreeSolv benchmark")
+    freesolv = subparsers.add_parser("freesolv", help="Run the FreeSolv benchmark")
     _add_common_benchmark_args(freesolv)
     freesolv.add_argument("--include-moladt-predictive", action="store_true")
     freesolv.add_argument("--skip-moladt", dest="skip_moladt", action="store_true")
@@ -74,12 +81,12 @@ def _add_common_benchmark_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--force", action="store_true")
     parser.add_argument(
         "--methods",
-        default=",".join(ALL_METHODS),
+        default=DEFAULT_STAN_METHODS_ARG,
         help="Comma-separated inference methods: sample,variational,pathfinder,optimize,laplace",
     )
     parser.add_argument(
         "--models",
-        default="bayes_linear_student_t,bayes_hierarchical_shrinkage",
+        default=DEFAULT_STAN_MODELS_ARG,
         help="Comma-separated Stan models to run",
     )
     parser.add_argument("--sample-chains", type=int, default=2)
@@ -109,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
     training_curve_rows: list[dict[str, object]] = []
     model_artifact_rows: list[dict[str, object]] = []
 
-    if args.command in {"freesolv", "smoke-test"}:
+    if args.command == "freesolv":
         if args.verbose:
             log("Starting FreeSolv benchmark")
             log(f"Results directory: {display_path(RESULTS_DIR)}")
@@ -242,7 +249,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if metrics_rows:
         if args.verbose:
-            total_stages = 2 if args.command in {"freesolv", "smoke-test", "qm9", "models"} else 3 if args.command == "benchmark" else 1
+            total_stages = 2 if args.command in {"freesolv", "qm9", "models"} else 3 if args.command == "benchmark" else 1
             log_stage(
                 "benchmark",
                 total_stages,
@@ -317,8 +324,8 @@ def _extend_with_property_results(
     extra_models: tuple[str, ...],
     args: argparse.Namespace,
 ) -> None:
-    methods = tuple(method.strip() for method in args.methods.split(",") if method.strip())
-    models = tuple(model.strip() for model in args.models.split(",") if model.strip())
+    methods = _stan_methods_for_artifacts(artifacts, args)
+    models = _stan_models_for_artifacts(artifacts, args)
     config = StanRunConfig(
         methods=methods,
         seed=args.seed,
@@ -333,11 +340,20 @@ def _extend_with_property_results(
         verbose=args.verbose,
     )
     moladt_bundle = getattr(artifacts, "moladt_export", None)
-    if moladt_bundle is None:
-        raise RuntimeError("MolADT export is required for the Stan benchmark")
     if extra_models and args.verbose:
         log("Ignoring optional non-Stan models for the MolADT-only benchmark contract.")
-    for bundle in (moladt_bundle,):
+    moladt_featurized_bundle = getattr(artifacts, "moladt_featurized_export", None)
+    if isinstance(artifacts, FreeSolvArtifacts) and models == DEFAULT_FREESOLV_STAN_MODELS:
+        if moladt_featurized_bundle is None:
+            raise RuntimeError("FreeSolv featurized export is required for the reviewer benchmark")
+        bundles: list[ExportedDataset] = [moladt_featurized_bundle]
+    else:
+        if moladt_bundle is None:
+            raise RuntimeError("MolADT export is required for the Stan benchmark")
+        bundles = [moladt_bundle]
+        if moladt_featurized_bundle is not None:
+            bundles.append(moladt_featurized_bundle)
+    for bundle in bundles:
         write_stan_data_json(bundle, student_df=config.student_df)
         if args.verbose:
             log(
@@ -346,12 +362,39 @@ def _extend_with_property_results(
                 f"features={len(bundle.feature_names)}"
             )
         for model_name in models:
+            if model_name == "bayes_gp_rbf_screened" and bundle.representation != "moladt_featurized":
+                if args.verbose:
+                    log(
+                        f"[{bundle.dataset_name}/{bundle.representation}] "
+                        f"Skipping `{model_name}` because it is reserved for the SDF-backed featurized FreeSolv path"
+                    )
+                continue
             if args.verbose:
                 log(f"[{bundle.dataset_name}/{bundle.representation}] Running Stan model `{model_name}`")
             rows, predictions, coefficients = run_model_suite(bundle, model_name=model_name, config=config)
             metrics_rows.extend(rows)
             prediction_rows.extend(predictions)
             coefficient_rows.extend(coefficients)
+
+
+def _stan_models_for_artifacts(
+    artifacts: FreeSolvArtifacts | QM9Artifacts,
+    args: argparse.Namespace,
+) -> tuple[str, ...]:
+    requested = tuple(model.strip() for model in args.models.split(",") if model.strip())
+    if isinstance(artifacts, FreeSolvArtifacts) and args.models == DEFAULT_STAN_MODELS_ARG:
+        return DEFAULT_FREESOLV_STAN_MODELS
+    return requested
+
+
+def _stan_methods_for_artifacts(
+    artifacts: FreeSolvArtifacts | QM9Artifacts,
+    args: argparse.Namespace,
+) -> tuple[str, ...]:
+    requested = tuple(method.strip() for method in args.methods.split(",") if method.strip())
+    if isinstance(artifacts, FreeSolvArtifacts) and args.methods == DEFAULT_STAN_METHODS_ARG:
+        return DEFAULT_FREESOLV_STAN_METHODS
+    return requested
 
 
 def _details_dir() -> Any:
@@ -515,7 +558,13 @@ def _write_generalization_artifacts(metrics: pd.DataFrame) -> pd.DataFrame:
 
 def _build_simple_review_frame(generalization: pd.DataFrame, *, baselines_frame: pd.DataFrame) -> pd.DataFrame:
     rows: list[dict[str, object]] = []
-    for _, row in generalization.iterrows():
+    for dataset, dataset_rows in generalization.groupby("dataset", sort=True):
+        primary_metric, secondary_metric = _metric_priority_for_dataset(str(dataset))
+        ordered_rows = dataset_rows.sort_values(
+            [f"valid_{primary_metric}", f"valid_{secondary_metric}", f"test_{primary_metric}", "fit_runtime_seconds", "representation", "model", "method"],
+            kind="stable",
+        )
+        row = ordered_rows.iloc[0]
         dataset = str(row["dataset"])
         representation = str(row["representation"])
         local_metric_name, local_metric_column = _primary_metric_for_dataset(dataset)
@@ -658,6 +707,7 @@ def _build_moleculenet_comparison_frame(review_frame: pd.DataFrame) -> pd.DataFr
             {
                 "dataset": str(row["dataset"]),
                 "dataset_label": str(row.get("dataset_label", row["dataset"])),
+                "representation": str(row.get("representation", "moladt")),
                 "metric_name": str(row["local_metric_name"]),
                 "train_value": float(row.get("train_metric_value", row["local_metric_value"])),
                 "valid_value": float(row.get("valid_metric_value", row["local_metric_value"])),
@@ -860,7 +910,7 @@ def _write_results_csv(
 
 def _freesolv_context_note(*, baseline_note: str = "") -> str:
     contextual = (
-        "MoleculeNet Table 3 is the external baseline here. The local bar is the best Stan MolADT run, "
+        "MoleculeNet Table 3 is the external baseline here. The local bar is the best validation-selected MolADT run, "
         "so the metric matches but the split and model family are still different."
     )
     if baseline_note:

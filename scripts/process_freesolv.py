@@ -16,6 +16,7 @@ from .features import (
     GeometricFeatureTable,
     canonicalize_smiles,
     featurize_moladt_geometry_records,
+    featurize_moladt_featurized_records,
     featurize_moladt_smiles_dataframe,
     featurize_sdf_geometry_records,
     featurize_smiles_dataframe,
@@ -31,6 +32,7 @@ class FreeSolvArtifacts:
     geometric_exports: dict[str, GeometricDatasetSpec]
     smiles_export: ExportedDataset
     moladt_export: ExportedDataset | None
+    moladt_featurized_export: ExportedDataset | None
     failure_csv_paths: tuple[Path, ...]
 
 
@@ -133,6 +135,7 @@ def process_freesolv_dataset(
     write_failure_csv(smiles_feature_failure_path, smiles_table.failures)
     failure_paths.append(smiles_feature_failure_path)
     moladt_export: ExportedDataset | None = None
+    moladt_featurized_export: ExportedDataset | None = None
     if include_moladt:
         moladt_table = featurize_moladt_smiles_dataframe(
             processed_frame,
@@ -144,6 +147,16 @@ def process_freesolv_dataset(
         moladt_feature_failure_path = PROCESSED_DATA_DIR / "freesolv_moladt_feature_failures.csv"
         write_failure_csv(moladt_feature_failure_path, moladt_table.failures)
         failure_paths.append(moladt_feature_failure_path)
+        moladt_featurized_table = featurize_moladt_featurized_records(
+            processed_frame,
+            dataset_name="freesolv_moladt_featurized",
+            mol_id_column="mol_id",
+            mol_column="moladt_molecule",
+            target_column="expt",
+        )
+        moladt_featurized_feature_failure_path = PROCESSED_DATA_DIR / "freesolv_moladt_featurized_feature_failures.csv"
+        write_failure_csv(moladt_featurized_feature_failure_path, moladt_featurized_table.failures)
+        failure_paths.append(moladt_featurized_feature_failure_path)
         aligned_tabular = _align_feature_tables({"smiles": smiles_table, "moladt": moladt_table})
         smiles_table = aligned_tabular["smiles"]
         moladt_table = aligned_tabular["moladt"]
@@ -168,6 +181,19 @@ def process_freesolv_dataset(
             seed=seed,
             split_partition=split_partition,
         )
+        typed_split_partition = None
+        if not moladt_featurized_table.rows.empty:
+            from .splits import deterministic_split_partition
+
+            typed_split_partition = deterministic_split_partition(len(moladt_featurized_table.rows), seed=seed)
+            moladt_featurized_export = export_standardized_splits(
+                moladt_featurized_table,
+                dataset_name="freesolv",
+                representation="moladt_featurized",
+                target_name="expt",
+                seed=seed,
+                split_partition=typed_split_partition,
+            )
         if verbose:
             log(
                 f"[freesolv 3/{total_stages}] shared_tabular_rows={len(smiles_table.rows)} "
@@ -175,10 +201,20 @@ def process_freesolv_dataset(
                 f"train={len(smiles_export.y_train)} valid={len(smiles_export.y_valid)} test={len(smiles_export.y_test)} "
                 f"(usable_rows_from_sdf={len(smiles_table.rows)}/{source_sdf_count})"
             )
+            if moladt_featurized_export is not None:
+                log(
+                    f"[freesolv 3/{total_stages}] moladt_featurized_rows={len(moladt_featurized_table.rows)} "
+                    f"moladt_featurized_failures={len(moladt_featurized_table.failures)} "
+                    f"train={len(moladt_featurized_export.y_train)} valid={len(moladt_featurized_export.y_valid)} "
+                    f"test={len(moladt_featurized_export.y_test)} "
+                    f"(usable_rows_from_sdf={len(moladt_featurized_table.rows)}/{source_sdf_count})"
+                )
         tabular_exports: dict[str, ExportedDataset] = {
             "smiles": smiles_export,
             "moladt": moladt_export,
         }
+        if moladt_featurized_export is not None:
+            tabular_exports["moladt_featurized"] = moladt_featurized_export
     else:
         smiles_export = export_standardized_splits(
             smiles_table,
@@ -292,6 +328,7 @@ def process_freesolv_dataset(
         geometric_exports=geometric_exports,
         smiles_export=smiles_export,
         moladt_export=moladt_export,
+        moladt_featurized_export=moladt_featurized_export,
         failure_csv_paths=tuple(failure_paths),
     )
 

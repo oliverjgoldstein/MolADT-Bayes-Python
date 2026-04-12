@@ -194,7 +194,7 @@ _TYPED_DIHEDRAL_FEATURES: dict[str, str] = {
     **{_angular_feature_name("torsion_order_weighted", center): "adt_typed_torsions" for center in _DIHEDRAL_CENTERS_DEGREES},
 }
 
-MOLADT_TYPED_FEATURE_GROUPS: dict[str, str] = {
+MOLADT_FEATURIZED_FEATURE_GROUPS: dict[str, str] = {
     **MOLADT_FEATURE_GROUPS,
     **_TYPED_PAIR_COUNT_FEATURES,
     **_TYPED_PAIR_INTERACTION_FEATURES,
@@ -387,7 +387,7 @@ def featurize_moladt_records(
     return FeatureTable(rows=pd.DataFrame(rows), feature_names=feature_names, feature_groups=dict(MOLADT_FEATURE_GROUPS), failures=tuple(failures))
 
 
-def featurize_moladt_typed_records(
+def featurize_moladt_featurized_records(
     dataframe: pd.DataFrame,
     *,
     dataset_name: str,
@@ -409,20 +409,20 @@ def featurize_moladt_typed_records(
         try:
             molecule = _coerce_moladt_molecule(molecule)
             canonical = canonical_smiles_from_molecule(molecule)
-            features = compute_moladt_typed_descriptors(molecule)
+            features = compute_moladt_featurized_descriptors(molecule)
         except Exception as exc:
-            failures.append(FailureRecord(dataset=dataset_name, mol_id=mol_id, stage="moladt_typed_featurize", error=str(exc)))
+            failures.append(FailureRecord(dataset=dataset_name, mol_id=mol_id, stage="moladt_featurized_featurize", error=str(exc)))
             continue
         row: dict[str, Any] = {"mol_id": mol_id, "smiles": canonical, target_column: target}
         if record_index_column is not None:
             row[record_index_column] = int(getattr(record, record_index_column))
         row.update(features)
         rows.append(row)
-    feature_names = tuple(MOLADT_TYPED_FEATURE_GROUPS)
+    feature_names = tuple(MOLADT_FEATURIZED_FEATURE_GROUPS)
     return FeatureTable(
         rows=pd.DataFrame(rows),
         feature_names=feature_names,
-        feature_groups=dict(MOLADT_TYPED_FEATURE_GROUPS),
+        feature_groups=dict(MOLADT_FEATURIZED_FEATURE_GROUPS),
         failures=tuple(failures),
     )
 
@@ -567,7 +567,7 @@ def featurize_moladt_geometry_records(
     )
 
 
-def featurize_moladt_typed_geometry_records(
+def featurize_moladt_featurized_geometry_records(
     dataframe: pd.DataFrame,
     *,
     dataset_name: str,
@@ -583,7 +583,7 @@ def featurize_moladt_typed_geometry_records(
     coordinates: list[np.ndarray] = []
     global_rows: list[dict[str, float]] = []
     failures: list[FailureRecord] = []
-    feature_names = tuple(MOLADT_TYPED_FEATURE_GROUPS)
+    feature_names = tuple(MOLADT_FEATURIZED_FEATURE_GROUPS)
     for record in dataframe.itertuples(index=False):
         mol_id = str(getattr(record, mol_id_column))
         target = float(getattr(record, target_column))
@@ -591,7 +591,7 @@ def featurize_moladt_typed_geometry_records(
         try:
             canonical = canonical_smiles_from_mol(raw_molecule)
             moladt_record = rdkit_mol_to_moladt_record(raw_molecule)
-            descriptor_dict = compute_moladt_typed_descriptors(moladt_record.molecule)
+            descriptor_dict = compute_moladt_featurized_descriptors(moladt_record.molecule)
             ordered_atoms = [moladt_record.molecule.atoms[atom_id] for atom_id in sorted(moladt_record.molecule.atoms)]
             z = np.asarray([atom.attributes.atomic_number for atom in ordered_atoms], dtype=np.int64)
             pos = np.asarray(
@@ -604,7 +604,7 @@ def featurize_moladt_typed_geometry_records(
             if pos.shape != (len(z), 3):
                 raise ValueError(f"Expected MolADT coordinates with shape ({len(z)}, 3) but found {pos.shape}")
         except Exception as exc:
-            failures.append(FailureRecord(dataset=dataset_name, mol_id=mol_id, stage="moladt_typed_geometry_featurize", error=str(exc)))
+            failures.append(FailureRecord(dataset=dataset_name, mol_id=mol_id, stage="moladt_featurized_geometry_featurize", error=str(exc)))
             continue
         row: dict[str, Any] = {"mol_id": mol_id, "smiles": canonical, target_column: target}
         if record_index_column is not None:
@@ -618,7 +618,7 @@ def featurize_moladt_typed_geometry_records(
         atomic_numbers=tuple(atomic_numbers),
         coordinates=tuple(coordinates),
         global_feature_names=feature_names,
-        global_feature_groups=dict(MOLADT_TYPED_FEATURE_GROUPS),
+        global_feature_groups=dict(MOLADT_FEATURIZED_FEATURE_GROUPS),
         global_features=np.asarray([[row[name] for name in feature_names] for row in global_rows], dtype=float) if global_rows else None,
         failures=tuple(failures),
     )
@@ -750,7 +750,7 @@ def _require_rdkit_descriptors():
     return Descriptors, Lipinski, rdMolDescriptors, chem
 
 
-def compute_moladt_typed_descriptors(molecule: Molecule) -> dict[str, float]:
+def compute_moladt_featurized_descriptors(molecule: Molecule) -> dict[str, float]:
     # Legacy richer ADT helper kept for side experiments. It adds typed
     # pair, radial, angle, torsion, and bonding-system channels on top of
     # the compact MolADT descriptor set, which means it is not the fair

@@ -24,7 +24,7 @@ Use `parse-smiles`.
 
 This parses the conservative SMILES subset, validates it, and prints the MolADT structure.
 
-Inside that boundary, `parse-smiles` now does three useful lifts after reading the graph:
+Inside that boundary, `parse-smiles` does three useful lifts after reading the graph:
 
 - it infers terminal hydrogens for supported bare atoms such as `C`, `N`, `O`, and aromatic lowercase atoms
 - it promotes recoverable six-membered delocalized cycles into explicit Dietz `pi_ring` systems when the SMILES uses aromatic lowercase syntax, including ring-closure edges

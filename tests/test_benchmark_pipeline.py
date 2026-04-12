@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -32,13 +33,13 @@ from scripts.features import (
     compute_3d_descriptors,
     compute_base_descriptors,
     featurize_moladt_records,
+    featurize_moladt_featurized_records,
     featurize_moladt_smiles_dataframe,
-    featurize_moladt_typed_records,
 )
-from scripts.process_freesolv import process_freesolv_dataset
+from scripts.process_freesolv import FreeSolvArtifacts, process_freesolv_dataset
 from scripts.process_qm9 import process_qm9_dataset
-from scripts.run_all import build_parser
-from scripts.splits import deterministic_split_indices, deterministic_split_partition, export_standardized_splits
+from scripts.run_all import _stan_methods_for_artifacts, _stan_models_for_artifacts, build_parser
+from scripts.splits import ExportedDataset, deterministic_split_indices, deterministic_split_partition, export_standardized_splits
 from scripts.stan_runner import build_stan_data, write_stan_data_json
 
 
@@ -156,6 +157,90 @@ def test_run_all_parser_accepts_verbose_for_benchmark() -> None:
     assert args.verbose is True
 
 
+def test_run_all_defaults_freesolv_to_single_best_model() -> None:
+    rows = pd.DataFrame([{"mol_id": "mol_1", "smiles": "CCO", "target": 1.0}])
+    bundle = ExportedDataset(
+        dataset_name="freesolv",
+        representation="moladt",
+        target_name="target",
+        split_scheme="fractional:0.800/0.100/0.100",
+        source_row_count=3,
+        used_row_count=3,
+        feature_names=("x1",),
+        feature_groups={"x1": "group_a"},
+        group_names=("group_a",),
+        group_ids=(1,),
+        rows=rows,
+        X_train=np.asarray([[0.0]]),
+        X_valid=np.asarray([[0.0]]),
+        X_test=np.asarray([[0.0]]),
+        y_train=np.asarray([1.0]),
+        y_valid=np.asarray([1.0]),
+        y_test=np.asarray([1.0]),
+        mol_ids_train=("mol_1",),
+        mol_ids_valid=("mol_1",),
+        mol_ids_test=("mol_1",),
+        metadata_path=Path("demo_metadata.json"),
+        feature_csv_path=Path("demo_features.csv"),
+    )
+    artifacts = FreeSolvArtifacts(
+        processed_csv_path=Path("freesolv_processed.csv"),
+        moladt_index_path=None,
+        tabular_exports={"moladt": bundle},
+        geometric_exports={},
+        smiles_export=bundle,
+        moladt_export=bundle,
+        moladt_featurized_export=None,
+        failure_csv_paths=(),
+    )
+
+    args = build_parser().parse_args(["freesolv"])
+
+    assert _stan_models_for_artifacts(artifacts, args) == ("bayes_gp_rbf_screened",)
+
+
+def test_run_all_defaults_freesolv_to_single_best_algorithm() -> None:
+    rows = pd.DataFrame([{"mol_id": "mol_1", "smiles": "CCO", "target": 1.0}])
+    bundle = ExportedDataset(
+        dataset_name="freesolv",
+        representation="moladt",
+        target_name="target",
+        split_scheme="fractional:0.800/0.100/0.100",
+        source_row_count=3,
+        used_row_count=3,
+        feature_names=("x1",),
+        feature_groups={"x1": "group_a"},
+        group_names=("group_a",),
+        group_ids=(1,),
+        rows=rows,
+        X_train=np.asarray([[0.0]]),
+        X_valid=np.asarray([[0.0]]),
+        X_test=np.asarray([[0.0]]),
+        y_train=np.asarray([1.0]),
+        y_valid=np.asarray([1.0]),
+        y_test=np.asarray([1.0]),
+        mol_ids_train=("mol_1",),
+        mol_ids_valid=("mol_1",),
+        mol_ids_test=("mol_1",),
+        metadata_path=Path("demo_metadata.json"),
+        feature_csv_path=Path("demo_features.csv"),
+    )
+    artifacts = FreeSolvArtifacts(
+        processed_csv_path=Path("freesolv_processed.csv"),
+        moladt_index_path=None,
+        tabular_exports={"moladt": bundle},
+        geometric_exports={},
+        smiles_export=bundle,
+        moladt_export=bundle,
+        moladt_featurized_export=None,
+        failure_csv_paths=(),
+    )
+
+    args = build_parser().parse_args(["freesolv"])
+
+    assert _stan_methods_for_artifacts(artifacts, args) == ("laplace",)
+
+
 def test_stan_data_serialization_round_trip(tmp_path, monkeypatch) -> None:
     import scripts.splits as splits
 
@@ -204,14 +289,14 @@ def test_featurize_moladt_records_uses_adt_descriptors() -> None:
     assert float(table.rows.iloc[0]["weight"]) > 0.0
 
 
-def test_featurize_moladt_typed_records_adds_pair_angle_and_torsion_features() -> None:
+def test_featurize_moladt_featurized_records_adds_pair_angle_and_torsion_features() -> None:
     molecule = Chem.AddHs(Chem.MolFromSmiles("CCO"))
     AllChem.EmbedMolecule(molecule, randomSeed=1)
     frame = pd.DataFrame([{"mol_id": "mol_1", "mu": 1.25, "sdf_record_index": 0, "rdkit_mol": molecule}])
 
-    table = featurize_moladt_typed_records(
+    table = featurize_moladt_featurized_records(
         frame,
-        dataset_name="demo_moladt_typed",
+        dataset_name="demo_moladt_featurized",
         mol_id_column="mol_id",
         mol_column="rdkit_mol",
         target_column="mu",
@@ -367,6 +452,95 @@ def test_process_freesolv_creates_processed_directory_before_writing(tmp_path, m
 
     assert processed_dir.is_dir()
     assert artifacts.processed_csv_path.exists()
+
+
+def test_process_freesolv_exports_sdf_backed_moladt_featurized_bundle(tmp_path, monkeypatch) -> None:
+    import scripts.process_freesolv as process_freesolv
+    import scripts.splits as splits
+
+    processed_dir = tmp_path / "processed"
+    monkeypatch.setattr(process_freesolv, "PROCESSED_DATA_DIR", processed_dir)
+    monkeypatch.setattr(splits, "PROCESSED_DATA_DIR", processed_dir)
+
+    class FakeDownloads:
+        csv_path = tmp_path / "SAMPL.csv"
+        repo_extract_dir = tmp_path / "FreeSolv-master"
+
+    fake_frame = pd.DataFrame(
+        [
+            {
+                "mol_id": f"mobley_{index:04d}",
+                "smiles": "O",
+                "smiles_canonical": "O",
+                "expt": float(index),
+                "sdf_relpath": f"sdffiles/mobley_{index:04d}.sdf",
+                "sdf_record_index": 0,
+                "moladt_molecule": object(),
+            }
+            for index in range(12)
+        ]
+    )
+
+    fake_table = FeatureTable(
+        rows=pd.DataFrame(
+            [
+                {"mol_id": f"mobley_{index:04d}", "smiles": "O", "expt": float(index), "x1": float(index), "x2": float(index + 1)}
+                for index in range(12)
+            ]
+        ),
+        feature_names=("x1", "x2"),
+        feature_groups={"x1": "group_a", "x2": "group_b"},
+        failures=(),
+    )
+
+    monkeypatch.setattr(process_freesolv, "download_freesolv", lambda force=False: FakeDownloads())
+    monkeypatch.setattr(process_freesolv, "_load_freesolv_sdf_dataset", lambda downloads: (fake_frame, [], 12))
+    monkeypatch.setattr(process_freesolv, "featurize_smiles_dataframe", lambda *args, **kwargs: fake_table)
+    monkeypatch.setattr(process_freesolv, "featurize_moladt_smiles_dataframe", lambda *args, **kwargs: fake_table)
+    monkeypatch.setattr(process_freesolv, "featurize_moladt_featurized_records", lambda *args, **kwargs: fake_table)
+    monkeypatch.setattr(
+        process_freesolv,
+        "featurize_sdf_geometry_records",
+        lambda *args, **kwargs: process_freesolv.GeometricFeatureTable(
+            rows=pd.DataFrame(
+                [
+                    {"mol_id": f"mobley_{index:04d}", "smiles": "O", "expt": float(index), "sdf_record_index": 0}
+                    for index in range(12)
+                ]
+            ),
+            atomic_numbers=tuple(np.asarray([8], dtype=np.int64) for _ in range(12)),
+            coordinates=tuple(np.asarray([[0.0, 0.0, 0.0]], dtype=float) for _ in range(12)),
+            global_feature_names=("z_mean",),
+            global_feature_groups={"z_mean": "geometry_atoms"},
+            global_features=np.asarray([[8.0] for _ in range(12)], dtype=float),
+            failures=(),
+        ),
+    )
+    monkeypatch.setattr(
+        process_freesolv,
+        "featurize_moladt_geometry_records",
+        lambda *args, **kwargs: process_freesolv.GeometricFeatureTable(
+            rows=pd.DataFrame(
+                [
+                    {"mol_id": f"mobley_{index:04d}", "smiles": "O", "expt": float(index), "sdf_record_index": 0}
+                    for index in range(12)
+                ]
+            ),
+            atomic_numbers=tuple(np.asarray([8], dtype=np.int64) for _ in range(12)),
+            coordinates=tuple(np.asarray([[0.0, 0.0, 0.0]], dtype=float) for _ in range(12)),
+            global_feature_names=("weight",),
+            global_feature_groups={"weight": "adt_composition"},
+            global_features=np.asarray([[18.0] for _ in range(12)], dtype=float),
+            failures=(),
+        ),
+    )
+
+    artifacts = process_freesolv_dataset(include_moladt=True)
+
+    assert "moladt_featurized" in artifacts.tabular_exports
+    assert artifacts.moladt_featurized_export is not None
+    assert artifacts.moladt_featurized_export.source_row_count == 12
+    assert artifacts.moladt_featurized_export.used_row_count == 12
 
 
 def test_process_qm9_creates_processed_directory_before_writing(tmp_path, monkeypatch) -> None:

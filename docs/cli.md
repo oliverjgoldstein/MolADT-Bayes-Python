@@ -14,7 +14,7 @@ It currently exposes four subcommands.
 ./.venv/bin/python -m moladt.cli parse molecules/benzene.sdf
 ```
 
-What it does now:
+What it does:
 
 - reads one SDF record from the given path
 - validates the resulting MolADT structure with `validate_molecule`
@@ -30,7 +30,7 @@ Use `parse` when the source of truth is a file-backed molecule.
 ./.venv/bin/python -m moladt.cli parse-smiles "c1ccccc1"
 ```
 
-What it validates now:
+What it validates:
 
 - the conservative SMILES grammar implemented in [`moladt/io/smiles.py`](../moladt/io/smiles.py)
 - atom, bond, and ring-closure syntax inside that subset
@@ -47,7 +47,7 @@ On success it prints the pretty-printed MolADT structure. It does not print a ti
 ./.venv/bin/python -m moladt.cli to-smiles molecules/benzene.sdf
 ```
 
-What it accepts now:
+What it accepts:
 
 - validated molecules in the conservative classical subset
 - localized single, double, and triple bonds
@@ -57,7 +57,7 @@ Current limitation:
 
 - stored `smiles_stereochemistry` annotations are preserved on parse, but the renderer does not yet emit `@`, `@@`, `/`, or `\`
 
-What it rejects now:
+What it rejects:
 
 - empty molecules
 - structures where rendering would require dropping bonded atoms

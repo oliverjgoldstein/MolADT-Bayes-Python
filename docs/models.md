@@ -1,26 +1,21 @@
 # Models and Features
 
-This page explains how the repo turns molecular data into model inputs.
+This repo benchmarks MolADT by exporting descriptor matrices from the typed molecule object and fitting Stan models to those matrices.
 
-## Our Approach
-
-The approach is simple:
+## Benchmark Shape
 
 - build a typed MolADT `Molecule`
-- turn that object into a numeric descriptor matrix
-- run the local Stan sweep on that matrix
-- keep the best local MolADT run
-- compare that one result to MoleculeNet for FreeSolv and QM9
+- derive a numeric descriptor matrix from that object
+- fit the benchmark model in Stan
+- compare the local result to the matching MoleculeNet baseline
 
-The short version is:
-
-- the benchmark model input is the normal typed `Molecule` object
-- the benchmark export is a MolADT descriptor matrix derived from that object
-- Stan sweeps several inference methods and model variants, then the reporting layer keeps the single best MolADT row per dataset
+The benchmark input is the ordinary typed `Molecule` object. FreeSolv uses the richer `moladt_featurized` branch, while QM9 uses the compact `moladt` branch.
 
 ## Representation Contract
 
-The benchmark path now uses `moladt` only.
+The FreeSolv benchmark uses `moladt_featurized`, the richer SDF-backed branch with pair, radial, angle, torsion, and bonding-system channels.
+
+QM9 uses the compact `moladt` branch for the Stan comparison.
 
 Boundary SMILES still matter because many datasets ship with SMILES strings, but the benchmark object is the typed `Molecule` ADT derived from that boundary string or aligned SDF record.
 
@@ -35,7 +30,7 @@ The typed chemistry object is already the ordinary `Molecule` class:
 - Dietz bonding systems are explicit
 - shell and orbital data remain attached to atoms
 
-So the meaningful question is not "plain MolADT versus typed MolADT". The benchmark model already uses the ordinary typed `Molecule` class.
+The benchmark already uses the ordinary typed `Molecule` class.
 
 ## What The Features Mean
 
@@ -54,18 +49,44 @@ The exported descriptors come from the MolADT object and include:
 
 For the published benchmark comparison, these descriptors are computed from the typed molecule object and then fed into Stan.
 
+### `moladt_featurized`
+
+This is the FreeSolv feature-rich branch.
+
+It keeps the compact MolADT descriptors and adds:
+
+- typed atom-pair count and interaction channels
+- bonding-system summaries
+- effective-bond-order bucket counts
+- APRDF-like radial channels
+- bond-angle channels
+- torsion channels
+
+This branch is exported from the aligned SDF-backed MolADT molecules, so it keeps all `642` local FreeSolv structures in the benchmark split.
+
 ## Stan Boundary
 
 Stan does not fit directly over string objects. The Stan models in this repo consume numeric matrices exported from MolADT descriptors.
 
 ## Model Families
 
-The benchmark sweep contains:
+The repo contains these Stan model families:
 
 - `bayes_linear_student_t`
 - `bayes_hierarchical_shrinkage`
+- `bayes_gp_rbf_screened`
 
-The reporting layer keeps the best local MolADT run from that Stan sweep and compares it to MoleculeNet only:
+`bayes_gp_rbf_screened` is the FreeSolv benchmark model. It screens the richer featurized descriptor matrix down to the strongest training-only channels and then fits an exact RBF Gaussian process in Stan. It was chosen because it performed better than the linear baselines on local validation for the `642`-molecule FreeSolv task.
+
+For FreeSolv, the benchmark contract is:
+
+- representation: `moladt_featurized`
+- model: `bayes_gp_rbf_screened`
+- algorithm: `laplace`
+
+The linear models remain in the repo for QM9 and side experiments.
+
+Reports compare the fixed FreeSolv benchmark run and the selected QM9 local run to MoleculeNet only:
 
 - FreeSolv: local MolADT RMSE versus MoleculeNet MPNN RMSE `1.15`
 - QM9 `mu`: local MolADT MAE versus MoleculeNet DTNN MAE `2.35`
@@ -79,7 +100,7 @@ make benchmark-small
 make timing
 ```
 
-- `make freesolv` writes the long-run `Training` / `Test` / `Paper` FreeSolv figure
+- `make freesolv` writes the `Training` / `Validation` / `Test` / `Paper` FreeSolv figure
 - `make qm9` writes the long-run `Training` / `Test` / `Paper` QM9 figure
 - `make benchmark-small` keeps the lighter subset benchmark path available
 - `make timing` is the separate ingest/interoperability timing path
