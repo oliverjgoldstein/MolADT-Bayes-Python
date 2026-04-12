@@ -29,7 +29,6 @@ MODELS ?= bayes_linear_student_t,bayes_hierarchical_shrinkage
 FREESOLV_MODELS ?= bayes_gp_rbf_screened
 QM9_MODELS ?= bayes_linear_student_t
 PYTHON_EXTRAS ?= dev,ml,geom
-PYTHON_QM9_EXTRAS ?= ml,geom
 RESULTS_SUBDIR ?=
 RUN_TIMESTAMP ?= $(shell date +%Y%m%d_%H%M%S)
 
@@ -120,13 +119,12 @@ BEST_QM9_EXTRA_MODELS := catboost_uncertainty,visnet_ensemble
 QM9_SMALL_RESULTS_SUBDIR := qm9/run_$(RUN_TIMESTAMP)
 QM9_PAPER_RESULTS_SUBDIR := qm9/paper/run_$(RUN_TIMESTAMP)
 
-.PHONY: help python-setup python-qm9-deps python-cmdstan-install python-test python-typecheck python-activate python-parse python-parse-smiles python-to-smiles python-pretty-example python-benchmark-qm9 python-benchmark-zinc freesolv qm9 qm9small qm9paper benchmark benchmark-small benchmark-paper benchmark-bg timing catboost-geom-model catboost-geom-model-paper model
+.PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-activate python-parse python-parse-smiles python-to-smiles python-pretty-example python-benchmark-qm9 python-benchmark-zinc freesolv qm9 qm9small qm9paper benchmark benchmark-small benchmark-paper benchmark-bg timing catboost-geom-model catboost-geom-model-paper model
 
 help:
 	@printf "%s\n" \
 	"Python repo targets:" \
 	"  make python-setup           Create .venv and install the package plus model deps" \
-	"  make python-qm9-deps        Install CatBoost and the PyG geometry stack into the current .venv" \
 	"  make python-cmdstan-install Install CmdStan into .cmdstan (run once before Stan benchmarks)" \
 	"  make python-test            Run the pytest suite" \
 	"  make python-typecheck       Run mypy on the package" \
@@ -155,7 +153,6 @@ help:
 		"  qm9_limit=$(if $(QM9_LIMIT),$(QM9_LIMIT),full-local-download)" \
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
 	"  python_extras=$(PYTHON_EXTRAS)" \
-	"  python_qm9_extras=$(PYTHON_QM9_EXTRAS)" \
 	"  toolchain_env=$(if $(DARWIN_SDKROOT),apple-xcrun,default)" \
 	"  methods=$(METHODS)" \
 	"  models=$(MODELS)" \
@@ -355,58 +352,6 @@ python-setup:
 		fi; \
 		"$$venv_python" -m pip install -U torch-geometric; \
 	fi
-
-python-qm9-deps:
-	@set -e; \
-	venv_python=""; \
-	if [ -f "$(VENV_PYTHON_UNIX)" ]; then \
-		venv_python="$(VENV_PYTHON_UNIX)"; \
-	elif [ -f "$(VENV_PYTHON_WIN)" ]; then \
-		venv_python="$(VENV_PYTHON_WIN)"; \
-	elif [ -f "$(VENV_PYTHON_WIN_ALT)" ]; then \
-		venv_python="$(VENV_PYTHON_WIN_ALT)"; \
-	else \
-		printf "%s\n" \
-		"" \
-		"Could not find a local virtualenv." \
-		"Create it first with:" \
-		"  make python-setup"; \
-		exit 1; \
-	fi; \
-	printf "%s\n" \
-	"Installing QM9 benchmark dependencies into the current virtualenv." \
-	"  repo: MolADT-Bayes-Python" \
-	"  python: $$venv_python" \
-	"  extras: $(PYTHON_QM9_EXTRAS)"; \
-	"$$venv_python" -m pip install -U pip "setuptools<82" wheel; \
-	"$$venv_python" -m pip install -U -e ".[ml]"; \
-	printf "%s\n" "Installing geometry stack in a second phase so torch-dependent build hooks can see PyTorch."; \
-	"$$venv_python" -m pip install -U torch; \
-	torch_tag="$$( "$$venv_python" -c 'import torch; version = torch.__version__.split("+")[0].split("."); print(f"{version[0]}.{version[1]}.0")' )"; \
-	cuda_tag="$$( "$$venv_python" -c 'import torch; cuda = torch.version.cuda; print("cpu" if not cuda else "cu" + cuda.replace(".", ""))' )"; \
-	pyg_wheel_url="https://data.pyg.org/whl/torch-$${torch_tag}+$${cuda_tag}.html"; \
-	if ! "$$venv_python" -m pip install -U torch-scatter -f "$$pyg_wheel_url"; then \
-		printf "%s\n" \
-			"" \
-			"Falling back to a local torch-scatter build without build isolation." \
-			"This is slower, but it lets the build backend import the already-installed torch package."; \
-		"$$venv_python" -m pip install -U --no-build-isolation torch-scatter; \
-	fi; \
-	if ! "$$venv_python" -m pip install -U torch-sparse -f "$$pyg_wheel_url"; then \
-		printf "%s\n" \
-			"" \
-			"Falling back to a local torch-sparse build without build isolation." \
-			"This is slower, but it lets the build backend import the already-installed torch package."; \
-		"$$venv_python" -m pip install -U --no-build-isolation torch-sparse; \
-	fi; \
-	if ! "$$venv_python" -m pip install -U torch-cluster -f "$$pyg_wheel_url"; then \
-		printf "%s\n" \
-			"" \
-			"Falling back to a local torch-cluster build without build isolation." \
-			"This is slower, but it lets the build backend import the already-installed torch package."; \
-		"$$venv_python" -m pip install -U --no-build-isolation torch-cluster; \
-	fi; \
-	"$$venv_python" -m pip install -U torch-geometric
 
 python-cmdstan-install:
 	@printf "%s\n" \

@@ -275,24 +275,6 @@ def test_makefile_python_setup_geom_phase_installs_torch_sparse_before_torch_clu
     assert result.stdout.index('torch-sparse -f "$pyg_wheel_url"') < result.stdout.index('torch-cluster -f "$pyg_wheel_url"')
 
 
-def test_makefile_python_qm9_deps_target_installs_catboost_and_geometry_stack(tmp_path: Path) -> None:
-    _copy_makefile(tmp_path)
-
-    result = subprocess.run(
-        ["make", "-C", str(tmp_path), "-n", "python-qm9-deps", "SYSTEM_PYTHON=python3"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-
-    assert '"$venv_python" -m pip install -U -e ".[ml]"' in result.stdout
-    assert '"$venv_python" -m pip install -U torch' in result.stdout
-    assert '"$venv_python" -m pip install -U torch-scatter -f "$pyg_wheel_url"' in result.stdout
-    assert '"$venv_python" -m pip install -U torch-sparse -f "$pyg_wheel_url"' in result.stdout
-    assert '"$venv_python" -m pip install -U torch-cluster -f "$pyg_wheel_url"' in result.stdout
-    assert '"$venv_python" -m pip install -U torch-geometric' in result.stdout
-
-
 def test_makefile_benchmark_uses_xcrun_toolchain_on_darwin(tmp_path: Path) -> None:
     _copy_makefile(tmp_path)
     _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")

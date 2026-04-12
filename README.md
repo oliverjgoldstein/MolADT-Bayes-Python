@@ -24,7 +24,6 @@ MolADT keeps that chemistry as typed atoms, local bonds, bonding systems, and st
 
 ```bash
 make python-setup
-make python-qm9-deps
 ./.venv/bin/python -m moladt.cli parse-smiles "c1ccccc1"
 # once, before Stan benchmarks
 make python-cmdstan-install
@@ -89,8 +88,6 @@ make benchmark-small
 - `make qm9paper`: the same CatBoost + ViSNet comparison on the paper-sized QM9 split `110,462 / 10,000 / 10,000`. Writes `results/qm9/paper/run_.../qm9_mae_vs_moleculenet.svg`.
 - `make timing`: ZINC ingest and runtime comparison. It separates raw I/O, optional external-toolkit stages, a plain string baseline, our SMILES parser, and our MolADT file reader. Writes `results/timing/paper/run_.../timing_overview.svg`.
 - `make benchmark-small`: lighter QM9 subset check for faster local iteration.
-
-If the optional QM9 models are missing from the current virtualenv, install them with `make python-qm9-deps`.
 
 Results are written under timestamped directories in `results/`, mainly `results/freesolv/run_.../`, `results/qm9/run_.../`, `results/qm9/paper/run_.../`, and `results/timing/paper/run_.../`.
 
