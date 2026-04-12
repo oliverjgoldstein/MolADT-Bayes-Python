@@ -57,7 +57,10 @@ The SDF reader accepts V2000 and the core V3000 CTAB subset used by common struc
 
 The writer still emits V2000. The parser and renderer are intentionally narrower than the full MDL feature surface.
 
-If one SDF file contains multiple molecules, use `from moladt.io.sdf import read_sdf_records; titles = [record.title for record in read_sdf_records("bundle.sdf", limit=3)]` or stream lazily with `from moladt.io.sdf import iter_sdf_records; first_titles = [record.title for record in iter_sdf_records("bundle.sdf", limit=3)]`.
+If one SDF file contains multiple molecules:
+
+- read a small eager slice with `from moladt.io.sdf import read_sdf_records; titles = [record.title for record in read_sdf_records("bundle.sdf", limit=3)]`
+- stream lazily with `from moladt.io.sdf import iter_sdf_records; first_titles = [record.title for record in iter_sdf_records("bundle.sdf", limit=3)]`
 
 The local QM9 and vendored FreeSolv raw files in this workspace are still V2000. The downloader and parser prefer V3000 when a future dataset bundle actually provides it, but the current local raws are not being silently relabeled.
 

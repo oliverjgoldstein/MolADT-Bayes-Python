@@ -108,6 +108,20 @@ def _add_common_benchmark_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--verbose", action="store_true")
 
 
+def _parsed_models_arg(args: argparse.Namespace) -> tuple[str, ...]:
+    return tuple(model.strip() for model in str(args.models).split(",") if model.strip())
+
+
+def _uses_fixed_freesolv_contract(args: argparse.Namespace) -> bool:
+    requested = _parsed_models_arg(args)
+    return requested in (DEFAULT_FREESOLV_STAN_MODELS, DEFAULT_STAN_MODELS)
+
+
+def _uses_fixed_qm9_contract(args: argparse.Namespace) -> bool:
+    requested = _parsed_models_arg(args)
+    return requested in (DEFAULT_QM9_STAN_MODELS, DEFAULT_STAN_MODELS)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     extra_models = _parse_extra_models(args)
@@ -127,6 +141,7 @@ def main(argv: list[str] | None = None) -> int:
             seed=args.seed,
             force=args.force,
             include_moladt=True,
+            include_legacy_tabular=not _uses_fixed_freesolv_contract(args),
             verbose=args.verbose,
         )
         _extend_with_property_results(
@@ -146,7 +161,14 @@ def main(argv: list[str] | None = None) -> int:
             log(f"Starting QM9 benchmark with limit={qm9_limit}, split_mode={qm9_split_mode}")
             log(f"Results directory: {display_path(RESULTS_DIR)}")
             log_stage("benchmark", 1, 3, "Preparing QM9 exports")
-        artifacts = process_qm9_dataset(seed=args.seed, force=args.force, limit=qm9_limit, split_mode=qm9_split_mode, verbose=args.verbose)
+        artifacts = process_qm9_dataset(
+            seed=args.seed,
+            force=args.force,
+            limit=qm9_limit,
+            split_mode=qm9_split_mode,
+            include_legacy_tabular=not _uses_fixed_qm9_contract(args),
+            verbose=args.verbose,
+        )
         _extend_with_property_results(
             artifacts,
             metrics_rows,
@@ -181,6 +203,7 @@ def main(argv: list[str] | None = None) -> int:
             seed=args.seed,
             force=args.force,
             include_moladt=True,
+            include_legacy_tabular=not _uses_fixed_freesolv_contract(args),
             verbose=args.verbose,
         )
         _extend_with_property_results(
@@ -195,7 +218,14 @@ def main(argv: list[str] | None = None) -> int:
         )
         if args.verbose:
             log_stage("benchmark", 2, 3, "Running QM9 benchmark flow")
-        qm9 = process_qm9_dataset(seed=args.seed, force=args.force, limit=qm9_limit, split_mode=qm9_split_mode, verbose=args.verbose)
+        qm9 = process_qm9_dataset(
+            seed=args.seed,
+            force=args.force,
+            limit=qm9_limit,
+            split_mode=qm9_split_mode,
+            include_legacy_tabular=not _uses_fixed_qm9_contract(args),
+            verbose=args.verbose,
+        )
         _extend_with_property_results(
             qm9,
             metrics_rows,
@@ -221,6 +251,7 @@ def main(argv: list[str] | None = None) -> int:
             seed=args.seed,
             force=args.force,
             include_moladt=True,
+            include_legacy_tabular=not _uses_fixed_freesolv_contract(args),
             verbose=args.verbose,
         )
         _extend_with_property_results(
@@ -235,7 +266,14 @@ def main(argv: list[str] | None = None) -> int:
         )
         if args.verbose:
             log_stage("benchmark", 2, 3, "Running QM9 model flow")
-        qm9 = process_qm9_dataset(seed=args.seed, force=args.force, limit=qm9_limit, split_mode=qm9_split_mode, verbose=args.verbose)
+        qm9 = process_qm9_dataset(
+            seed=args.seed,
+            force=args.force,
+            limit=qm9_limit,
+            split_mode=qm9_split_mode,
+            include_legacy_tabular=not _uses_fixed_qm9_contract(args),
+            verbose=args.verbose,
+        )
         _extend_with_property_results(
             qm9,
             metrics_rows,

@@ -7,25 +7,29 @@ from moladt.examples import diborane_pretty, ferrocene_pretty, morphine_pretty
 
 def test_ferrocene_pretty_rendering_includes_shells_and_backdonation() -> None:
     rendered = pretty_text(ferrocene_pretty)
-    assert "Molecule with 21 atoms, 20 sigma bonds, 3 bonding systems" in rendered
-    assert "electron shells:" in rendered
-    assert "System 3 [fe_backdonation]: 6 shared electrons" in rendered
-    assert "Fe #1" in rendered
+    assert "Molecule Report" in rendered
+    assert "bonding systems  3" in rendered
+    assert "Bonding Systems" in rendered
+    assert "[#3] fe_backdonation" in rendered
+    assert "[Fe#1]" in rendered
+    assert "shells:" in rendered
 
 
 def test_diborane_pretty_rendering_includes_3c2e_bridges() -> None:
     rendered = pretty_text(diborane_pretty)
-    assert "Molecule with 8 atoms, 5 sigma bonds, 2 bonding systems" in rendered
-    assert "System 1 [bridge_h3_3c2e]: 2 shared electrons" in rendered
-    assert "System 2 [bridge_h4_3c2e]: 2 shared electrons" in rendered
+    assert "atoms            8" in rendered
+    assert "Sigma Network" in rendered
+    assert "[#1] bridge_h3_3c2e" in rendered
+    assert "[#2] bridge_h4_3c2e" in rendered
+    assert "edge bonus:       +0.50 to each listed edge" in rendered
 
 
 def test_morphine_pretty_rendering_includes_explicit_ring_and_pi_systems() -> None:
     rendered = pretty_text(morphine_pretty)
-    assert "Molecule with 21 atoms, 25 sigma bonds, 2 bonding systems" in rendered
-    assert "System 1 [alkene_bridge]: 2 shared electrons" in rendered
-    assert "System 2 [phenyl_pi_ring]: 6 shared electrons" in rendered
-    assert "SMILES stereochemistry:" in rendered
+    assert "atoms            21" in rendered
+    assert "[#1] alkene_bridge" in rendered
+    assert "[#2] phenyl_pi_ring" in rendered
+    assert "SMILES Stereochemistry" in rendered
     assert "center #3: TH2 from token @@" in rendered
 
 

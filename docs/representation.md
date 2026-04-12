@@ -45,20 +45,23 @@ In MolADT, the structure is stated directly:
 Diborane (B2H6)
 Dietz-style ADT with two explicit 3c-2e bridging hydrogen bonding systems.
 
-Molecule with 8 atoms, 5 sigma bonds, 2 bonding systems
+Molecule Report
+===============
+atoms            8
+sigma bonds      5
+bonding systems  2
 
-Bonding systems (2):
-  System 1 [bridge_h3_3c2e]: 2 shared electrons
-    Atoms: B#1, B#2, H#3
-    Edges (+0.50 to bond order each):
-      B#1 <-> H#3
-      B#2 <-> H#3
+Bonding Systems
+---------------
+[#1] bridge_h3_3c2e
+  shared electrons: 2
+  member atoms:     B#1, B#2, H#3
+  edge bonus:       +0.50 to each listed edge
 
-  System 2 [bridge_h4_3c2e]: 2 shared electrons
-    Atoms: B#1, B#2, H#4
-    Edges (+0.50 to bond order each):
-      B#1 <-> H#4
-      B#2 <-> H#4
+[#2] bridge_h4_3c2e
+  shared electrons: 2
+  member atoms:     B#1, B#2, H#4
+  edge bonus:       +0.50 to each listed edge
 ```
 
 That is the point of the representation. The unusual bonding is not an edge case bolted onto a string format later; it is part of the molecule object itself.

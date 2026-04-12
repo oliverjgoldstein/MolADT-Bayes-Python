@@ -95,6 +95,7 @@ def process_freesolv_dataset(
     seed: int = DEFAULT_SEED,
     force: bool = False,
     include_moladt: bool = True,
+    include_legacy_tabular: bool = True,
     verbose: bool = False,
 ) -> FreeSolvArtifacts:
     total_stages = 4 if include_moladt else 3
@@ -117,36 +118,40 @@ def process_freesolv_dataset(
     write_failure_csv(import_failure_path, import_failures)
     failure_paths.append(import_failure_path)
 
-    if verbose:
-        log_stage(
-            "freesolv",
-            3,
-            total_stages,
-            f"Featurizing FreeSolv boundary strings with SDF-backed molecules (molecules={len(processed_frame)})",
-        )
-    smiles_table = featurize_smiles_dataframe(
-        processed_frame,
-        dataset_name="freesolv_smiles",
-        mol_id_column="mol_id",
-        smiles_column="smiles",
-        target_column="expt",
+    stage_three_message = (
+        f"Featurizing FreeSolv boundary strings with SDF-backed molecules (molecules={len(processed_frame)})"
+        if include_legacy_tabular
+        else f"Featurizing FreeSolv MolADT featurized tables from SDF-backed molecules (molecules={len(processed_frame)})"
     )
-    smiles_feature_failure_path = PROCESSED_DATA_DIR / "freesolv_smiles_feature_failures.csv"
-    write_failure_csv(smiles_feature_failure_path, smiles_table.failures)
-    failure_paths.append(smiles_feature_failure_path)
-    moladt_export: ExportedDataset | None = None
-    moladt_featurized_export: ExportedDataset | None = None
-    if include_moladt:
-        moladt_table = featurize_moladt_smiles_dataframe(
+    if verbose:
+        log_stage("freesolv", 3, total_stages, stage_three_message)
+    smiles_table: FeatureTable | None = None
+    if include_legacy_tabular:
+        smiles_table = featurize_smiles_dataframe(
             processed_frame,
-            dataset_name="freesolv_moladt",
+            dataset_name="freesolv_smiles",
             mol_id_column="mol_id",
             smiles_column="smiles",
             target_column="expt",
         )
-        moladt_feature_failure_path = PROCESSED_DATA_DIR / "freesolv_moladt_feature_failures.csv"
-        write_failure_csv(moladt_feature_failure_path, moladt_table.failures)
-        failure_paths.append(moladt_feature_failure_path)
+        smiles_feature_failure_path = PROCESSED_DATA_DIR / "freesolv_smiles_feature_failures.csv"
+        write_failure_csv(smiles_feature_failure_path, smiles_table.failures)
+        failure_paths.append(smiles_feature_failure_path)
+    moladt_export: ExportedDataset | None = None
+    moladt_featurized_export: ExportedDataset | None = None
+    if include_moladt:
+        moladt_table: FeatureTable | None = None
+        if include_legacy_tabular:
+            moladt_table = featurize_moladt_smiles_dataframe(
+                processed_frame,
+                dataset_name="freesolv_moladt",
+                mol_id_column="mol_id",
+                smiles_column="smiles",
+                target_column="expt",
+            )
+            moladt_feature_failure_path = PROCESSED_DATA_DIR / "freesolv_moladt_feature_failures.csv"
+            write_failure_csv(moladt_feature_failure_path, moladt_table.failures)
+            failure_paths.append(moladt_feature_failure_path)
         moladt_featurized_table = featurize_moladt_featurized_records(
             processed_frame,
             dataset_name="freesolv_moladt_featurized",
@@ -157,30 +162,39 @@ def process_freesolv_dataset(
         moladt_featurized_feature_failure_path = PROCESSED_DATA_DIR / "freesolv_moladt_featurized_feature_failures.csv"
         write_failure_csv(moladt_featurized_feature_failure_path, moladt_featurized_table.failures)
         failure_paths.append(moladt_featurized_feature_failure_path)
-        aligned_tabular = _align_feature_tables({"smiles": smiles_table, "moladt": moladt_table})
-        smiles_table = aligned_tabular["smiles"]
-        moladt_table = aligned_tabular["moladt"]
+        if include_legacy_tabular:
+            assert smiles_table is not None
+            assert moladt_table is not None
+            aligned_tabular = _align_feature_tables({"smiles": smiles_table, "moladt": moladt_table})
+            smiles_table = aligned_tabular["smiles"]
+            moladt_table = aligned_tabular["moladt"]
         split_partition = None
-        if not smiles_table.rows.empty:
+        if not moladt_featurized_table.rows.empty:
             from .splits import deterministic_split_partition
 
-            split_partition = deterministic_split_partition(len(smiles_table.rows), seed=seed)
-        smiles_export = export_standardized_splits(
-            smiles_table,
-            dataset_name="freesolv",
-            representation="smiles",
-            target_name="expt",
-            seed=seed,
-            split_partition=split_partition,
-        )
-        moladt_export = export_standardized_splits(
-            moladt_table,
-            dataset_name="freesolv",
-            representation="moladt",
-            target_name="expt",
-            seed=seed,
-            split_partition=split_partition,
-        )
+            split_partition = deterministic_split_partition(len(moladt_featurized_table.rows), seed=seed)
+        if include_legacy_tabular:
+            assert smiles_table is not None
+            assert moladt_table is not None
+            smiles_export = export_standardized_splits(
+                smiles_table,
+                dataset_name="freesolv",
+                representation="smiles",
+                target_name="expt",
+                seed=seed,
+                split_partition=split_partition,
+            )
+            moladt_export = export_standardized_splits(
+                moladt_table,
+                dataset_name="freesolv",
+                representation="moladt",
+                target_name="expt",
+                seed=seed,
+                split_partition=split_partition,
+            )
+        else:
+            smiles_export = None
+            moladt_export = None
         typed_split_partition = None
         if not moladt_featurized_table.rows.empty:
             from .splits import deterministic_split_partition
@@ -194,14 +208,38 @@ def process_freesolv_dataset(
                 seed=seed,
                 split_partition=typed_split_partition,
             )
-        if verbose:
-            log(
-                f"[freesolv 3/{total_stages}] shared_tabular_rows={len(smiles_table.rows)} "
-                f"smiles_failures={len(smiles_table.failures)} moladt_failures={len(moladt_table.failures)} "
-                f"train={len(smiles_export.y_train)} valid={len(smiles_export.y_valid)} test={len(smiles_export.y_test)} "
-                f"(usable_rows_from_sdf={len(smiles_table.rows)}/{source_sdf_count})"
-            )
+        if include_legacy_tabular:
+            assert smiles_table is not None
+            assert moladt_table is not None
+            assert smiles_export is not None
+            if verbose:
+                log(
+                    f"[freesolv 3/{total_stages}] shared_tabular_rows={len(smiles_table.rows)} "
+                    f"smiles_failures={len(smiles_table.failures)} moladt_failures={len(moladt_table.failures)} "
+                    f"train={len(smiles_export.y_train)} valid={len(smiles_export.y_valid)} test={len(smiles_export.y_test)} "
+                    f"(usable_rows_from_sdf={len(smiles_table.rows)}/{source_sdf_count})"
+                )
+                if moladt_featurized_export is not None:
+                    log(
+                        f"[freesolv 3/{total_stages}] moladt_featurized_rows={len(moladt_featurized_table.rows)} "
+                        f"moladt_featurized_failures={len(moladt_featurized_table.failures)} "
+                        f"train={len(moladt_featurized_export.y_train)} valid={len(moladt_featurized_export.y_valid)} "
+                        f"test={len(moladt_featurized_export.y_test)} "
+                        f"(usable_rows_from_sdf={len(moladt_featurized_table.rows)}/{source_sdf_count})"
+                    )
+            tabular_exports = {
+                "smiles": smiles_export,
+                "moladt": moladt_export,
+            }
             if moladt_featurized_export is not None:
+                tabular_exports["moladt_featurized"] = moladt_featurized_export
+        else:
+            tabular_exports = {}
+            if moladt_featurized_export is not None:
+                tabular_exports["moladt_featurized"] = moladt_featurized_export
+                smiles_export = moladt_featurized_export
+                moladt_export = moladt_featurized_export
+            if verbose and moladt_featurized_export is not None:
                 log(
                     f"[freesolv 3/{total_stages}] moladt_featurized_rows={len(moladt_featurized_table.rows)} "
                     f"moladt_featurized_failures={len(moladt_featurized_table.failures)} "
@@ -209,13 +247,8 @@ def process_freesolv_dataset(
                     f"test={len(moladt_featurized_export.y_test)} "
                     f"(usable_rows_from_sdf={len(moladt_featurized_table.rows)}/{source_sdf_count})"
                 )
-        tabular_exports: dict[str, ExportedDataset] = {
-            "smiles": smiles_export,
-            "moladt": moladt_export,
-        }
-        if moladt_featurized_export is not None:
-            tabular_exports["moladt_featurized"] = moladt_featurized_export
     else:
+        assert smiles_table is not None
         smiles_export = export_standardized_splits(
             smiles_table,
             dataset_name="freesolv",
@@ -341,12 +374,12 @@ def _candidate_freesolv_roots(root: Path) -> tuple[Path, ...]:
     return tuple(candidates)
 
 
-def _find_freesolv_database_json(downloads: FreeSolvDownloads) -> Path:
+def _find_freesolv_database_json(downloads: FreeSolvDownloads) -> Path | None:
     for root in _candidate_freesolv_roots(downloads.repo_extract_dir):
         candidate = root / "database.json"
         if candidate.is_file():
             return candidate
-    raise FileNotFoundError("Could not find FreeSolv database.json alongside the SDF files")
+    return None
 
 
 def _find_freesolv_sdf_dir(downloads: FreeSolvDownloads) -> Path:
@@ -368,6 +401,8 @@ def _find_freesolv_sdf_dir(downloads: FreeSolvDownloads) -> Path:
 
 def _load_freesolv_metadata(downloads: FreeSolvDownloads) -> dict[str, dict[str, object]]:
     database_path = _find_freesolv_database_json(downloads)
+    if database_path is None:
+        raise FileNotFoundError("Could not find FreeSolv database.json alongside the SDF files")
     payload = json.loads(database_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("FreeSolv database.json must decode to an object keyed by compound id")
@@ -377,9 +412,18 @@ def _load_freesolv_metadata(downloads: FreeSolvDownloads) -> dict[str, dict[str,
 def _load_freesolv_sdf_dataset(
     downloads: FreeSolvDownloads,
 ) -> tuple[pd.DataFrame, list[FailureRecord], int]:
-    metadata_by_id = _load_freesolv_metadata(downloads)
     sdf_dir = _find_freesolv_sdf_dir(downloads)
     sdf_paths = sorted(sdf_dir.glob("*.sdf"))
+    database_path = _find_freesolv_database_json(downloads)
+    if database_path is None:
+        processed_frame, csv_failures = _canonicalize_freesolv_csv(downloads)
+        aligned_frame, alignment_failures = _align_freesolv_sdf(downloads, processed_frame)
+        return aligned_frame, [*csv_failures, *alignment_failures], len(sdf_paths)
+
+    payload = json.loads(database_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("FreeSolv database.json must decode to an object keyed by compound id")
+    metadata_by_id = {str(key): value for key, value in payload.items() if isinstance(value, dict)}
     rows: list[dict[str, object]] = []
     failures: list[FailureRecord] = []
     for sdf_path in sdf_paths:
@@ -470,6 +514,7 @@ def _canonicalize_freesolv_csv(downloads: FreeSolvDownloads) -> tuple[pd.DataFra
                 "mol_id": mol_id,
                 "smiles": raw_smiles,
                 "smiles_canonical": canonical,
+                "iupac": str(record.get("iupac", "")).strip(),
                 "expt": float(record["expt"]),
             }
         )
@@ -497,7 +542,7 @@ def _align_freesolv_sdf(downloads: FreeSolvDownloads, processed_frame: pd.DataFr
         for record_index, record in enumerate(iter_sdf_records(sdf_path)):
             mol_id = f"{sdf_path.stem}:{record_index}"
             try:
-                canonical = molecule_to_smiles(record.molecule)
+                canonical = canonicalize_smiles(molecule_to_smiles(record.molecule))
             except Exception as exc:
                 failures.append(FailureRecord(dataset="freesolv", mol_id=mol_id, stage="render_smiles", error=str(exc)))
                 continue
@@ -509,6 +554,7 @@ def _align_freesolv_sdf(downloads: FreeSolvDownloads, processed_frame: pd.DataFr
                         "mol_id": str(match["mol_id"]),
                         "smiles": str(match["smiles"]),
                         "smiles_canonical": canonical,
+                        "iupac": str(match.get("iupac", "")).strip(),
                         "expt": float(match["expt"]),
                         "sdf_relpath": str(sdf_path.relative_to(downloads.repo_extract_dir)),
                         "sdf_record_index": record_index,

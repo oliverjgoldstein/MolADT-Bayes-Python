@@ -98,6 +98,7 @@ def process_qm9_dataset(
     force: bool = False,
     limit: int | None = None,
     split_mode: str = "subset",
+    include_legacy_tabular: bool = True,
     verbose: bool = False,
 ) -> QM9Artifacts:
     if split_mode == "paper" and limit is not None and limit < QM9_PAPER_TOTAL:
@@ -105,7 +106,7 @@ def process_qm9_dataset(
             f"QM9 paper split requires at least {QM9_PAPER_TOTAL} aligned molecules; "
             "omit --limit or provide a larger value"
         )
-    total_stages = 5
+    total_stages = 5 if include_legacy_tabular else 4
     if verbose:
         log_stage(
             "qm9",
@@ -129,31 +130,38 @@ def process_qm9_dataset(
     processing_failure_path = PROCESSED_DATA_DIR / "qm9_processing_failures.csv"
     write_failure_csv(processing_failure_path, failures)
     failure_paths.append(processing_failure_path)
-    if verbose:
-        log_stage("qm9", 2, total_stages, f"Featurizing QM9 SMILES records (rows={len(combined_frame)})")
-    smiles_table = featurize_smiles_dataframe(
-        combined_frame.loc[:, ["mol_id", "smiles", "mu"]],
-        dataset_name="qm9_smiles",
-        mol_id_column="mol_id",
-        smiles_column="smiles",
-        target_column="mu",
-    )
-    smiles_feature_failure_path = PROCESSED_DATA_DIR / "qm9_smiles_feature_failures.csv"
-    write_failure_csv(smiles_feature_failure_path, smiles_table.failures)
-    failure_paths.append(smiles_feature_failure_path)
+    smiles_table: FeatureTable | None = None
+    moladt_table: FeatureTable | None = None
+    stage_three_index = 3 if include_legacy_tabular else 2
+    if include_legacy_tabular:
+        if verbose:
+            log_stage("qm9", 2, total_stages, f"Featurizing QM9 SMILES records (rows={len(combined_frame)})")
+        smiles_table = featurize_smiles_dataframe(
+            combined_frame.loc[:, ["mol_id", "smiles", "mu"]],
+            dataset_name="qm9_smiles",
+            mol_id_column="mol_id",
+            smiles_column="smiles",
+            target_column="mu",
+        )
+        smiles_feature_failure_path = PROCESSED_DATA_DIR / "qm9_smiles_feature_failures.csv"
+        write_failure_csv(smiles_feature_failure_path, smiles_table.failures)
+        failure_paths.append(smiles_feature_failure_path)
 
-    if verbose:
-        log_stage("qm9", 3, total_stages, f"Featurizing QM9 MolADT-from-SMILES tables (rows={len(combined_frame)})")
-    moladt_table = featurize_moladt_smiles_dataframe(
-        combined_frame.loc[:, ["mol_id", "smiles", "mu"]],
-        dataset_name="qm9_moladt",
-        mol_id_column="mol_id",
-        smiles_column="smiles",
-        target_column="mu",
-    )
-    moladt_feature_failure_path = PROCESSED_DATA_DIR / "qm9_moladt_feature_failures.csv"
-    write_failure_csv(moladt_feature_failure_path, moladt_table.failures)
-    failure_paths.append(moladt_feature_failure_path)
+        if verbose:
+            log_stage("qm9", 3, total_stages, f"Featurizing QM9 MolADT-from-SMILES tables (rows={len(combined_frame)})")
+        moladt_table = featurize_moladt_smiles_dataframe(
+            combined_frame.loc[:, ["mol_id", "smiles", "mu"]],
+            dataset_name="qm9_moladt",
+            mol_id_column="mol_id",
+            smiles_column="smiles",
+            target_column="mu",
+        )
+        moladt_feature_failure_path = PROCESSED_DATA_DIR / "qm9_moladt_feature_failures.csv"
+        write_failure_csv(moladt_feature_failure_path, moladt_table.failures)
+        failure_paths.append(moladt_feature_failure_path)
+    elif verbose:
+        log_stage("qm9", stage_three_index, total_stages, f"Featurizing QM9 MolADT featurized tables from SDF-backed records (rows={len(combined_frame)})")
+
     moladt_featurized_table = featurize_moladt_featurized_records(
         combined_frame.loc[:, ["mol_id", "mu", "sdf_record_index", "moladt_molecule"]],
         dataset_name="qm9_moladt_featurized",
@@ -165,40 +173,50 @@ def process_qm9_dataset(
     moladt_featurized_feature_failure_path = PROCESSED_DATA_DIR / "qm9_moladt_featurized_feature_failures.csv"
     write_failure_csv(moladt_featurized_feature_failure_path, moladt_featurized_table.failures)
     failure_paths.append(moladt_featurized_feature_failure_path)
-    aligned_tabular = _align_feature_tables(
-        {
-            "smiles": smiles_table,
-            "moladt": moladt_table,
-            "moladt_featurized": moladt_featurized_table,
-        }
-    )
-    smiles_table = aligned_tabular["smiles"]
-    moladt_table = aligned_tabular["moladt"]
-    moladt_featurized_table = aligned_tabular["moladt_featurized"]
-    split_partition = _qm9_split_partition(len(smiles_table.rows), seed=seed, split_mode=split_mode)
-    if verbose:
+    if include_legacy_tabular:
+        assert smiles_table is not None
+        assert moladt_table is not None
+        aligned_tabular = _align_feature_tables(
+            {
+                "smiles": smiles_table,
+                "moladt": moladt_table,
+                "moladt_featurized": moladt_featurized_table,
+            }
+        )
+        smiles_table = aligned_tabular["smiles"]
+        moladt_table = aligned_tabular["moladt"]
+        moladt_featurized_table = aligned_tabular["moladt_featurized"]
+    split_partition = _qm9_split_partition(len(moladt_featurized_table.rows), seed=seed, split_mode=split_mode)
+    if include_legacy_tabular and verbose:
+        assert smiles_table is not None
         log(
             f"[qm9 3/{total_stages}] shared_tabular_rows={len(smiles_table.rows)} "
             f"split_train={len(split_partition.train_indices)} "
             f"split_valid={len(split_partition.valid_indices)} "
             f"split_test={len(split_partition.test_indices)}"
         )
-    smiles_export = export_standardized_splits(
-        smiles_table,
-        dataset_name="qm9",
-        representation="smiles",
-        target_name="mu",
-        seed=seed,
-        split_partition=split_partition,
-    )
-    moladt_export = export_standardized_splits(
-        moladt_table,
-        dataset_name="qm9",
-        representation="moladt",
-        target_name="mu",
-        seed=seed,
-        split_partition=split_partition,
-    )
+    if include_legacy_tabular:
+        assert smiles_table is not None
+        assert moladt_table is not None
+        smiles_export = export_standardized_splits(
+            smiles_table,
+            dataset_name="qm9",
+            representation="smiles",
+            target_name="mu",
+            seed=seed,
+            split_partition=split_partition,
+        )
+        moladt_export = export_standardized_splits(
+            moladt_table,
+            dataset_name="qm9",
+            representation="moladt",
+            target_name="mu",
+            seed=seed,
+            split_partition=split_partition,
+        )
+    else:
+        smiles_export = None
+        moladt_export = None
     moladt_featurized_export = export_standardized_splits(
         moladt_featurized_table,
         dataset_name="qm9",
@@ -207,30 +225,47 @@ def process_qm9_dataset(
         seed=seed,
         split_partition=split_partition,
     )
-    tabular_exports: dict[str, ExportedDataset] = {
-        "smiles": smiles_export,
-        "moladt": moladt_export,
-        "moladt_featurized": moladt_featurized_export,
-    }
-    if verbose:
-        log(
-            f"[qm9 2/{total_stages}] smiles_rows={len(smiles_table.rows)} "
-            f"smiles_feature_failures={len(smiles_table.failures)} "
-            f"train={len(smiles_export.y_train)} valid={len(smiles_export.y_valid)} test={len(smiles_export.y_test)}"
-        )
-        log(
-            f"[qm9 3/{total_stages}] moladt_rows={len(moladt_table.rows)} "
-            f"moladt_feature_failures={len(moladt_table.failures)} "
-            f"train={len(moladt_export.y_train)} valid={len(moladt_export.y_valid)} test={len(moladt_export.y_test)}"
-        )
-        log(
-            f"[qm9 3/{total_stages}] moladt_featurized_rows={len(moladt_featurized_table.rows)} "
-            f"moladt_featurized_failures={len(moladt_featurized_table.failures)} "
-            f"train={len(moladt_featurized_export.y_train)} valid={len(moladt_featurized_export.y_valid)} test={len(moladt_featurized_export.y_test)}"
-        )
+    if include_legacy_tabular:
+        assert smiles_export is not None
+        assert moladt_export is not None
+        tabular_exports: dict[str, ExportedDataset] = {
+            "smiles": smiles_export,
+            "moladt": moladt_export,
+            "moladt_featurized": moladt_featurized_export,
+        }
+        if verbose:
+            assert smiles_table is not None
+            assert moladt_table is not None
+            log(
+                f"[qm9 2/{total_stages}] smiles_rows={len(smiles_table.rows)} "
+                f"smiles_feature_failures={len(smiles_table.failures)} "
+                f"train={len(smiles_export.y_train)} valid={len(smiles_export.y_valid)} test={len(smiles_export.y_test)}"
+            )
+            log(
+                f"[qm9 3/{total_stages}] moladt_rows={len(moladt_table.rows)} "
+                f"moladt_feature_failures={len(moladt_table.failures)} "
+                f"train={len(moladt_export.y_train)} valid={len(moladt_export.y_valid)} test={len(moladt_export.y_test)}"
+            )
+            log(
+                f"[qm9 {stage_three_index}/{total_stages}] moladt_featurized_rows={len(moladt_featurized_table.rows)} "
+                f"moladt_featurized_failures={len(moladt_featurized_table.failures)} "
+                f"train={len(moladt_featurized_export.y_train)} valid={len(moladt_featurized_export.y_valid)} test={len(moladt_featurized_export.y_test)}"
+            )
+    else:
+        tabular_exports = {"moladt_featurized": moladt_featurized_export}
+        smiles_export = moladt_featurized_export
+        moladt_export = moladt_featurized_export
+        if verbose:
+            log(
+                f"[qm9 {stage_three_index}/{total_stages}] moladt_featurized_rows={len(moladt_featurized_table.rows)} "
+                f"moladt_featurized_failures={len(moladt_featurized_table.failures)} "
+                f"train={len(moladt_featurized_export.y_train)} valid={len(moladt_featurized_export.y_valid)} test={len(moladt_featurized_export.y_test)}"
+            )
 
+    geometry_stage_index = 4 if include_legacy_tabular else 3
+    prepared_stage_index = 5 if include_legacy_tabular else 4
     if verbose:
-        log_stage("qm9", 4, total_stages, f"Featurizing QM9 geometry tables (rows={len(combined_frame)})")
+        log_stage("qm9", geometry_stage_index, total_stages, f"Featurizing QM9 geometry tables (rows={len(combined_frame)})")
     sdf_geom_table = featurize_sdf_geometry_records(
         combined_frame,
         dataset_name="qm9_sdf_geom",
@@ -271,7 +306,7 @@ def process_qm9_dataset(
         if verbose:
             geom_export = geometric_exports["sdf_geom"]
             log(
-                f"[qm9 4/{total_stages}] sdf_geom_rows={len(sdf_geom_table.rows)} "
+                f"[qm9 {geometry_stage_index}/{total_stages}] sdf_geom_rows={len(sdf_geom_table.rows)} "
                 f"sdf_geom_feature_failures={len(sdf_geom_table.failures)} "
                 f"train={len(geom_export.train_indices)} valid={len(geom_export.valid_indices)} test={len(geom_export.test_indices)}"
             )
@@ -287,14 +322,14 @@ def process_qm9_dataset(
         if verbose:
             geom_export = geometric_exports["moladt_geom"]
             log(
-                f"[qm9 4/{total_stages}] moladt_geom_rows={len(moladt_geom_table.rows)} "
+                f"[qm9 {geometry_stage_index}/{total_stages}] moladt_geom_rows={len(moladt_geom_table.rows)} "
                 f"moladt_geom_feature_failures={len(moladt_geom_table.failures)} "
                 f"train={len(geom_export.train_indices)} valid={len(geom_export.valid_indices)} test={len(geom_export.test_indices)}"
             )
     if verbose:
         tabular_keys = ", ".join(sorted(tabular_exports))
         geometric_keys = ", ".join(sorted(geometric_exports)) or "(none)"
-        log_stage("qm9", 5, total_stages, f"Prepared exports: tabular={tabular_keys}; geometric={geometric_keys}")
+        log_stage("qm9", prepared_stage_index, total_stages, f"Prepared exports: tabular={tabular_keys}; geometric={geometric_keys}")
 
     return QM9Artifacts(
         processed_csv_path=processed_csv_path,

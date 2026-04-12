@@ -769,6 +769,128 @@ def test_process_qm9_creates_processed_directory_before_writing(tmp_path, monkey
     assert "moladt_featurized" in artifacts.tabular_exports
 
 
+def test_process_qm9_fixed_contract_skips_legacy_smiles_exports(tmp_path, monkeypatch) -> None:
+    import scripts.process_qm9 as process_qm9
+    import scripts.splits as splits
+
+    processed_dir = tmp_path / "processed"
+    monkeypatch.setattr(process_qm9, "PROCESSED_DATA_DIR", processed_dir)
+    monkeypatch.setattr(splits, "PROCESSED_DATA_DIR", processed_dir)
+
+    class FakeDownloads:
+        sdf_path = tmp_path / "qm9.sdf"
+        csv_path = tmp_path / "qm9.csv"
+
+    monkeypatch.setattr(process_qm9, "download_qm9", lambda force=False: FakeDownloads())
+    aligned_frame = pd.DataFrame(
+        [
+            {"mol_id": f"qm9_{index:06d}", "smiles": "O", "mu": float(index), "sdf_record_index": index, "moladt_molecule": object()}
+            for index in range(12)
+        ]
+    )
+    monkeypatch.setattr(process_qm9, "_build_qm9_aligned_frame", lambda *args, **kwargs: (aligned_frame, []))
+
+    def should_not_run(*args, **kwargs):
+        raise AssertionError("legacy SMILES featurizers should not run for the fixed QM9 benchmark contract")
+
+    monkeypatch.setattr(process_qm9, "featurize_smiles_dataframe", should_not_run)
+    monkeypatch.setattr(process_qm9, "featurize_moladt_smiles_dataframe", should_not_run)
+    monkeypatch.setattr(
+        process_qm9,
+        "featurize_moladt_featurized_records",
+        lambda *args, **kwargs: FeatureTable(
+            rows=pd.DataFrame(
+                [
+                    {"mol_id": f"qm9_{index:06d}", "mu": float(index), "sdf_record_index": index, "x1": float(index), "x2": float(index + 1)}
+                    for index in range(12)
+                ]
+            ),
+            feature_names=("x1", "x2"),
+            feature_groups={"x1": "group_a", "x2": "group_b"},
+            failures=(),
+        ),
+    )
+    monkeypatch.setattr(
+        process_qm9,
+        "featurize_sdf_geometry_records",
+        lambda *args, **kwargs: process_qm9.GeometricFeatureTable(
+            rows=pd.DataFrame(
+                [
+                    {"mol_id": f"qm9_{index:06d}", "smiles": "O", "mu": float(index), "sdf_record_index": index}
+                    for index in range(12)
+                ]
+            ),
+            atomic_numbers=tuple(np.asarray([8], dtype=np.int64) for _ in range(12)),
+            coordinates=tuple(np.asarray([[0.0, 0.0, 0.0]], dtype=float) for _ in range(12)),
+            global_feature_names=("z_mean",),
+            global_feature_groups={"z_mean": "geometry_atoms"},
+            global_features=np.asarray([[8.0] for _ in range(12)], dtype=float),
+            failures=(),
+        ),
+    )
+    monkeypatch.setattr(
+        process_qm9,
+        "featurize_moladt_geometry_records",
+        lambda *args, **kwargs: process_qm9.GeometricFeatureTable(
+            rows=pd.DataFrame(
+                [
+                    {"mol_id": f"qm9_{index:06d}", "smiles": "O", "mu": float(index), "sdf_record_index": index}
+                    for index in range(12)
+                ]
+            ),
+            atomic_numbers=tuple(np.asarray([8], dtype=np.int64) for _ in range(12)),
+            coordinates=tuple(np.asarray([[0.0, 0.0, 0.0]], dtype=float) for _ in range(12)),
+            global_feature_names=("weight",),
+            global_feature_groups={"weight": "adt_composition"},
+            global_features=np.asarray([[18.0] for _ in range(12)], dtype=float),
+            failures=(),
+        ),
+    )
+
+    artifacts = process_qm9.process_qm9_dataset(limit=12, split_mode="subset", include_legacy_tabular=False)
+
+    assert set(artifacts.tabular_exports) == {"moladt_featurized"}
+    assert artifacts.moladt_featurized_export is not None
+
+
+def test_load_freesolv_sdf_dataset_falls_back_when_database_json_is_missing(tmp_path, monkeypatch) -> None:
+    import scripts.process_freesolv as process_freesolv
+
+    sdf_dir = tmp_path / "sdffiles"
+    sdf_dir.mkdir(parents=True)
+    (sdf_dir / "mobley_1.sdf").write_text("", encoding="utf-8")
+    (sdf_dir / "mobley_2.sdf").write_text("", encoding="utf-8")
+
+    class FakeDownloads:
+        repo_extract_dir = tmp_path
+        csv_path = tmp_path / "SAMPL.csv"
+
+    aligned = pd.DataFrame(
+        [
+            {
+                "mol_id": "freesolv_0001",
+                "smiles": "O",
+                "smiles_canonical": "O",
+                "iupac": "water",
+                "expt": -6.0,
+                "sdf_relpath": "sdffiles/mobley_1.sdf",
+                "sdf_record_index": 0,
+                "moladt_molecule": object(),
+            }
+        ]
+    )
+    monkeypatch.setattr(process_freesolv, "_find_freesolv_database_json", lambda downloads: None)
+    monkeypatch.setattr(process_freesolv, "_find_freesolv_sdf_dir", lambda downloads: sdf_dir)
+    monkeypatch.setattr(process_freesolv, "_canonicalize_freesolv_csv", lambda downloads: (pd.DataFrame([{"mol_id": "freesolv_0001", "smiles": "O", "smiles_canonical": "O", "iupac": "water", "expt": -6.0}]), []))
+    monkeypatch.setattr(process_freesolv, "_align_freesolv_sdf", lambda downloads, processed_frame: (aligned, []))
+
+    frame, failures, source_sdf_count = process_freesolv._load_freesolv_sdf_dataset(FakeDownloads())
+
+    assert len(frame) == 1
+    assert failures == []
+    assert source_sdf_count == 2
+
+
 def test_featurize_moladt_smiles_dataframe_uses_plain_moladt_feature_schema() -> None:
     frame = pd.DataFrame([{"mol_id": "mol-1", "smiles": "O", "target": 1.0}])
 

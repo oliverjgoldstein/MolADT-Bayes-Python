@@ -95,6 +95,33 @@ Reports compare the fixed FreeSolv benchmark run and the fixed QM9 Stan benchmar
 - FreeSolv: local MolADT RMSE versus MoleculeNet MPNN RMSE `1.15`
 - QM9 `mu`: local MolADT MAE versus MoleculeNet DTNN MAE `2.35`
 
+## Example Code
+
+This is the smallest programmatic example of the fixed QM9 Stan path:
+
+```python
+from scripts.process_qm9 import process_qm9_dataset
+from scripts.stan_runner import StanRunConfig, run_model_suite
+
+artifacts = process_qm9_dataset(limit=2000, split_mode="subset", verbose=True)
+bundle = artifacts.moladt_featurized_export
+assert bundle is not None
+
+config = StanRunConfig(
+    methods=("optimize",),
+    optimize_iterations=2000,
+    predictive_draws=500,
+)
+
+summary_rows, prediction_rows, coefficient_rows = run_model_suite(
+    bundle,
+    model_name="bayes_linear_student_t",
+    config=config,
+)
+```
+
+That call path uses the typed MolADT object only indirectly: Python first featurizes the MolADT molecules into the exported `X/y` bundle, and then Stan fits the model from that numeric matrix. The corresponding Stan sources are [`stan/bayes_linear_student_t.stan`](../stan/bayes_linear_student_t.stan) and [`stan/bayes_gp_rbf_screened.stan`](../stan/bayes_gp_rbf_screened.stan).
+
 ## Benchmark Commands
 
 ```bash
