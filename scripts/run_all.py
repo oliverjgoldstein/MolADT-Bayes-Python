@@ -12,6 +12,7 @@ import pandas as pd
 from .benchmark_zinc import run_zinc_benchmark
 from .common import DEFAULT_SEED, RESULTS_DIR, display_path, ensure_directory, log, log_stage
 from .literature_baselines import literature_baselines_frame
+from .model_errors import OptionalModelDependencyError
 from .model_registry import GEOMETRIC_MODEL_REGISTRY, TABULAR_MODEL_REGISTRY
 from .process_freesolv import FreeSolvArtifacts, process_freesolv_dataset
 from .process_qm9 import QM9Artifacts, process_qm9_dataset
@@ -21,6 +22,8 @@ from .report_graphs import (
     write_timing_stage_overview,
 )
 from .stan_runner import ALL_METHODS, StanRunConfig, run_model_suite, write_stan_data_json
+from .tabular_runner import CatBoostRunConfig
+from .geometry_runner import GeometryRunConfig
 
 DEFAULT_STAN_METHODS = tuple(ALL_METHODS)
 DEFAULT_STAN_METHODS_ARG = ",".join(DEFAULT_STAN_METHODS)
@@ -122,6 +125,13 @@ def _uses_fixed_qm9_contract(args: argparse.Namespace) -> bool:
     return requested in (DEFAULT_QM9_STAN_MODELS, DEFAULT_STAN_MODELS)
 
 
+def _uses_sdf_only_qm9_predictive_contract(
+    args: argparse.Namespace,
+    extra_models: tuple[str, ...],
+) -> bool:
+    return bool(extra_models) and bool(getattr(args, "include_moladt_predictive", False))
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     extra_models = _parse_extra_models(args)
@@ -166,7 +176,10 @@ def main(argv: list[str] | None = None) -> int:
             force=args.force,
             limit=qm9_limit,
             split_mode=qm9_split_mode,
-            include_legacy_tabular=not _uses_fixed_qm9_contract(args),
+            include_legacy_tabular=not (
+                _uses_fixed_qm9_contract(args)
+                or _uses_sdf_only_qm9_predictive_contract(args, extra_models)
+            ),
             verbose=args.verbose,
         )
         _extend_with_property_results(
@@ -223,7 +236,10 @@ def main(argv: list[str] | None = None) -> int:
             force=args.force,
             limit=qm9_limit,
             split_mode=qm9_split_mode,
-            include_legacy_tabular=not _uses_fixed_qm9_contract(args),
+            include_legacy_tabular=not (
+                _uses_fixed_qm9_contract(args)
+                or _uses_sdf_only_qm9_predictive_contract(args, extra_models)
+            ),
             verbose=args.verbose,
         )
         _extend_with_property_results(
@@ -271,7 +287,10 @@ def main(argv: list[str] | None = None) -> int:
             force=args.force,
             limit=qm9_limit,
             split_mode=qm9_split_mode,
-            include_legacy_tabular=not _uses_fixed_qm9_contract(args),
+            include_legacy_tabular=not (
+                _uses_fixed_qm9_contract(args)
+                or _uses_sdf_only_qm9_predictive_contract(args, extra_models)
+            ),
             verbose=args.verbose,
         )
         _extend_with_property_results(
@@ -379,10 +398,8 @@ def _extend_with_property_results(
         predictive_draws=args.predictive_draws,
         verbose=args.verbose,
     )
-    moladt_bundle = getattr(artifacts, "moladt_export", None)
-    if extra_models and args.verbose:
-        log("Ignoring optional non-Stan models for the MolADT-only benchmark contract.")
     moladt_featurized_bundle = getattr(artifacts, "moladt_featurized_export", None)
+    moladt_bundle = getattr(artifacts, "moladt_export", None)
     if isinstance(artifacts, FreeSolvArtifacts) and models == DEFAULT_FREESOLV_STAN_MODELS:
         if moladt_featurized_bundle is None:
             raise RuntimeError("FreeSolv featurized export is required for the reviewer benchmark")
@@ -419,6 +436,37 @@ def _extend_with_property_results(
             metrics_rows.extend(rows)
             prediction_rows.extend(predictions)
             coefficient_rows.extend(coefficients)
+    extra_seeds = _extra_model_seeds(args.seed, args.num_seeds if args.paper_mode else 1)
+    for model_name in extra_models:
+        if model_name in TABULAR_MODEL_REGISTRY:
+            runner = TABULAR_MODEL_REGISTRY[model_name].runner
+            try:
+                for bundle in getattr(artifacts, "tabular_exports", {}).values():
+                    if getattr(bundle, "representation", "") == "smiles":
+                        continue
+                    rows, predictions, artifact_rows = runner(
+                        bundle,
+                        config=CatBoostRunConfig(seeds=extra_seeds, verbose=args.verbose),
+                    )
+                    metrics_rows.extend(rows)
+                    prediction_rows.extend(predictions)
+                    model_artifact_rows.extend(artifact_rows)
+            except OptionalModelDependencyError as exc:
+                log(f"Skipping optional model `{model_name}`: {exc}")
+        elif model_name in GEOMETRIC_MODEL_REGISTRY:
+            runner = GEOMETRIC_MODEL_REGISTRY[model_name].runner
+            try:
+                for bundle in getattr(artifacts, "geometric_exports", {}).values():
+                    rows, predictions, training_curves, artifact_manifest = runner(
+                        bundle,
+                        config=GeometryRunConfig(model_name=model_name, seeds=extra_seeds, verbose=args.verbose),
+                    )
+                    metrics_rows.extend(rows)
+                    prediction_rows.extend(predictions)
+                    training_curve_rows.extend(training_curves)
+                    model_artifact_rows.extend(artifact_manifest)
+            except OptionalModelDependencyError as exc:
+                log(f"Skipping optional model `{model_name}`: {exc}")
 
 
 def _stan_models_for_artifacts(
@@ -976,12 +1024,12 @@ def _qm9_review_note(
 ) -> str:
     if split_scheme.startswith("paper:") or (train_n_eval == 110_462 and valid_n_eval == 10_000 and test_n_eval == 10_000):
         contextual = (
-            "The local run uses paper-sized split counts and the fixed `moladt_featurized` Student-t Stan path with L-BFGS mode fitting, "
-            "but it still compares against MoleculeNet's DTNN MAE row rather than reproducing the original neural training recipe exactly."
+            "The local run uses paper-sized split counts, but it still compares against MoleculeNet's DTNN MAE row "
+            "rather than reproducing the original neural training recipe exactly."
         )
     else:
         contextual = (
-            "MoleculeNet Table 3 is the paper baseline. The metric matches MAE, but the local split and Stan model family "
+            "MoleculeNet Table 3 is the paper baseline. The metric matches MAE, but the local split and training recipe "
             "still differ from the original DTNN benchmark."
         )
     if baseline_note:
@@ -1003,6 +1051,10 @@ def _parse_extra_models(args: argparse.Namespace) -> tuple[str, ...]:
     if unknown:
         raise ValueError(f"Unknown extra model(s): {', '.join(unknown)}")
     return ordered
+
+
+def _extra_model_seeds(base_seed: int, count: int) -> tuple[int, ...]:
+    return tuple(base_seed + 101 * index for index in range(max(1, count)))
 
 
 def _write_timing_report(timing: pd.DataFrame) -> None:

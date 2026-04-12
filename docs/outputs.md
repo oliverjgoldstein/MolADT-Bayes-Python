@@ -5,7 +5,7 @@ Each focused run writes a small timestamped bundle under `results/`.
 ## Main Locations
 
 - FreeSolv: `results/freesolv/run_<timestamp>/`
-- QM9: `results/qm9/paper/run_<timestamp>/` for the default long run, or `results/qm9/run_<timestamp>/` for explicit lighter overrides
+- QM9: `results/qm9/run_<timestamp>/` for the default focused run, or `results/qm9/paper/run_<timestamp>/` when you explicitly request the paper-sized split
 - combined benchmark: `results/paper/run_<timestamp>/` for the default long run, or `results/run_<timestamp>/` for explicit lighter overrides
 - ZINC timing: `results/timing/run_<timestamp>/`
 
@@ -33,7 +33,7 @@ Each predictive run writes only the two MoleculeNet comparison figures:
 - `qm9_mae_vs_moleculenet.svg`
 
 The FreeSolv figure shows local `Training`, `Validation`, and `Test` metrics, followed by the cited `Paper` baseline.
-The QM9 figure shows local `Training` and `Test` metrics, followed by the cited `Paper` baseline for the fixed `moladt_featurized + bayes_linear_student_t + optimize` Stan path.
+The QM9 figure shows local `Training` and `Test` metrics, followed by the cited `Paper` baseline for the validation-selected CatBoost or ViSNet QM9 run over the SDF-backed MolADT benchmark branches.
 
 ## Other Useful Files
 

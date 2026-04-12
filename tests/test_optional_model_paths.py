@@ -13,7 +13,7 @@ from scripts.features import FeatureTable, featurize_moladt_featurized_geometry_
 from scripts.geometry_runner import _import_geometry_stack
 from scripts.model_errors import OptionalModelDependencyError
 from scripts.model_registry import RegisteredModel
-from scripts.run_all import _extend_with_property_results, _parse_extra_models, build_parser
+from scripts.run_all import _extend_with_property_results, _parse_extra_models, _uses_sdf_only_qm9_predictive_contract, build_parser
 from scripts.splits import export_geometric_splits, export_standardized_splits
 from scripts.tabular_runner import CATBOOST_METHOD, CATBOOST_MODEL, CatBoostRunConfig, run_catboost_uncertainty
 
@@ -53,6 +53,21 @@ def test_models_command_defaults_include_both_geometry_families() -> None:
     args = build_parser().parse_args(["models"])
 
     assert _parse_extra_models(args) == ("catboost_uncertainty", "visnet_ensemble", "dimenetpp_ensemble")
+
+
+def test_qm9_predictive_contract_is_sdf_only() -> None:
+    args = build_parser().parse_args(
+        [
+            "qm9",
+            "--include-moladt-predictive",
+            "--models",
+            "",
+            "--extra-models",
+            "catboost_uncertainty,visnet_ensemble",
+        ]
+    )
+
+    assert _uses_sdf_only_qm9_predictive_contract(args, _parse_extra_models(args)) is True
 
 
 def test_moladt_geometry_export_creation(tmp_path, monkeypatch) -> None:
@@ -244,6 +259,60 @@ def test_extend_with_property_results_skips_missing_optional_geometry_dependency
     assert metrics_rows == []
     assert prediction_rows == []
     assert training_curve_rows == []
+
+
+def test_extend_with_property_results_skips_smiles_tabular_bundle(monkeypatch) -> None:
+    import scripts.run_all as run_all
+
+    seen_representations: list[str] = []
+
+    def fake_tabular_runner(bundle, config):
+        seen_representations.append(bundle.representation)
+        return [], [], []
+
+    monkeypatch.setitem(
+        run_all.TABULAR_MODEL_REGISTRY,
+        "catboost_uncertainty",
+        RegisteredModel(name="catboost_uncertainty", input_kind="tabular", runner=fake_tabular_runner),
+    )
+    monkeypatch.setattr(run_all, "write_stan_data_json", lambda *args, **kwargs: None)
+    artifacts = SimpleNamespace(
+        moladt_export=SimpleNamespace(),
+        tabular_exports={
+            "smiles": SimpleNamespace(representation="smiles"),
+            "moladt_featurized": SimpleNamespace(representation="moladt_featurized"),
+        },
+        geometric_exports={},
+    )
+    args = SimpleNamespace(
+        methods="",
+        models="",
+        seed=7,
+        sample_chains=1,
+        sample_warmup=1,
+        sample_draws=1,
+        approximation_draws=1,
+        variational_iterations=1,
+        optimize_iterations=1,
+        pathfinder_paths=1,
+        predictive_draws=1,
+        verbose=False,
+        num_seeds=1,
+        paper_mode=False,
+    )
+
+    _extend_with_property_results(
+        artifacts,
+        [],
+        [],
+        [],
+        [],
+        [],
+        ("catboost_uncertainty",),
+        args,
+    )
+
+    assert seen_representations == ["moladt_featurized"]
 
 
 def test_dimenet_reports_missing_torch_sparse_dependency(monkeypatch) -> None:

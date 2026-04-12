@@ -24,6 +24,7 @@ MolADT keeps that chemistry as typed atoms, local bonds, bonding systems, and st
 
 ```bash
 make python-setup
+make python-qm9-deps
 ./.venv/bin/python -m moladt.cli parse-smiles "c1ccccc1"
 # once, before Stan benchmarks
 make python-cmdstan-install
@@ -77,16 +78,21 @@ Benchmark outputs stay local. `results/` is generated on your machine rather tha
 ```bash
 make freesolv
 make qm9
+make qm9small
+make qm9paper
 make timing
 make benchmark-small
 ```
 
 - `make freesolv`: FreeSolv RMSE comparison. Fixed path `moladt_featurized + bayes_gp_rbf_screened + laplace`. Writes `results/freesolv/run_.../freesolv_rmse_vs_moleculenet.svg`.
-- `make qm9`: QM9 `mu` MAE comparison. Fixed path `moladt_featurized + bayes_linear_student_t + optimize`. Writes `results/qm9/paper/run_.../qm9_mae_vs_moleculenet.svg`.
+- `make qm9` or `make qm9small`: focused QM9 `mu` MAE comparison on the local subset `1600 / 200 / 200`, with `catboost_uncertainty` on the SDF-backed `moladt_featurized` tabular export and `visnet_ensemble` on the geometry exports. Writes `results/qm9/run_.../qm9_mae_vs_moleculenet.svg`.
+- `make qm9paper`: the same CatBoost + ViSNet comparison on the paper-sized QM9 split `110,462 / 10,000 / 10,000`. Writes `results/qm9/paper/run_.../qm9_mae_vs_moleculenet.svg`.
 - `make timing`: ZINC ingest and runtime comparison. It separates raw I/O, optional external-toolkit stages, a plain string baseline, our SMILES parser, and our MolADT file reader. Writes `results/timing/paper/run_.../timing_overview.svg`.
 - `make benchmark-small`: lighter QM9 subset check for faster local iteration.
 
-Results are written under timestamped directories in `results/`, mainly `results/freesolv/run_.../`, `results/qm9/paper/run_.../`, and `results/timing/paper/run_.../`.
+If the optional QM9 models are missing from the current virtualenv, install them with `make python-qm9-deps`.
+
+Results are written under timestamped directories in `results/`, mainly `results/freesolv/run_.../`, `results/qm9/run_.../`, `results/qm9/paper/run_.../`, and `results/timing/paper/run_.../`.
 
 The FreeSolv figure shows `Training`, `Validation`, `Test`, and `Paper`. The QM9 figure shows `Training`, `Test`, and `Paper`.
 

@@ -407,6 +407,6 @@ def _import_catboost() -> Any:
         return importlib.import_module("catboost")
     except ModuleNotFoundError as exc:
         raise OptionalModelDependencyError(
-            "CatBoost is not installed in the local repo environment. Re-run `make python-setup` "
-            "to install the default model stack."
+            "CatBoost is not installed in the local repo environment. Re-run `make python-qm9-deps` "
+            "or `make python-setup` to install the benchmark model stack."
         ) from exc

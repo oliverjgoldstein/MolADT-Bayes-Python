@@ -51,12 +51,12 @@ Each `*_metadata.json` file includes:
 
 ## Relation to the Python Models
 
-Python fits the benchmark Stan models:
+Python still fits the benchmark Stan models for the export-compatible baseline paths:
 
 - FreeSolv: `bayes_gp_rbf_screened`
-- QM9: `bayes_linear_student_t`
+- QM9 Stan baseline: `bayes_linear_student_t`
 
-The Haskell baseline is aligned to the exported linear `X/y` format used by the Python `bayes_linear_student_t` workflow for QM9. It does not re-derive the feature matrix locally.
+The Haskell baseline is aligned to the exported linear `X/y` format used by the Python Stan workflow for QM9. It does not re-derive the feature matrix locally, and it is separate from the focused Python `make qm9` CatBoost + ViSNet path.
 
 Shared modeling assumptions that matter for interop:
 

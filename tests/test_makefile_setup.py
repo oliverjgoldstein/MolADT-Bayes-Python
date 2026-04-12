@@ -89,7 +89,7 @@ def test_makefile_freesolv_target_prints_verbose_context(tmp_path: Path) -> None
     assert "models: bayes_gp_rbf_screened" in result.stdout
 
 
-def test_makefile_qm9_target_prints_fixed_best_path(tmp_path: Path) -> None:
+def test_makefile_qm9_target_prints_recovered_predictive_path(tmp_path: Path) -> None:
     _copy_makefile(tmp_path)
     _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
 
@@ -103,8 +103,49 @@ def test_makefile_qm9_target_prints_fixed_best_path(tmp_path: Path) -> None:
     assert "Running reviewer-facing QM9 comparison." in result.stdout
     assert "paper baseline: MoleculeNet DTNN MAE 2.35" in result.stdout
     assert "./.venv/bin/python -m scripts.run_all qm9" in result.stdout
-    assert "methods: optimize" in result.stdout
-    assert "models: bayes_linear_student_t" in result.stdout
+    assert "qm9small" in result.stdout
+
+
+def test_makefile_qm9small_target_uses_subset_predictive_path(tmp_path: Path) -> None:
+    _copy_makefile(tmp_path)
+    _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
+
+    result = subprocess.run(
+        ["make", "-C", str(tmp_path), "-n", "qm9small", "SYSTEM_PYTHON=python3"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "Running reviewer-facing QM9 comparison." in result.stdout
+    assert "inference_preset: default" in result.stdout
+    assert "qm9_split_mode: subset" in result.stdout
+    assert "qm9_limit: 2000" in result.stdout
+    assert "stan_methods: (disabled)" in result.stdout
+    assert "stan_models: (disabled)" in result.stdout
+    assert "extra_models: catboost_uncertainty,visnet_ensemble" in result.stdout
+    assert '--limit 2000 --split-mode subset --include-moladt-predictive --models "" --extra-models catboost_uncertainty,visnet_ensemble' in result.stdout
+
+
+def test_makefile_qm9paper_target_uses_paper_predictive_path(tmp_path: Path) -> None:
+    _copy_makefile(tmp_path)
+    _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
+
+    result = subprocess.run(
+        ["make", "-C", str(tmp_path), "-n", "qm9paper", "SYSTEM_PYTHON=python3"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "Running reviewer-facing QM9 comparison." in result.stdout
+    assert "inference_preset: paper" in result.stdout
+    assert "qm9_split_mode: paper" in result.stdout
+    assert "qm9_limit: full-local-download" in result.stdout
+    assert "stan_methods: (disabled)" in result.stdout
+    assert "stan_models: (disabled)" in result.stdout
+    assert "extra_models: catboost_uncertainty,visnet_ensemble" in result.stdout
+    assert '--split-mode paper --paper-mode --include-moladt-predictive --models "" --extra-models catboost_uncertainty,visnet_ensemble' in result.stdout
 
 
 def test_makefile_benchmark_defaults_to_timestamped_results_directory(tmp_path: Path) -> None:
@@ -227,9 +268,29 @@ def test_makefile_python_setup_geom_phase_installs_torch_sparse_before_torch_clu
         check=True,
     )
 
+    assert '"$venv_python" -m pip install -U torch-scatter -f "$pyg_wheel_url"' in result.stdout
     assert '"$venv_python" -m pip install -U torch-sparse -f "$pyg_wheel_url"' in result.stdout
     assert '"$venv_python" -m pip install -U torch-cluster -f "$pyg_wheel_url"' in result.stdout
+    assert result.stdout.index('torch-scatter -f "$pyg_wheel_url"') < result.stdout.index('torch-sparse -f "$pyg_wheel_url"')
     assert result.stdout.index('torch-sparse -f "$pyg_wheel_url"') < result.stdout.index('torch-cluster -f "$pyg_wheel_url"')
+
+
+def test_makefile_python_qm9_deps_target_installs_catboost_and_geometry_stack(tmp_path: Path) -> None:
+    _copy_makefile(tmp_path)
+
+    result = subprocess.run(
+        ["make", "-C", str(tmp_path), "-n", "python-qm9-deps", "SYSTEM_PYTHON=python3"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert '"$venv_python" -m pip install -U -e ".[ml]"' in result.stdout
+    assert '"$venv_python" -m pip install -U torch' in result.stdout
+    assert '"$venv_python" -m pip install -U torch-scatter -f "$pyg_wheel_url"' in result.stdout
+    assert '"$venv_python" -m pip install -U torch-sparse -f "$pyg_wheel_url"' in result.stdout
+    assert '"$venv_python" -m pip install -U torch-cluster -f "$pyg_wheel_url"' in result.stdout
+    assert '"$venv_python" -m pip install -U torch-geometric' in result.stdout
 
 
 def test_makefile_benchmark_uses_xcrun_toolchain_on_darwin(tmp_path: Path) -> None:

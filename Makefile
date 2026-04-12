@@ -29,6 +29,7 @@ MODELS ?= bayes_linear_student_t,bayes_hierarchical_shrinkage
 FREESOLV_MODELS ?= bayes_gp_rbf_screened
 QM9_MODELS ?= bayes_linear_student_t
 PYTHON_EXTRAS ?= dev,ml,geom
+PYTHON_QM9_EXTRAS ?= ml,geom
 RESULTS_SUBDIR ?=
 RUN_TIMESTAMP ?= $(shell date +%Y%m%d_%H%M%S)
 
@@ -115,13 +116,17 @@ MODEL_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),models/paper/ru
 TIMING_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),timing/paper/run_$(RUN_TIMESTAMP),timing/run_$(RUN_TIMESTAMP))
 FREESOLV_RESULTS_SUBDIR := freesolv/run_$(RUN_TIMESTAMP)
 QM9_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),qm9/paper/run_$(RUN_TIMESTAMP),qm9/run_$(RUN_TIMESTAMP))
+BEST_QM9_EXTRA_MODELS := catboost_uncertainty,visnet_ensemble
+QM9_SMALL_RESULTS_SUBDIR := qm9/run_$(RUN_TIMESTAMP)
+QM9_PAPER_RESULTS_SUBDIR := qm9/paper/run_$(RUN_TIMESTAMP)
 
-.PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-activate python-parse python-parse-smiles python-to-smiles python-pretty-example python-benchmark-qm9 python-benchmark-zinc freesolv qm9 benchmark benchmark-small benchmark-paper benchmark-bg timing catboost-geom-model catboost-geom-model-paper model
+.PHONY: help python-setup python-qm9-deps python-cmdstan-install python-test python-typecheck python-activate python-parse python-parse-smiles python-to-smiles python-pretty-example python-benchmark-qm9 python-benchmark-zinc freesolv qm9 qm9small qm9paper benchmark benchmark-small benchmark-paper benchmark-bg timing catboost-geom-model catboost-geom-model-paper model
 
 help:
 	@printf "%s\n" \
 	"Python repo targets:" \
 	"  make python-setup           Create .venv and install the package plus model deps" \
+	"  make python-qm9-deps        Install CatBoost and the PyG geometry stack into the current .venv" \
 	"  make python-cmdstan-install Install CmdStan into .cmdstan (run once before Stan benchmarks)" \
 	"  make python-test            Run the pytest suite" \
 	"  make python-typecheck       Run mypy on the package" \
@@ -131,7 +136,9 @@ help:
 	"  make python-to-smiles       Render molecules/benzene.sdf to SMILES" \
 		"  make python-pretty-example  Render EXAMPLE=ferrocene or EXAMPLE=diborane" \
 		"  make freesolv              Run the long FreeSolv MolADT-vs-MoleculeNet Stan comparison" \
-		"  make qm9                   Run the long QM9 MolADT-vs-MoleculeNet Stan comparison" \
+		"  make qm9                   Alias for make qm9small" \
+		"  make qm9small              Run the focused QM9 subset benchmark (1600/200/200)" \
+		"  make qm9paper              Run the focused QM9 paper-sized benchmark (110462/10000/10000)" \
 		"  make benchmark              Run the combined FreeSolv + QM9 MolADT Stan comparison bundle" \
 		"  make benchmark-small        Run the lighter 2000-row QM9 subset comparison" \
 		"  make benchmark-paper        Re-run the paper-sized QM9 split (110462/10000/10000) explicitly" \
@@ -148,6 +155,7 @@ help:
 		"  qm9_limit=$(if $(QM9_LIMIT),$(QM9_LIMIT),full-local-download)" \
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
 	"  python_extras=$(PYTHON_EXTRAS)" \
+	"  python_qm9_extras=$(PYTHON_QM9_EXTRAS)" \
 	"  toolchain_env=$(if $(DARWIN_SDKROOT),apple-xcrun,default)" \
 	"  methods=$(METHODS)" \
 	"  models=$(MODELS)" \
@@ -291,7 +299,7 @@ python-setup:
 		"  $(VENV_PYTHON_WIN)"; \
 		exit 1; \
 	fi; \
-	"$$venv_python" -m pip install -U pip setuptools wheel; \
+	"$$venv_python" -m pip install -U pip "setuptools<82" wheel; \
 	python_extras_raw="$(PYTHON_EXTRAS)"; \
 	install_geom=0; \
 	editable_extras=""; \
@@ -324,6 +332,13 @@ python-setup:
 		torch_tag="$$( "$$venv_python" -c 'import torch; version = torch.__version__.split("+")[0].split("."); print(f"{version[0]}.{version[1]}.0")' )"; \
 		cuda_tag="$$( "$$venv_python" -c 'import torch; cuda = torch.version.cuda; print("cpu" if not cuda else "cu" + cuda.replace(".", ""))' )"; \
 		pyg_wheel_url="https://data.pyg.org/whl/torch-$${torch_tag}+$${cuda_tag}.html"; \
+		if ! "$$venv_python" -m pip install -U torch-scatter -f "$$pyg_wheel_url"; then \
+			printf "%s\n" \
+				"" \
+				"Falling back to a local torch-scatter build without build isolation." \
+				"This is slower, but it lets the build backend import the already-installed torch package."; \
+			"$$venv_python" -m pip install -U --no-build-isolation torch-scatter; \
+		fi; \
 		if ! "$$venv_python" -m pip install -U torch-sparse -f "$$pyg_wheel_url"; then \
 			printf "%s\n" \
 				"" \
@@ -340,6 +355,58 @@ python-setup:
 		fi; \
 		"$$venv_python" -m pip install -U torch-geometric; \
 	fi
+
+python-qm9-deps:
+	@set -e; \
+	venv_python=""; \
+	if [ -f "$(VENV_PYTHON_UNIX)" ]; then \
+		venv_python="$(VENV_PYTHON_UNIX)"; \
+	elif [ -f "$(VENV_PYTHON_WIN)" ]; then \
+		venv_python="$(VENV_PYTHON_WIN)"; \
+	elif [ -f "$(VENV_PYTHON_WIN_ALT)" ]; then \
+		venv_python="$(VENV_PYTHON_WIN_ALT)"; \
+	else \
+		printf "%s\n" \
+		"" \
+		"Could not find a local virtualenv." \
+		"Create it first with:" \
+		"  make python-setup"; \
+		exit 1; \
+	fi; \
+	printf "%s\n" \
+	"Installing QM9 benchmark dependencies into the current virtualenv." \
+	"  repo: MolADT-Bayes-Python" \
+	"  python: $$venv_python" \
+	"  extras: $(PYTHON_QM9_EXTRAS)"; \
+	"$$venv_python" -m pip install -U pip "setuptools<82" wheel; \
+	"$$venv_python" -m pip install -U -e ".[ml]"; \
+	printf "%s\n" "Installing geometry stack in a second phase so torch-dependent build hooks can see PyTorch."; \
+	"$$venv_python" -m pip install -U torch; \
+	torch_tag="$$( "$$venv_python" -c 'import torch; version = torch.__version__.split("+")[0].split("."); print(f"{version[0]}.{version[1]}.0")' )"; \
+	cuda_tag="$$( "$$venv_python" -c 'import torch; cuda = torch.version.cuda; print("cpu" if not cuda else "cu" + cuda.replace(".", ""))' )"; \
+	pyg_wheel_url="https://data.pyg.org/whl/torch-$${torch_tag}+$${cuda_tag}.html"; \
+	if ! "$$venv_python" -m pip install -U torch-scatter -f "$$pyg_wheel_url"; then \
+		printf "%s\n" \
+			"" \
+			"Falling back to a local torch-scatter build without build isolation." \
+			"This is slower, but it lets the build backend import the already-installed torch package."; \
+		"$$venv_python" -m pip install -U --no-build-isolation torch-scatter; \
+	fi; \
+	if ! "$$venv_python" -m pip install -U torch-sparse -f "$$pyg_wheel_url"; then \
+		printf "%s\n" \
+			"" \
+			"Falling back to a local torch-sparse build without build isolation." \
+			"This is slower, but it lets the build backend import the already-installed torch package."; \
+		"$$venv_python" -m pip install -U --no-build-isolation torch-sparse; \
+	fi; \
+	if ! "$$venv_python" -m pip install -U torch-cluster -f "$$pyg_wheel_url"; then \
+		printf "%s\n" \
+			"" \
+			"Falling back to a local torch-cluster build without build isolation." \
+			"This is slower, but it lets the build backend import the already-installed torch package."; \
+		"$$venv_python" -m pip install -U --no-build-isolation torch-cluster; \
+	fi; \
+	"$$venv_python" -m pip install -U torch-geometric
 
 python-cmdstan-install:
 	@printf "%s\n" \
@@ -446,22 +513,43 @@ freesolv:
 	MOLADT_RESULTS_DIR=results/$(FREESOLV_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all freesolv $(VERBOSE_ARG) $(FREESOLV_BENCHMARK_ARGS)
 
 qm9:
+	@$(MAKE) --no-print-directory qm9small
+
+qm9small:
 	@printf "%s\n" \
 	"Running reviewer-facing QM9 comparison." \
 	"  repo: MolADT-Bayes-Python" \
-	"  first benchmark run prerequisite: make python-cmdstan-install" \
 	"  command: scripts.run_all qm9" \
 	"  dataset: QM9 (mu task, MolADT only)" \
-	"  results_dir: results/$(QM9_RESULTS_SUBDIR)" \
+	"  results_dir: results/$(QM9_SMALL_RESULTS_SUBDIR)" \
 	"  paper baseline: MoleculeNet DTNN MAE 2.35" \
-	"  inference_preset: $(INFERENCE_PRESET)" \
-	"  qm9_split_mode: $(QM9_SPLIT_MODE)" \
-	"  qm9_limit: $(if $(QM9_LIMIT),$(QM9_LIMIT),full-local-download)" \
-	"  methods: $(QM9_METHODS)" \
-	"  models: $(QM9_MODELS)" \
+	"  inference_preset: default" \
+	"  qm9_split_mode: subset" \
+	"  qm9_limit: 2000" \
+	"  stan_methods: (disabled)" \
+	"  stan_models: (disabled)" \
+	"  extra_models: $(BEST_QM9_EXTRA_MODELS)" \
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
-	"  expected figure: results/$(QM9_RESULTS_SUBDIR)/qm9_mae_vs_moleculenet.svg"
-	MOLADT_RESULTS_DIR=results/$(QM9_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 $(QM9_LIMIT_QM9_ARG) --split-mode $(QM9_SPLIT_MODE) $(if $(filter paper,$(INFERENCE_PRESET)),--paper-mode,) $(VERBOSE_ARG) $(QM9_BENCHMARK_ARGS)
+	"  expected figure: results/$(QM9_SMALL_RESULTS_SUBDIR)/qm9_mae_vs_moleculenet.svg"
+	MOLADT_RESULTS_DIR=results/$(QM9_SMALL_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 --limit 2000 --split-mode subset --include-moladt-predictive --models "" --extra-models $(BEST_QM9_EXTRA_MODELS) $(VERBOSE_ARG)
+
+qm9paper:
+	@printf "%s\n" \
+	"Running reviewer-facing QM9 comparison." \
+	"  repo: MolADT-Bayes-Python" \
+	"  command: scripts.run_all qm9" \
+	"  dataset: QM9 (mu task, MolADT only)" \
+	"  results_dir: results/$(QM9_PAPER_RESULTS_SUBDIR)" \
+	"  paper baseline: MoleculeNet DTNN MAE 2.35" \
+	"  inference_preset: paper" \
+	"  qm9_split_mode: paper" \
+	"  qm9_limit: full-local-download" \
+	"  stan_methods: (disabled)" \
+	"  stan_models: (disabled)" \
+	"  extra_models: $(BEST_QM9_EXTRA_MODELS)" \
+	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
+	"  expected figure: results/$(QM9_PAPER_RESULTS_SUBDIR)/qm9_mae_vs_moleculenet.svg"
+	MOLADT_RESULTS_DIR=results/$(QM9_PAPER_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 --split-mode paper --paper-mode --include-moladt-predictive --models "" --extra-models $(BEST_QM9_EXTRA_MODELS) $(VERBOSE_ARG)
 
 benchmark:
 	@printf "%s\n" \

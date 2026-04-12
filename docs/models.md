@@ -1,19 +1,28 @@
 # Models and Features
 
-This repo benchmarks MolADT by exporting descriptor matrices from the typed molecule object and fitting Stan models to those matrices.
+This repo benchmarks MolADT by exporting descriptor matrices from the typed molecule object and then fitting either Stan, CatBoost, or geometry-aware neural models to those exports.
 
-## Benchmark Shape
+## Front-Door Benchmark Paths
 
-- build a typed MolADT `Molecule`
-- derive a numeric descriptor matrix from that object
-- fit the benchmark model in Stan
-- compare the local result to the matching MoleculeNet baseline
+The two user-facing benchmark commands are intentionally different:
 
-The benchmark input is the ordinary typed `Molecule` object. Both reviewer-facing predictive paths use the richer `moladt_featurized` branch.
+- FreeSolv keeps the fixed Stan GP path:
+  - representation: `moladt_featurized`
+  - model: `bayes_gp_rbf_screened`
+  - algorithm: Stan `laplace`
+- QM9 keeps the recovered predictive path that was producing the strong `mu` results:
+  - tabular representation: `moladt_featurized`
+  - tabular model: `catboost_uncertainty`
+  - geometry models: `visnet_ensemble` on the SDF-backed geometry exports
+  - default scale: local subset `1600 / 200 / 200`
+  - default seed: `1`
+  - paper-mode seeds: `1, 102, 203, 304, 405`
+
+`make qm9` does not use the fixed Stan path anymore. It runs the focused CatBoost + ViSNet comparison and then plots the validation-selected local result against the MoleculeNet DTNN MAE row.
 
 ## Representation Contract
 
-The FreeSolv and QM9 benchmark paths use `moladt_featurized`, the richer SDF-backed branch with pair, radial, angle, torsion, and bonding-system channels.
+The FreeSolv and QM9 benchmark paths both rely on `moladt_featurized`, the richer SDF-backed branch with pair, radial, angle, torsion, and bonding-system channels.
 
 Boundary SMILES still matter because many datasets ship with SMILES strings, but the benchmark object is the typed `Molecule` ADT derived from that boundary string or aligned SDF record.
 
@@ -49,7 +58,7 @@ For the published benchmark comparison, these descriptors are computed from the 
 
 ### `moladt_featurized`
 
-This is the feature-rich MolADT branch used by the current FreeSolv and QM9 benchmark defaults.
+This is the feature-rich MolADT branch used by the current FreeSolv benchmark and the tabular side of the current QM9 benchmark.
 
 It keeps the compact MolADT descriptors and adds:
 
@@ -62,17 +71,20 @@ It keeps the compact MolADT descriptors and adds:
 
 This branch is exported from the aligned SDF-backed MolADT molecules. It keeps all `642` local FreeSolv structures in the benchmark split and is also the default QM9 representation because the `mu` task depends on 3D geometry and directional structure.
 
-## Stan Boundary
-
-Stan does not fit directly over string objects. The Stan models in this repo consume numeric matrices exported from MolADT descriptors.
-
 ## Model Families
 
-The repo contains these Stan model families:
+The repo contains these predictive model families:
 
 - `bayes_linear_student_t`
 - `bayes_hierarchical_shrinkage`
 - `bayes_gp_rbf_screened`
+- `catboost_uncertainty`
+- `visnet_ensemble`
+- `dimenetpp_ensemble`
+
+## Stan Boundary
+
+Stan does not fit directly over string objects. The Stan models in this repo consume numeric matrices exported from MolADT descriptors.
 
 `bayes_gp_rbf_screened` is the FreeSolv benchmark model. It screens the richer featurized descriptor matrix down to the strongest training-only channels and then fits an exact RBF Gaussian process in Stan. It was chosen because it performed better than the linear baselines on local validation for the `642`-molecule FreeSolv task.
 
@@ -84,43 +96,44 @@ For FreeSolv, the benchmark contract is:
 
 For QM9, the benchmark contract is:
 
-- representation: `moladt_featurized`
-- model: `bayes_linear_student_t`
-- algorithm: `optimize`
+- tabular export: `moladt_featurized`
+- tabular model: `catboost_uncertainty`
+- geometry exports: `sdf_geom`, `moladt_geom`
+- geometry model: `visnet_ensemble`
+- default run size: subset `1600 / 200 / 200`
+- paper override: `INFERENCE_PRESET=paper QM9_LIMIT= QM9_SPLIT_MODE=paper make qm9`
 
-That QM9 choice is based on two constraints. First, the literature on QM9 `mu` consistently rewards geometry-aware and direction-aware models, so the compact descriptor set is the wrong default. Second, exact GP inference is not practical at full QM9 scale, and the pasted long NUTS run is a clear example of why full sampling is the wrong default here. On the local `QM9_LIMIT=2000` subset, the featurized Student-`t` path outperformed the compact and grouped-shrinkage Stan alternatives on validation MAE, and `optimize` slightly beat the other scalable Stan fits on validation MAE while being much faster than `pathfinder`, so that is the fixed reviewer-facing Stan path.
+That QM9 choice is deliberate. `mu` is a directional 3D target, so the old front-door path used a strong non-linear tabular baseline for the featurized MolADT descriptors and a geometry-aware ViSNet path for the coordinate-bearing export. The slow run you remembered was the geometry model path, not the later Stan `optimize` shortcut. The recovered default `make qm9` target matches that earlier setup.
 
-Reports compare the fixed FreeSolv benchmark run and the fixed QM9 Stan benchmark run to MoleculeNet only:
+Reports compare the fixed FreeSolv benchmark run and the focused QM9 predictive run to MoleculeNet only:
 
 - FreeSolv: local MolADT RMSE versus MoleculeNet MPNN RMSE `1.15`
 - QM9 `mu`: local MolADT MAE versus MoleculeNet DTNN MAE `2.35`
 
 ## Example Code
 
-This is the smallest programmatic example of the fixed QM9 Stan path:
+This is the smallest programmatic example of the recovered QM9 tabular path:
 
 ```python
 from scripts.process_qm9 import process_qm9_dataset
-from scripts.stan_runner import StanRunConfig, run_model_suite
+from scripts.tabular_runner import CatBoostRunConfig, run_catboost_uncertainty
 
 artifacts = process_qm9_dataset(limit=2000, split_mode="subset", verbose=True)
 bundle = artifacts.moladt_featurized_export
 assert bundle is not None
 
-config = StanRunConfig(
-    methods=("optimize",),
-    optimize_iterations=2000,
-    predictive_draws=500,
+config = CatBoostRunConfig(
+    seeds=(1,),
+    search_hyperparameters=True,
 )
 
-summary_rows, prediction_rows, coefficient_rows = run_model_suite(
+summary_rows, prediction_rows, artifact_rows = run_catboost_uncertainty(
     bundle,
-    model_name="bayes_linear_student_t",
     config=config,
 )
 ```
 
-That call path uses the typed MolADT object only indirectly: Python first featurizes the MolADT molecules into the exported `X/y` bundle, and then Stan fits the model from that numeric matrix. The corresponding Stan sources are [`stan/bayes_linear_student_t.stan`](../stan/bayes_linear_student_t.stan) and [`stan/bayes_gp_rbf_screened.stan`](../stan/bayes_gp_rbf_screened.stan).
+`make qm9` also runs `visnet_ensemble` on the geometry export, then keeps the best local validation-selected QM9 row for the final paper-comparison figure.
 
 ## Benchmark Commands
 
@@ -132,7 +145,7 @@ make timing
 ```
 
 - `make freesolv` writes the `Training` / `Validation` / `Test` / `Paper` FreeSolv figure
-- `make qm9` writes the long-run `Training` / `Test` / `Paper` QM9 figure for the fixed `moladt_featurized + bayes_linear_student_t + optimize` path
+- `make qm9` writes the `Training` / `Test` / `Paper` QM9 figure for the focused CatBoost + ViSNet path
 - `make benchmark-small` keeps the lighter subset benchmark path available
 - `make timing` is the separate ingest/interoperability timing path
 
