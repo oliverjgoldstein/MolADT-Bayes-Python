@@ -78,47 +78,26 @@ make timing
 make benchmark-small
 ```
 
-Current benchmark sizes:
+- `make freesolv`: FreeSolv RMSE comparison. Fixed path `moladt_featurized + bayes_gp_rbf_screened + laplace`. Writes `results/freesolv/run_.../freesolv_rmse_vs_moleculenet.svg`.
+- `make qm9`: QM9 `mu` MAE comparison. Fixed path `moladt_featurized + bayes_linear_student_t + optimize`. Writes `results/qm9/paper/run_.../qm9_mae_vs_moleculenet.svg`.
+- `make timing`: ZINC ingest and runtime comparison. It separates raw I/O, optional external-toolkit stages, a plain string baseline, our SMILES parser, and our MolADT file reader. Writes `results/timing/paper/run_.../timing_overview.svg`.
+- `make benchmark-small`: lighter QM9 subset check for faster local iteration.
 
-- FreeSolv benchmark path: the SDF-backed `moladt_featurized` export uses all `642` local SDF molecules and splits them into `513` train / `64` validation / `65` test
-- QM9 default long run: `110,462` train / `10,000` validation / `10,000` test
-- `benchmark-small`: the lighter QM9 subset path uses `1,600` train / `200` validation / `200` test
+Results are written under timestamped directories in `results/`, mainly `results/freesolv/run_.../`, `results/qm9/paper/run_.../`, and `results/timing/paper/run_.../`.
 
-- `make freesolv` writes `results/freesolv/run_.../freesolv_rmse_vs_moleculenet.svg`
-- `make qm9` writes `results/qm9/paper/run_.../qm9_mae_vs_moleculenet.svg`
-- `make timing` writes `results/timing/paper/run_.../timing_overview.svg`
-- the FreeSolv figure shows `Training`, `Validation`, `Test`, then `Paper`
-- the QM9 figure shows `Training`, `Test`, then `Paper`
-- `make freesolv` runs one fixed benchmark path: `moladt_featurized` with the `bayes_gp_rbf_screened` model fit by Stan `laplace`
-- `make qm9` runs one fixed benchmark path: `moladt_featurized` with the `bayes_linear_student_t` model fit by Stan `optimize`
-- FreeSolv compares local MolADT RMSE to the MoleculeNet MPNN RMSE row `1.15`
-- QM9 `mu` compares local MolADT MAE to the MoleculeNet DTNN MAE row `2.35`
+The FreeSolv figure shows `Training`, `Validation`, `Test`, and `Paper`. The QM9 figure shows `Training`, `Test`, and `Paper`.
 
-The QM9 path is explicit: representation `moladt_featurized`, model `bayes_linear_student_t`, inference algorithm Stan `optimize` with L-BFGS mode fitting. That choice is deliberate. `mu` is a 3D directional property, so the default path uses the richer MolADT featurized branch with radial, angle, and torsion channels rather than the older compact descriptor set. Exact GP inference is not practical at full QM9 scale, and the old NUTS run is pathological on this benchmark. On the local `QM9_LIMIT=2000` subset sweep, the featurized Student-`t` path with `optimize` beat the other scalable Stan fits on validation MAE, so that is the fixed Stan benchmark path.
-
-The default benchmark targets use the long `paper` inference preset. `make qm9` still runs the full paper-sized split, but it no longer launches the old multi-model multi-algorithm Stan sweep by default. Use `make benchmark-small` or override `INFERENCE_PRESET=default QM9_LIMIT=2000 QM9_SPLIT_MODE=subset` for a lighter run.
-
-The metric matches the cited MoleculeNet row, but the Stan model family still differs from the paper, and FreeSolv still uses the repo's own split. Large raw files are downloaded on demand when they are not already vendored.
-
-Read the timing overview as a pipeline rather than as one score. The SVG uses a log throughput axis, so equal horizontal gaps mean multiplicative speedups.
-
-- `raw_file_read`: I/O baseline only. It reads SMILES text from the normalized ZINC source file and does no chemistry work.
-- `smiles_parse_sanitize`: external-toolkit stage. It parses each SMILES string into a molecular graph and applies that toolkit's sanitization rules.
-- `smiles_canonicalization`: external-toolkit stage. It rewrites the parsed molecule into one canonical SMILES form.
-- `timing_library_prepare`: one-time setup. It builds the matched timing corpus so every later stage runs on the same molecules.
-- `smiles_csv_string_parse`: plain-string baseline. It only materializes the canonical SMILES CSV field into a Python string.
-- `smiles_library_parse`: our parser. It turns that string into the typed MolADT object through the local SMILES path.
-- `moladt_file_parse`: our file reader. It loads the already-structured MolADT JSON form from disk and reconstructs the local typed object.
-
-In practice, compare `smiles_csv_string_parse` against `smiles_library_parse` to see the real incremental cost of building a MolADT object from SMILES text. Compare `smiles_library_parse` against `moladt_file_parse` to see the gap between parsing a boundary string and reading the structured MolADT form directly.
+For split sizes, the exact benchmark contract, and the detailed timing-stage definitions, see [Inference and benchmarks](docs/inference-and-benchmarks.md) and [Outputs](docs/outputs.md).
 
 ## Read More
 
 - [Quickstart](docs/quickstart.md)
+- [Inference and benchmarks](docs/inference-and-benchmarks.md)
 - [Parsing and rendering](docs/parsing.md)
 - [CLI reference](docs/cli.md)
 - [Examples](docs/examples.md)
 - [Models and features](docs/models.md)
+- [Outputs](docs/outputs.md)
 - [Data sources](docs/data-sources.md)
 
 ## Related Repo
