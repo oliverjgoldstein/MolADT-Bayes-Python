@@ -107,6 +107,8 @@ ferrocene_pretty = Molecule(
 )
 ```
 
+Intuitively, `_ring_pairs(...)` just walks once around the ring and returns the neighboring atom pairs, so for one Cp ring it gives the five local `C-C` links that make the pentagon. `_edge_set(...)` then turns those raw atom-id pairs into canonical undirected `Edge(...)` values, so `(C2, C3)` and `(C3, C2)` collapse to the same bond instead of creating fake duplicates. That is why the same Fe-C and Cp `C-C` edges can be reused inside several bonding systems without pretending the molecule has parallel copies of those bonds.
+
 Expanded Python with explicit edge literals:
 
 ```python
@@ -380,7 +382,7 @@ The benchmark object is just `moladt`: the typed MolADT representation built fro
 
 The current benchmark asks one narrow question:
 
-- if we fit the Stan MolADT models and keep the best local run, how does that MolADT result compare with the matching MoleculeNet row for FreeSolv or QM9?
+- if we fit the fixed MolADT benchmark paths, how does the local MolADT result compare with the matching MoleculeNet row for FreeSolv or QM9?
 
 ## See Also
 

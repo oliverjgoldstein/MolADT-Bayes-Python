@@ -89,6 +89,24 @@ def test_makefile_freesolv_target_prints_verbose_context(tmp_path: Path) -> None
     assert "models: bayes_gp_rbf_screened" in result.stdout
 
 
+def test_makefile_qm9_target_prints_fixed_best_path(tmp_path: Path) -> None:
+    _copy_makefile(tmp_path)
+    _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
+
+    result = subprocess.run(
+        ["make", "-C", str(tmp_path), "-n", "qm9", "SYSTEM_PYTHON=python3"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "Running reviewer-facing QM9 comparison." in result.stdout
+    assert "paper baseline: MoleculeNet DTNN MAE 2.35" in result.stdout
+    assert "./.venv/bin/python -m scripts.run_all qm9" in result.stdout
+    assert "methods: optimize" in result.stdout
+    assert "models: bayes_linear_student_t" in result.stdout
+
+
 def test_makefile_benchmark_defaults_to_timestamped_results_directory(tmp_path: Path) -> None:
     _copy_makefile(tmp_path)
     _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")

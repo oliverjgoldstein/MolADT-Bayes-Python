@@ -9,13 +9,11 @@ This repo benchmarks MolADT by exporting descriptor matrices from the typed mole
 - fit the benchmark model in Stan
 - compare the local result to the matching MoleculeNet baseline
 
-The benchmark input is the ordinary typed `Molecule` object. FreeSolv uses the richer `moladt_featurized` branch, while QM9 uses the compact `moladt` branch.
+The benchmark input is the ordinary typed `Molecule` object. Both reviewer-facing predictive paths use the richer `moladt_featurized` branch.
 
 ## Representation Contract
 
-The FreeSolv benchmark uses `moladt_featurized`, the richer SDF-backed branch with pair, radial, angle, torsion, and bonding-system channels.
-
-QM9 uses the compact `moladt` branch for the Stan comparison.
+The FreeSolv and QM9 benchmark paths use `moladt_featurized`, the richer SDF-backed branch with pair, radial, angle, torsion, and bonding-system channels.
 
 Boundary SMILES still matter because many datasets ship with SMILES strings, but the benchmark object is the typed `Molecule` ADT derived from that boundary string or aligned SDF record.
 
@@ -51,7 +49,7 @@ For the published benchmark comparison, these descriptors are computed from the 
 
 ### `moladt_featurized`
 
-This is the FreeSolv feature-rich branch.
+This is the feature-rich MolADT branch used by the current FreeSolv and QM9 benchmark defaults.
 
 It keeps the compact MolADT descriptors and adds:
 
@@ -62,7 +60,7 @@ It keeps the compact MolADT descriptors and adds:
 - bond-angle channels
 - torsion channels
 
-This branch is exported from the aligned SDF-backed MolADT molecules, so it keeps all `642` local FreeSolv structures in the benchmark split.
+This branch is exported from the aligned SDF-backed MolADT molecules. It keeps all `642` local FreeSolv structures in the benchmark split and is also the default QM9 representation because the `mu` task depends on 3D geometry and directional structure.
 
 ## Stan Boundary
 
@@ -84,9 +82,15 @@ For FreeSolv, the benchmark contract is:
 - model: `bayes_gp_rbf_screened`
 - algorithm: `laplace`
 
-The linear models remain in the repo for QM9 and side experiments.
+For QM9, the benchmark contract is:
 
-Reports compare the fixed FreeSolv benchmark run and the selected QM9 local run to MoleculeNet only:
+- representation: `moladt_featurized`
+- model: `bayes_linear_student_t`
+- algorithm: `optimize`
+
+That QM9 choice is based on two constraints. First, the literature on QM9 `mu` consistently rewards geometry-aware and direction-aware models, so the compact descriptor set is the wrong default. Second, exact GP inference is not practical at full QM9 scale, and the pasted long NUTS run is a clear example of why full sampling is the wrong default here. On the local `QM9_LIMIT=2000` subset, the featurized Student-`t` path outperformed the compact and grouped-shrinkage Stan alternatives on validation MAE, and `optimize` slightly beat the other scalable Stan fits on validation MAE while being much faster than `pathfinder`, so that is the fixed reviewer-facing Stan path.
+
+Reports compare the fixed FreeSolv benchmark run and the fixed QM9 Stan benchmark run to MoleculeNet only:
 
 - FreeSolv: local MolADT RMSE versus MoleculeNet MPNN RMSE `1.15`
 - QM9 `mu`: local MolADT MAE versus MoleculeNet DTNN MAE `2.35`
@@ -101,7 +105,7 @@ make timing
 ```
 
 - `make freesolv` writes the `Training` / `Validation` / `Test` / `Paper` FreeSolv figure
-- `make qm9` writes the long-run `Training` / `Test` / `Paper` QM9 figure
+- `make qm9` writes the long-run `Training` / `Test` / `Paper` QM9 figure for the fixed `moladt_featurized + bayes_linear_student_t + optimize` path
 - `make benchmark-small` keeps the lighter subset benchmark path available
 - `make timing` is the separate ingest/interoperability timing path
 

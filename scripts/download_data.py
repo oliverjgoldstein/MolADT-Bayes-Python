@@ -65,6 +65,19 @@ def zinc_normalized_source_name(dataset_size: str, dataset_dimension: str, suffi
     return f"zinc15_{dataset_size}_{dataset_dimension}{suffix}"
 
 
+def _prefer_v3000_path(candidates: tuple[Path, ...]) -> Path:
+    if not candidates:
+        raise FileNotFoundError("No candidate paths were provided")
+    ordered = sorted(
+        candidates,
+        key=lambda path: (
+            0 if "v3000" in path.name.lower() or "v3000" in path.as_posix().lower() else 1,
+            path.as_posix(),
+        ),
+    )
+    return ordered[0]
+
+
 def download_freesolv(*, force: bool = False) -> FreeSolvDownloads:
     target_dir = ensure_directory(freesolv_raw_dir())
     csv_path = target_dir / "SAMPL.csv"
@@ -87,7 +100,13 @@ def download_qm9(*, force: bool = False) -> QM9Downloads:
         return QM9Downloads(sdf_path=sdf_path, csv_path=csv_path, archive_path=None, extract_dir=target_dir)
     archive_path = download_first(QM9_TAR_URLS, target_dir / "qm9.tar.gz", force=force)
     extract_dir = extract_archive(archive_path, target_dir / "extracted", force=force)
-    sdf_source = require_single_file(extract_dir, ("qm9.sdf", "gdb9.sdf", "*.sdf"), "QM9 SDF")
+    sdf_candidates = tuple(sorted((extract_dir / candidate) for candidate in ("qm9_v3000.sdf", "gdb9_v3000.sdf") if (extract_dir / candidate).exists()))
+    if not sdf_candidates:
+        sdf_candidates = tuple(sorted(extract_dir.rglob("*V3000*.sdf"))) + tuple(sorted(extract_dir.rglob("*v3000*.sdf")))
+    if sdf_candidates:
+        sdf_source = _prefer_v3000_path(sdf_candidates)
+    else:
+        sdf_source = require_single_file(extract_dir, ("qm9.sdf", "gdb9.sdf", "*.sdf"), "QM9 SDF")
     csv_candidates = ("qm9.sdf.csv", "gdb9.sdf.csv", "qm9.csv", "*.csv")
     try:
         csv_source = require_single_file(extract_dir, csv_candidates, "QM9 target CSV")

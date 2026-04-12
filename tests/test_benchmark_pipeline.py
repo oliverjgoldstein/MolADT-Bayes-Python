@@ -98,6 +98,28 @@ def test_download_qm9_prefers_vendored_snapshot(tmp_path, monkeypatch) -> None:
     assert downloads.extract_dir == qm9_dir
 
 
+def test_download_qm9_prefers_v3000_file_when_archive_contains_one(tmp_path, monkeypatch) -> None:
+    import scripts.download_data as download_data
+
+    raw_dir = tmp_path / "raw"
+    qm9_dir = raw_dir / "qm9"
+    extract_dir = qm9_dir / "extracted"
+    extract_dir.mkdir(parents=True)
+    archive_path = qm9_dir / "qm9.tar.gz"
+    archive_path.write_text("archive", encoding="utf-8")
+    (extract_dir / "gdb9.sdf").write_text("v2000\n", encoding="utf-8")
+    (extract_dir / "gdb9_v3000.sdf").write_text("v3000\n", encoding="utf-8")
+    (extract_dir / "qm9.csv").write_text("mol_id,mu\nmol_1,0.1\n", encoding="utf-8")
+    monkeypatch.setattr(download_data, "RAW_DATA_DIR", raw_dir)
+    monkeypatch.setattr(download_data, "download_first", lambda *args, **kwargs: archive_path)
+    monkeypatch.setattr(download_data, "extract_archive", lambda *args, **kwargs: extract_dir)
+    monkeypatch.setattr(download_data, "copy_if_needed", lambda source, destination, force=False: source)
+
+    downloads = download_qm9()
+
+    assert downloads.sdf_path == extract_dir / "gdb9_v3000.sdf"
+
+
 def test_download_zinc_prefers_vendored_snapshot(tmp_path, monkeypatch) -> None:
     import scripts.download_data as download_data
 
@@ -199,6 +221,50 @@ def test_run_all_defaults_freesolv_to_single_best_model() -> None:
     assert _stan_models_for_artifacts(artifacts, args) == ("bayes_gp_rbf_screened",)
 
 
+def test_run_all_defaults_qm9_to_single_best_model() -> None:
+    rows = pd.DataFrame([{"mol_id": "mol_1", "smiles": "CCO", "target": 1.0}])
+    bundle = ExportedDataset(
+        dataset_name="qm9",
+        representation="moladt_featurized",
+        target_name="target",
+        split_scheme="paper:110462/10000/10000",
+        source_row_count=130462,
+        used_row_count=130462,
+        feature_names=("x1",),
+        feature_groups={"x1": "group_a"},
+        group_names=("group_a",),
+        group_ids=(1,),
+        rows=rows,
+        X_train=np.asarray([[0.0]]),
+        X_valid=np.asarray([[0.0]]),
+        X_test=np.asarray([[0.0]]),
+        y_train=np.asarray([1.0]),
+        y_valid=np.asarray([1.0]),
+        y_test=np.asarray([1.0]),
+        mol_ids_train=("mol_1",),
+        mol_ids_valid=("mol_1",),
+        mol_ids_test=("mol_1",),
+        metadata_path=Path("demo_metadata.json"),
+        feature_csv_path=Path("demo_features.csv"),
+    )
+    from scripts.process_qm9 import QM9Artifacts
+
+    qm9_artifacts = QM9Artifacts(
+        processed_csv_path=Path("qm9_processed.csv"),
+        moladt_index_path=Path("qm9_index.csv"),
+        tabular_exports={"moladt_featurized": bundle},
+        geometric_exports={},
+        smiles_export=bundle,
+        moladt_export=bundle,
+        moladt_featurized_export=bundle,
+        failure_csv_paths=(),
+    )
+
+    args = build_parser().parse_args(["qm9"])
+
+    assert _stan_models_for_artifacts(qm9_artifacts, args) == ("bayes_linear_student_t",)
+
+
 def test_run_all_defaults_freesolv_to_single_best_algorithm() -> None:
     rows = pd.DataFrame([{"mol_id": "mol_1", "smiles": "CCO", "target": 1.0}])
     bundle = ExportedDataset(
@@ -239,6 +305,50 @@ def test_run_all_defaults_freesolv_to_single_best_algorithm() -> None:
     args = build_parser().parse_args(["freesolv"])
 
     assert _stan_methods_for_artifacts(artifacts, args) == ("laplace",)
+
+
+def test_run_all_defaults_qm9_to_single_best_algorithm() -> None:
+    rows = pd.DataFrame([{"mol_id": "mol_1", "smiles": "CCO", "target": 1.0}])
+    bundle = ExportedDataset(
+        dataset_name="qm9",
+        representation="moladt_featurized",
+        target_name="target",
+        split_scheme="paper:110462/10000/10000",
+        source_row_count=130462,
+        used_row_count=130462,
+        feature_names=("x1",),
+        feature_groups={"x1": "group_a"},
+        group_names=("group_a",),
+        group_ids=(1,),
+        rows=rows,
+        X_train=np.asarray([[0.0]]),
+        X_valid=np.asarray([[0.0]]),
+        X_test=np.asarray([[0.0]]),
+        y_train=np.asarray([1.0]),
+        y_valid=np.asarray([1.0]),
+        y_test=np.asarray([1.0]),
+        mol_ids_train=("mol_1",),
+        mol_ids_valid=("mol_1",),
+        mol_ids_test=("mol_1",),
+        metadata_path=Path("demo_metadata.json"),
+        feature_csv_path=Path("demo_features.csv"),
+    )
+    from scripts.process_qm9 import QM9Artifacts
+
+    qm9_artifacts = QM9Artifacts(
+        processed_csv_path=Path("qm9_processed.csv"),
+        moladt_index_path=Path("qm9_index.csv"),
+        tabular_exports={"moladt_featurized": bundle},
+        geometric_exports={},
+        smiles_export=bundle,
+        moladt_export=bundle,
+        moladt_featurized_export=bundle,
+        failure_csv_paths=(),
+    )
+
+    args = build_parser().parse_args(["qm9"])
+
+    assert _stan_methods_for_artifacts(qm9_artifacts, args) == ("optimize",)
 
 
 def test_stan_data_serialization_round_trip(tmp_path, monkeypatch) -> None:
@@ -595,6 +705,21 @@ def test_process_qm9_creates_processed_directory_before_writing(tmp_path, monkey
     )
     monkeypatch.setattr(
         process_qm9,
+        "featurize_moladt_featurized_records",
+        lambda *args, **kwargs: FeatureTable(
+            rows=pd.DataFrame(
+                [
+                    {"mol_id": f"qm9_{index:06d}", "mu": float(index), "sdf_record_index": index, "x1": float(index), "x2": float(index + 1)}
+                    for index in range(12)
+                ]
+            ),
+            feature_names=("x1", "x2"),
+            feature_groups={"x1": "group_a", "x2": "group_b"},
+            failures=(),
+        ),
+    )
+    monkeypatch.setattr(
+        process_qm9,
         "featurize_sdf_geometry_records",
         lambda *args, **kwargs: process_qm9.GeometricFeatureTable(
             rows=pd.DataFrame(
@@ -640,6 +765,8 @@ def test_process_qm9_creates_processed_directory_before_writing(tmp_path, monkey
 
     assert processed_dir.is_dir()
     assert artifacts.processed_csv_path.exists()
+    assert artifacts.moladt_featurized_export is not None
+    assert "moladt_featurized" in artifacts.tabular_exports
 
 
 def test_featurize_moladt_smiles_dataframe_uses_plain_moladt_feature_schema() -> None:

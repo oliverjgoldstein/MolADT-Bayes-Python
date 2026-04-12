@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from re import search
+import shlex
 from types import MappingProxyType
 from typing import Any, Mapping
 
@@ -128,10 +129,22 @@ def _parse_block(block: str) -> SDFRecord:
     lines = block.splitlines()
     if len(lines) < 2:
         raise ValueError("Incomplete SDF block")
-    counts_index = next((index for index, line in enumerate(lines) if "V2000" in line), None)
+    counts_index = next(
+        (index for index, line in enumerate(lines) if "V2000" in line or "V3000" in line),
+        3 if len(lines) >= 4 else None,
+    )
     if counts_index is None:
         raise ValueError("Counts line not found")
     title = lines[0] if lines else ""
+    if "V3000" in lines[counts_index]:
+        atoms, bonds, properties = _parse_v3000_sections(lines, counts_index)
+    else:
+        atoms, bonds, properties = _parse_v2000_sections(lines, counts_index)
+    molecule = _build_molecule(atoms, bonds)
+    return SDFRecord(molecule=molecule, properties=properties, title=title)
+
+
+def _parse_v2000_sections(lines: list[str], counts_index: int) -> tuple[list[Atom], list[tuple[Edge, int]], dict[str, str]]:
     atom_count, bond_count = _parse_counts_line(lines[counts_index])
     atom_start = counts_index + 1
     atom_lines = lines[atom_start : atom_start + atom_count]
@@ -141,7 +154,6 @@ def _parse_block(block: str) -> SDFRecord:
     atoms = [_parse_atom_line(index + 1, line) for index, line in enumerate(atom_lines)]
     bonds = [_parse_bond_line(line) for line in bond_lines]
     formal_charges: dict[AtomId, int] = {}
-    properties: dict[str, str] = {}
     tail_index = 0
     while tail_index < len(tail_lines):
         line = tail_lines[tail_index]
@@ -154,26 +166,149 @@ def _parse_block(block: str) -> SDFRecord:
             tail_index += 1
             break
         tail_index += 1
-    while tail_index < len(tail_lines):
-        line = tail_lines[tail_index]
-        if line.startswith(">"):
-            property_name = _parse_property_name(line)
-            tail_index += 1
-            property_value_lines: list[str] = []
-            while tail_index < len(tail_lines) and tail_lines[tail_index] != "":
-                property_value_lines.append(tail_lines[tail_index])
-                tail_index += 1
-            properties[property_name] = "\n".join(property_value_lines)
-        tail_index += 1
-    atom_map = {}
-    for atom in atoms:
-        atom_map[atom.atom_id] = Atom(
+    properties = _parse_properties(tail_lines[tail_index:])
+    atoms = [
+        Atom(
             atom_id=atom.atom_id,
             attributes=atom.attributes,
             coordinate=atom.coordinate,
             shells=atom.shells,
             formal_charge=formal_charges.get(atom.atom_id, atom.formal_charge),
         )
+        for atom in atoms
+    ]
+    return atoms, bonds, properties
+
+
+def _parse_v3000_sections(lines: list[str], counts_index: int) -> tuple[list[Atom], list[tuple[Edge, int]], dict[str, str]]:
+    ctab_lines, tail_index = _collect_v3000_ctab_lines(lines[counts_index + 1 :])
+    atoms: list[Atom] = []
+    bonds: list[tuple[Edge, int]] = []
+    state: str | None = None
+    atom_count = 0
+    bond_count = 0
+    for line in ctab_lines:
+        if line == "BEGIN CTAB" or line == "END CTAB":
+            continue
+        if line.startswith("COUNTS "):
+            atom_count, bond_count = _parse_v3000_counts_line(line)
+            continue
+        if line == "BEGIN ATOM":
+            state = "atom"
+            continue
+        if line == "END ATOM":
+            state = None
+            continue
+        if line == "BEGIN BOND":
+            state = "bond"
+            continue
+        if line == "END BOND":
+            state = None
+            continue
+        if line.startswith("BEGIN ") or line.startswith("END "):
+            state = None
+            continue
+        if state == "atom":
+            atoms.append(_parse_v3000_atom_line(line))
+        elif state == "bond":
+            bonds.append(_parse_v3000_bond_line(line))
+    if atom_count and len(atoms) != atom_count:
+        raise ValueError(f"V3000 atom count mismatch: expected {atom_count}, got {len(atoms)}")
+    if bond_count and len(bonds) != bond_count:
+        raise ValueError(f"V3000 bond count mismatch: expected {bond_count}, got {len(bonds)}")
+    properties = _parse_properties(lines[counts_index + 1 + tail_index :])
+    return atoms, bonds, properties
+
+
+def _collect_v3000_ctab_lines(lines: list[str]) -> tuple[list[str], int]:
+    logical_lines: list[str] = []
+    pending: str | None = None
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        if line == "M  END":
+            if pending is not None:
+                raise ValueError("Unterminated V3000 continuation line")
+            return logical_lines, index + 1
+        if not line.startswith("M  V30 "):
+            index += 1
+            continue
+        payload = line[7:]
+        if pending is not None:
+            payload = pending + payload.lstrip()
+            pending = None
+        if payload.endswith("-"):
+            pending = payload[:-1].rstrip() + " "
+        else:
+            logical_lines.append(payload.strip())
+        index += 1
+    raise ValueError("V3000 M  END line not found")
+
+
+def _parse_v3000_counts_line(line: str) -> tuple[int, int]:
+    words = line.split()
+    if len(words) < 3:
+        raise ValueError("Invalid V3000 counts line")
+    return int(words[1]), int(words[2])
+
+
+def _parse_v3000_atom_line(line: str) -> Atom:
+    words = shlex.split(line)
+    if len(words) < 6:
+        raise ValueError("Invalid V3000 atom line")
+    atom_id = AtomId(int(words[0]))
+    symbol = AtomicSymbol(words[1])
+    x, y, z = map(float, words[2:5])
+    formal_charge = 0
+    for token in words[6:]:
+        key, value = _split_v3000_token(token)
+        if key == "CHG":
+            formal_charge = int(value)
+    return Atom(
+        atom_id=atom_id,
+        attributes=element_attributes(symbol),
+        coordinate=Coordinate(mk_angstrom(x), mk_angstrom(y), mk_angstrom(z)),
+        shells=element_shells(symbol),
+        formal_charge=formal_charge,
+    )
+
+
+def _parse_v3000_bond_line(line: str) -> tuple[Edge, int]:
+    words = shlex.split(line)
+    if len(words) < 4:
+        raise ValueError("Invalid V3000 bond line")
+    bond_order = int(words[1])
+    atom_i = AtomId(int(words[2]))
+    atom_j = AtomId(int(words[3]))
+    return mk_edge(atom_i, atom_j), bond_order
+
+
+def _split_v3000_token(token: str) -> tuple[str, str]:
+    if "=" not in token:
+        return token, ""
+    key, value = token.split("=", 1)
+    return key, value.strip('"')
+
+
+def _parse_properties(lines: list[str]) -> dict[str, str]:
+    properties: dict[str, str] = {}
+    tail_index = 0
+    while tail_index < len(lines):
+        line = lines[tail_index]
+        if line.startswith(">"):
+            property_name = _parse_property_name(line)
+            tail_index += 1
+            property_value_lines: list[str] = []
+            while tail_index < len(lines) and lines[tail_index] != "":
+                property_value_lines.append(lines[tail_index])
+                tail_index += 1
+            properties[property_name] = "\n".join(property_value_lines)
+        tail_index += 1
+    return properties
+
+
+def _build_molecule(atoms: list[Atom], bonds: list[tuple[Edge, int]]) -> Molecule:
+    atom_map = {atom.atom_id: atom for atom in atoms}
     local_bonds = frozenset(edge for edge, _ in bonds)
     aromatic_rings = _detect_six_rings(bonds)
     aromatic_ring_edges = frozenset(edge for ring in aromatic_rings for edge in ring)
@@ -189,8 +324,7 @@ def _parse_block(block: str) -> SDFRecord:
     for ring_edges in aromatic_rings:
         systems.append((SystemId(system_index), mk_bonding_system(NonNegative(6), ring_edges, "pi_ring")))
         system_index += 1
-    molecule = Molecule(atoms=atom_map, local_bonds=local_bonds, systems=tuple(systems))
-    return SDFRecord(molecule=molecule, properties=properties, title=title)
+    return Molecule(atoms=atom_map, local_bonds=local_bonds, systems=tuple(systems))
 
 
 def _parse_atom_line(index: int, line: str) -> Atom:
@@ -300,7 +434,7 @@ def _detect_six_rings(bonds: list[tuple[Edge, int]]) -> list[frozenset[Edge]]:
 
     discovered: set[frozenset[Edge]] = set()
 
-    def search(path: list[AtomId], current: AtomId, previous_order: int | None) -> None:
+    def search_alternating(path: list[AtomId], current: AtomId, previous_order: int | None) -> None:
         if len(path) == 6:
             if previous_order is None:
                 return
@@ -318,8 +452,23 @@ def _detect_six_rings(bonds: list[tuple[Edge, int]]) -> list[frozenset[Edge]]:
                 continue
             if neighbor in path:
                 continue
-            search(path + [neighbor], neighbor, order)
+            search_alternating(path + [neighbor], neighbor, order)
+
+    def search_aromatic(path: list[AtomId], current: AtomId) -> None:
+        if len(path) == 6:
+            for neighbor, order in adjacency.get(current, []):
+                if neighbor == path[0] and order == 4:
+                    atoms = path + [path[0]]
+                    ring_edges = frozenset(mk_edge(atoms[index], atoms[index + 1]) for index in range(6))
+                    if path[0] == min(path, key=lambda atom_id: atom_id.value):
+                        discovered.add(ring_edges)
+            return
+        for neighbor, order in adjacency.get(current, []):
+            if order != 4 or neighbor in path:
+                continue
+            search_aromatic(path + [neighbor], neighbor)
 
     for start in adjacency:
-        search([start], start, None)
+        search_alternating([start], start, None)
+        search_aromatic([start], start)
     return sorted(discovered, key=lambda ring: sorted((edge.a.value, edge.b.value) for edge in ring))

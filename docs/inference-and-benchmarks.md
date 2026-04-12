@@ -15,8 +15,8 @@ make timing
 ./.venv/bin/python -m scripts.run_all benchmark --paper-mode --verbose
 ```
 
-- `make freesolv` runs the long FreeSolv MolADT sweep, imports all `642` vendored SDF structures as the molecule source, and compares the validation-selected local Stan run against MoleculeNet Table 3 on RMSE
-- `make qm9` runs the long QM9 `mu` MolADT sweep on the full local download with the paper-sized split and compares the validation-selected local Stan run against MoleculeNet Table 3 on MAE
+- `make freesolv` runs the long FreeSolv benchmark path, imports all `642` vendored SDF structures as the molecule source, and compares the fixed local Stan run against MoleculeNet Table 3 on RMSE
+- `make qm9` runs the long QM9 `mu` benchmark path on the full local download with the paper-sized split and compares the fixed local Stan run against MoleculeNet Table 3 on MAE
 - `make benchmark-small` keeps the older lighter `QM9_LIMIT=2000` subset path available for a faster local check
 - `make timing` runs the separate ZINC timing/interoperability pass
 - `make python-cmdstan-install` is the one-time local CmdStan install step required before the Stan benchmark targets
@@ -25,12 +25,12 @@ make timing
 
 The benchmark contract is deliberately narrow:
 
-- `moladt`
-  The same boundary SMILES is parsed into the typed MolADT object and featurized from that object.
-- the local run is selected by validation RMSE or MAE, not by test-set peeking
+- `moladt_featurized`
+  The same boundary SMILES or aligned SDF record is parsed into the typed MolADT object and featurized from that object with pair, radial, angle, torsion, and bonding-system channels.
 - the FreeSolv figure shows `Training`, `Validation`, `Test`, then `Paper`
 - the QM9 figure shows `Training`, `Test`, then `Paper`
-- FreeSolv uses one fixed benchmark path: `moladt_featurized` with `bayes_gp_rbf_screened` fit by `laplace`
+- FreeSolv uses one fixed benchmark path: `moladt_featurized` with the `bayes_gp_rbf_screened` model fit by Stan `laplace`
+- QM9 uses one fixed benchmark path: `moladt_featurized` with the `bayes_linear_student_t` model fit by Stan `optimize`
 - the paper bar is the matching MoleculeNet row only
 - FreeSolv uses RMSE
 - QM9 `mu` uses MAE
@@ -45,20 +45,29 @@ The aligned Stan models are:
 - [`bayes_hierarchical_shrinkage`](../stan/bayes_hierarchical_shrinkage.stan)
 - [`bayes_gp_rbf_screened`](../stan/bayes_gp_rbf_screened.stan)
 
-The benchmark graph uses the fixed FreeSolv run and the validation-selected QM9 row.
+The benchmark graph uses the fixed FreeSolv run and the fixed QM9 Stan path.
 
 ## Dataset Meaning
 
-- FreeSolv compares the best local MolADT RMSE against the MoleculeNet Table 3 MPNN RMSE row `1.15`.
-- QM9 `mu` compares the best local MolADT MAE against the MoleculeNet Table 3 DTNN MAE row `2.35`.
+- FreeSolv compares the local MolADT RMSE against the MoleculeNet Table 3 MPNN RMSE row `1.15`.
+- QM9 `mu` compares the local MolADT MAE against the MoleculeNet Table 3 DTNN MAE row `2.35`.
 
-By default the top-level `make freesolv`, `make qm9`, and `make benchmark` targets use the long `paper` inference preset. `make qm9` is therefore expected to take hours after CmdStan is already built.
+By default the top-level `make freesolv`, `make qm9`, and `make benchmark` targets use the long `paper` inference preset. `make qm9` still runs the paper-sized split, but it no longer launches the older multi-model multi-algorithm Stan sweep by default.
 
 ## Timing
 
 `make timing` is not the same question as the predictive benchmark.
 
-It writes a ZINC timing bundle under `results/timing/run_<timestamp>/` and reports ingest/runtime stages, including raw file IO, manifest CSV field materialization as plain strings, the local SMILES parser path, and the optional local MolADT-library path. Treat it as an interoperability/runtime benchmark, not as the central representation-quality comparison.
+It writes a ZINC timing bundle under `results/timing/run_<timestamp>/` and reports a pipeline:
+
+- raw file I/O baseline
+- optional external-toolkit SMILES normalization
+- one-time matched-corpus setup
+- plain-string CSV baseline
+- local MolADT SMILES parsing
+- local MolADT JSON file loading
+
+Treat it as an interoperability and runtime benchmark, not as the central representation-quality comparison. The timing SVG uses a log throughput axis so large stage gaps remain readable without overlapping labels.
 
 ## Outputs
 

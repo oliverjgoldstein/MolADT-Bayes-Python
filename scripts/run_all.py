@@ -28,6 +28,8 @@ DEFAULT_STAN_MODELS = ("bayes_linear_student_t", "bayes_hierarchical_shrinkage")
 DEFAULT_STAN_MODELS_ARG = ",".join(DEFAULT_STAN_MODELS)
 DEFAULT_FREESOLV_STAN_METHODS = ("laplace",)
 DEFAULT_FREESOLV_STAN_MODELS = ("bayes_gp_rbf_screened",)
+DEFAULT_QM9_STAN_METHODS = ("optimize",)
+DEFAULT_QM9_STAN_MODELS = ("bayes_linear_student_t",)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -347,6 +349,10 @@ def _extend_with_property_results(
         if moladt_featurized_bundle is None:
             raise RuntimeError("FreeSolv featurized export is required for the reviewer benchmark")
         bundles: list[ExportedDataset] = [moladt_featurized_bundle]
+    elif isinstance(artifacts, QM9Artifacts) and models == DEFAULT_QM9_STAN_MODELS:
+        if moladt_featurized_bundle is None:
+            raise RuntimeError("QM9 featurized export is required for the reviewer benchmark")
+        bundles = [moladt_featurized_bundle]
     else:
         if moladt_bundle is None:
             raise RuntimeError("MolADT export is required for the Stan benchmark")
@@ -384,6 +390,8 @@ def _stan_models_for_artifacts(
     requested = tuple(model.strip() for model in args.models.split(",") if model.strip())
     if isinstance(artifacts, FreeSolvArtifacts) and args.models == DEFAULT_STAN_MODELS_ARG:
         return DEFAULT_FREESOLV_STAN_MODELS
+    if isinstance(artifacts, QM9Artifacts) and args.models == DEFAULT_STAN_MODELS_ARG:
+        return DEFAULT_QM9_STAN_MODELS
     return requested
 
 
@@ -394,6 +402,8 @@ def _stan_methods_for_artifacts(
     requested = tuple(method.strip() for method in args.methods.split(",") if method.strip())
     if isinstance(artifacts, FreeSolvArtifacts) and args.methods == DEFAULT_STAN_METHODS_ARG:
         return DEFAULT_FREESOLV_STAN_METHODS
+    if isinstance(artifacts, QM9Artifacts) and args.methods == DEFAULT_STAN_METHODS_ARG:
+        return DEFAULT_QM9_STAN_METHODS
     return requested
 
 
@@ -910,8 +920,8 @@ def _write_results_csv(
 
 def _freesolv_context_note(*, baseline_note: str = "") -> str:
     contextual = (
-        "MoleculeNet Table 3 is the external baseline here. The local bar is the best validation-selected MolADT run, "
-        "so the metric matches but the split and model family are still different."
+        "MoleculeNet Table 3 is the paper baseline. The local result is the fixed MolADT benchmark run on the repo split, "
+        "so the metric matches but the split and model family still differ."
     )
     if baseline_note:
         return f"{contextual} {baseline_note}"
@@ -928,13 +938,13 @@ def _qm9_review_note(
 ) -> str:
     if split_scheme.startswith("paper:") or (train_n_eval == 110_462 and valid_n_eval == 10_000 and test_n_eval == 10_000):
         contextual = (
-            "The local run uses paper-sized split counts, but the benchmark still compares the best Stan MolADT run "
-            "against MoleculeNet's DTNN MAE row rather than reproducing the original paper training recipe exactly."
+            "The local run uses paper-sized split counts and the fixed `moladt_featurized` Student-t Stan path with L-BFGS mode fitting, "
+            "but it still compares against MoleculeNet's DTNN MAE row rather than reproducing the original neural training recipe exactly."
         )
     else:
         contextual = (
-            "MoleculeNet Table 3 is the external baseline here. The metric matches MAE, but the local split and Stan "
-            "model family still differ from the original DTNN benchmark."
+            "MoleculeNet Table 3 is the paper baseline. The metric matches MAE, but the local split and Stan model family "
+            "still differ from the original DTNN benchmark."
         )
     if baseline_note:
         return f"{contextual} {baseline_note}"

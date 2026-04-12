@@ -3,13 +3,60 @@ from __future__ import annotations
 from collections import Counter
 from pathlib import Path
 
+from moladt.chem.dietz import AtomId
 from moladt.examples.morphine import MORPHINE_RING_CLOSURE_SMILES
 from moladt.examples.sample_molecules import methane, water
-from moladt.io.sdf import molecule_to_sdf, parse_sdf, read_sdf, read_sdf_record
+from moladt.io.sdf import molecule_to_sdf, parse_sdf, parse_sdf_record, read_sdf, read_sdf_record
 from moladt.io.smiles import molecule_to_smiles, parse_smiles
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+V3000_WATER = """water
+MolADT
+generated
+  0  0  0  0  0  0            999 V3000
+M  V30 BEGIN CTAB
+M  V30 COUNTS 3 2 0 0 0
+M  V30 BEGIN ATOM
+M  V30 1 O 0.0000 0.0000 0.0000 0
+M  V30 2 H 0.9572 0.0000 0.0000 0
+M  V30 3 H -0.2390 0.9270 0.0000 0
+M  V30 END ATOM
+M  V30 BEGIN BOND
+M  V30 1 1 1 2
+M  V30 2 1 1 3
+M  V30 END BOND
+M  V30 END CTAB
+M  END
+> <source>
+v3000
+
+$$$$
+"""
+
+V3000_AMMONIUM = """ammonium
+MolADT
+generated
+  0  0  0  0  0  0            999 V3000
+M  V30 BEGIN CTAB
+M  V30 COUNTS 5 4 0 0 0
+M  V30 BEGIN ATOM
+M  V30 1 N 0.0000 0.0000 0.0000 0 CHG=1
+M  V30 2 H 0.9000 0.0000 0.0000 0
+M  V30 3 H -0.3000 0.8500 0.0000 0
+M  V30 4 H -0.3000 -0.4000 0.8000 0
+M  V30 5 H -0.3000 -0.4000 -0.8000 0
+M  V30 END ATOM
+M  V30 BEGIN BOND
+M  V30 1 1 1 2
+M  V30 2 1 1 3
+M  V30 3 1 1 4
+M  V30 4 1 1 5
+M  V30 END BOND
+M  V30 END CTAB
+M  END
+$$$$
+"""
 
 
 def test_benzene_round_trip_preserves_atom_count_and_sigma_bonds() -> None:
@@ -29,6 +76,21 @@ def test_water_smoke_parse() -> None:
     molecule = read_sdf(PROJECT_ROOT / "molecules" / "water.sdf")
     assert len(molecule.atoms) == 3
     assert len(molecule.local_bonds) == 2
+
+
+def test_v3000_water_record_parse_preserves_properties() -> None:
+    record = parse_sdf_record(V3000_WATER)
+
+    assert record.title == "water"
+    assert record.property("source") == "v3000"
+    assert len(record.molecule.atoms) == 3
+    assert len(record.molecule.local_bonds) == 2
+
+
+def test_v3000_atom_charge_is_read_from_atom_tokens() -> None:
+    molecule = parse_sdf(V3000_AMMONIUM)
+
+    assert molecule.atoms[AtomId(1)].formal_charge == 1
 
 
 def test_smiles_parse_recovers_benzene_pi_ring() -> None:

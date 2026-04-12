@@ -27,6 +27,7 @@ BENCHMARK_VERBOSE ?= 1
 EXAMPLE ?= ferrocene
 MODELS ?= bayes_linear_student_t,bayes_hierarchical_shrinkage
 FREESOLV_MODELS ?= bayes_gp_rbf_screened
+QM9_MODELS ?= bayes_linear_student_t
 PYTHON_EXTRAS ?= dev,ml,geom
 RESULTS_SUBDIR ?=
 RUN_TIMESTAMP ?= $(shell date +%Y%m%d_%H%M%S)
@@ -80,6 +81,7 @@ BENCHMARK_LOG ?= $(RESULTS_ROOT)/benchmark.out
 
 METHODS ?= $(METHODS_DEFAULT)
 FREESOLV_METHODS ?= laplace
+QM9_METHODS ?= optimize
 SAMPLE_CHAINS ?= $(SAMPLE_CHAINS_DEFAULT)
 SAMPLE_WARMUP ?= $(SAMPLE_WARMUP_DEFAULT)
 SAMPLE_DRAWS ?= $(SAMPLE_DRAWS_DEFAULT)
@@ -91,6 +93,7 @@ PREDICTIVE_DRAWS ?= $(PREDICTIVE_DRAWS_DEFAULT)
 
 BENCHMARK_ARGS := --methods $(METHODS) --models $(MODELS) --sample-chains $(SAMPLE_CHAINS) --sample-warmup $(SAMPLE_WARMUP) --sample-draws $(SAMPLE_DRAWS) --approximation-draws $(APPROXIMATION_DRAWS) --variational-iterations $(VARIATIONAL_ITERATIONS) --optimize-iterations $(OPTIMIZE_ITERATIONS) --pathfinder-paths $(PATHFINDER_PATHS) --predictive-draws $(PREDICTIVE_DRAWS)
 FREESOLV_BENCHMARK_ARGS := --methods $(FREESOLV_METHODS) --models $(FREESOLV_MODELS) --sample-chains $(SAMPLE_CHAINS) --sample-warmup $(SAMPLE_WARMUP) --sample-draws $(SAMPLE_DRAWS) --approximation-draws $(APPROXIMATION_DRAWS) --variational-iterations $(VARIATIONAL_ITERATIONS) --optimize-iterations $(OPTIMIZE_ITERATIONS) --pathfinder-paths $(PATHFINDER_PATHS) --predictive-draws $(PREDICTIVE_DRAWS)
+QM9_BENCHMARK_ARGS := --methods $(QM9_METHODS) --models $(QM9_MODELS) --sample-chains $(SAMPLE_CHAINS) --sample-warmup $(SAMPLE_WARMUP) --sample-draws $(SAMPLE_DRAWS) --approximation-draws $(APPROXIMATION_DRAWS) --variational-iterations $(VARIATIONAL_ITERATIONS) --optimize-iterations $(OPTIMIZE_ITERATIONS) --pathfinder-paths $(PATHFINDER_PATHS) --predictive-draws $(PREDICTIVE_DRAWS)
 QM9_LIMIT_QM9_ARG := $(if $(QM9_LIMIT),--limit $(QM9_LIMIT),)
 QM9_LIMIT_BENCHMARK_ARG := $(if $(QM9_LIMIT),--qm9-limit $(QM9_LIMIT),)
 ZINC_LIMIT_BENCHMARK_ARG := $(if $(ZINC_LIMIT),--zinc-limit $(ZINC_LIMIT),)
@@ -148,6 +151,8 @@ help:
 	"  toolchain_env=$(if $(DARWIN_SDKROOT),apple-xcrun,default)" \
 	"  methods=$(METHODS)" \
 	"  models=$(MODELS)" \
+	"  freesolv_methods=$(FREESOLV_METHODS) freesolv_models=$(FREESOLV_MODELS)" \
+	"  qm9_methods=$(QM9_METHODS) qm9_models=$(QM9_MODELS)" \
 	"  sample_chains=$(SAMPLE_CHAINS) sample_warmup=$(SAMPLE_WARMUP) sample_draws=$(SAMPLE_DRAWS)" \
 	"  approximation_draws=$(APPROXIMATION_DRAWS) pathfinder_paths=$(PATHFINDER_PATHS)" \
 	"  tested Python=$(TESTED_PYTHON) cmdstanpy=$(TESTED_CMDSTANPY) CmdStan=$(TESTED_CMDSTAN) RDKit=$(TESTED_RDKIT)" \
@@ -397,15 +402,15 @@ python-benchmark-qm9:
 	"  inference_preset: $(INFERENCE_PRESET)" \
 	"  qm9_split_mode: $(QM9_SPLIT_MODE)" \
 	"  qm9_limit: $(if $(QM9_LIMIT),$(QM9_LIMIT),full-local-download)" \
-	"  methods: $(METHODS)" \
-	"  models: $(MODELS)" \
+	"  methods: $(QM9_METHODS)" \
+	"  models: $(QM9_MODELS)" \
 	"  sample_chains=$(SAMPLE_CHAINS) sample_warmup=$(SAMPLE_WARMUP) sample_draws=$(SAMPLE_DRAWS)" \
 	"  approximation_draws=$(APPROXIMATION_DRAWS) variational_iterations=$(VARIATIONAL_ITERATIONS)" \
 	"  optimize_iterations=$(OPTIMIZE_ITERATIONS) pathfinder_paths=$(PATHFINDER_PATHS) predictive_draws=$(PREDICTIVE_DRAWS)" \
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
 	"  toolchain_env: $(if $(DARWIN_SDKROOT),apple-xcrun,default)" \
 	"  expected outputs: $(RESULTS_ROOT)/results.csv and $(RESULTS_ROOT)/details/"
-	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 $(QM9_LIMIT_QM9_ARG) --split-mode $(QM9_SPLIT_MODE) $(if $(filter paper,$(INFERENCE_PRESET)),--paper-mode,) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
+	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 $(QM9_LIMIT_QM9_ARG) --split-mode $(QM9_SPLIT_MODE) $(if $(filter paper,$(INFERENCE_PRESET)),--paper-mode,) $(VERBOSE_ARG) $(QM9_BENCHMARK_ARGS)
 
 python-benchmark-zinc:
 	@printf "%s\n" \
@@ -452,11 +457,11 @@ qm9:
 	"  inference_preset: $(INFERENCE_PRESET)" \
 	"  qm9_split_mode: $(QM9_SPLIT_MODE)" \
 	"  qm9_limit: $(if $(QM9_LIMIT),$(QM9_LIMIT),full-local-download)" \
-	"  methods: $(METHODS)" \
-	"  models: $(MODELS)" \
+	"  methods: $(QM9_METHODS)" \
+	"  models: $(QM9_MODELS)" \
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
 	"  expected figure: results/$(QM9_RESULTS_SUBDIR)/qm9_mae_vs_moleculenet.svg"
-	MOLADT_RESULTS_DIR=results/$(QM9_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 $(QM9_LIMIT_QM9_ARG) --split-mode $(QM9_SPLIT_MODE) $(if $(filter paper,$(INFERENCE_PRESET)),--paper-mode,) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
+	MOLADT_RESULTS_DIR=results/$(QM9_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 $(QM9_LIMIT_QM9_ARG) --split-mode $(QM9_SPLIT_MODE) $(if $(filter paper,$(INFERENCE_PRESET)),--paper-mode,) $(VERBOSE_ARG) $(QM9_BENCHMARK_ARGS)
 
 benchmark:
 	@printf "%s\n" \

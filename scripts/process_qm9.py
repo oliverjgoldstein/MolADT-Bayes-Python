@@ -13,6 +13,7 @@ from .download_data import download_qm9
 from .features import (
     FeatureTable,
     GeometricFeatureTable,
+    featurize_moladt_featurized_records,
     featurize_moladt_geometry_records,
     featurize_moladt_smiles_dataframe,
     featurize_sdf_geometry_records,
@@ -34,6 +35,7 @@ class QM9Artifacts:
     geometric_exports: dict[str, GeometricDatasetSpec]
     smiles_export: ExportedDataset
     moladt_export: ExportedDataset
+    moladt_featurized_export: ExportedDataset | None
     failure_csv_paths: tuple[Path, ...]
 
 def _align_feature_tables(tables: dict[str, FeatureTable]) -> dict[str, FeatureTable]:
@@ -152,9 +154,27 @@ def process_qm9_dataset(
     moladt_feature_failure_path = PROCESSED_DATA_DIR / "qm9_moladt_feature_failures.csv"
     write_failure_csv(moladt_feature_failure_path, moladt_table.failures)
     failure_paths.append(moladt_feature_failure_path)
-    aligned_tabular = _align_feature_tables({"smiles": smiles_table, "moladt": moladt_table})
+    moladt_featurized_table = featurize_moladt_featurized_records(
+        combined_frame.loc[:, ["mol_id", "mu", "sdf_record_index", "moladt_molecule"]],
+        dataset_name="qm9_moladt_featurized",
+        mol_id_column="mol_id",
+        mol_column="moladt_molecule",
+        target_column="mu",
+        record_index_column="sdf_record_index",
+    )
+    moladt_featurized_feature_failure_path = PROCESSED_DATA_DIR / "qm9_moladt_featurized_feature_failures.csv"
+    write_failure_csv(moladt_featurized_feature_failure_path, moladt_featurized_table.failures)
+    failure_paths.append(moladt_featurized_feature_failure_path)
+    aligned_tabular = _align_feature_tables(
+        {
+            "smiles": smiles_table,
+            "moladt": moladt_table,
+            "moladt_featurized": moladt_featurized_table,
+        }
+    )
     smiles_table = aligned_tabular["smiles"]
     moladt_table = aligned_tabular["moladt"]
+    moladt_featurized_table = aligned_tabular["moladt_featurized"]
     split_partition = _qm9_split_partition(len(smiles_table.rows), seed=seed, split_mode=split_mode)
     if verbose:
         log(
@@ -179,9 +199,18 @@ def process_qm9_dataset(
         seed=seed,
         split_partition=split_partition,
     )
+    moladt_featurized_export = export_standardized_splits(
+        moladt_featurized_table,
+        dataset_name="qm9",
+        representation="moladt_featurized",
+        target_name="mu",
+        seed=seed,
+        split_partition=split_partition,
+    )
     tabular_exports: dict[str, ExportedDataset] = {
         "smiles": smiles_export,
         "moladt": moladt_export,
+        "moladt_featurized": moladt_featurized_export,
     }
     if verbose:
         log(
@@ -193,6 +222,11 @@ def process_qm9_dataset(
             f"[qm9 3/{total_stages}] moladt_rows={len(moladt_table.rows)} "
             f"moladt_feature_failures={len(moladt_table.failures)} "
             f"train={len(moladt_export.y_train)} valid={len(moladt_export.y_valid)} test={len(moladt_export.y_test)}"
+        )
+        log(
+            f"[qm9 3/{total_stages}] moladt_featurized_rows={len(moladt_featurized_table.rows)} "
+            f"moladt_featurized_failures={len(moladt_featurized_table.failures)} "
+            f"train={len(moladt_featurized_export.y_train)} valid={len(moladt_featurized_export.y_valid)} test={len(moladt_featurized_export.y_test)}"
         )
 
     if verbose:
@@ -269,6 +303,7 @@ def process_qm9_dataset(
         geometric_exports=geometric_exports,
         smiles_export=smiles_export,
         moladt_export=moladt_export,
+        moladt_featurized_export=moladt_featurized_export,
         failure_csv_paths=tuple(failure_paths),
     )
 

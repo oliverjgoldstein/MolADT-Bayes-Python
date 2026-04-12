@@ -12,6 +12,15 @@ Use `parse`.
 
 This reads the file-backed molecule, validates it, prints the MolADT structure, and keeps SDF metadata such as the title and properties block when present.
 
+The SDF parser accepts:
+
+- V2000 records
+- the core V3000 CTAB subset with atom coordinates, bond tables, and atom-local formal charges
+
+The writer remains V2000-only.
+
+If the SDF payload contains several molecules, use `from moladt.io.sdf import read_sdf_records; titles = [record.title for record in read_sdf_records("bundle.sdf", limit=5)]` or iterate lazily with `from moladt.io.sdf import iter_sdf_records; first = next(iter_sdf_records("bundle.sdf"))`.
+
 Use `parse` when the source of truth is a structure file.
 
 ## If You Have a SMILES String

@@ -8,7 +8,7 @@ The shared contract lives under `data/processed/`. The goal is to let Haskell co
 
 ## What Python Writes
 
-For each exported dataset prefix such as `freesolv_moladt` or `qm9_moladt`, Python writes:
+For each exported dataset prefix such as `freesolv_moladt_featurized` or `qm9_moladt_featurized`, Python writes:
 
 - `*_X_train.csv`, `*_X_valid.csv`, `*_X_test.csv`
 - `*_y_train.csv`, `*_y_valid.csv`, `*_y_test.csv`
@@ -17,8 +17,8 @@ For each exported dataset prefix such as `freesolv_moladt` or `qm9_moladt`, Pyth
 
 Examples already used by the Haskell side include:
 
-- `data/processed/freesolv_moladt_X_train.csv`
-- `data/processed/qm9_moladt_X_train.csv`
+- `data/processed/freesolv_moladt_featurized_X_train.csv`
+- `data/processed/qm9_moladt_featurized_X_train.csv`
 
 ## Standardization Contract
 
@@ -51,12 +51,12 @@ Each `*_metadata.json` file includes:
 
 ## Relation to the Python Models
 
-Python fits two Stan models:
+Python fits the benchmark Stan models:
 
-- `bayes_linear_student_t`
-- `bayes_hierarchical_shrinkage`
+- FreeSolv: `bayes_gp_rbf_screened`
+- QM9: `bayes_linear_student_t`
 
-The Haskell baseline is aligned to the exported linear `X/y` format used by the Python `bayes_linear_student_t` workflow. It does not re-derive the feature matrix locally.
+The Haskell baseline is aligned to the exported linear `X/y` format used by the Python `bayes_linear_student_t` workflow for QM9. It does not re-derive the feature matrix locally.
 
 Shared modeling assumptions that matter for interop:
 
@@ -76,13 +76,13 @@ Shared modeling assumptions that matter for interop:
 2. In the Haskell repo, point the consumer at the processed directory:
 
    ```bash
-   MOLADT_PROCESSED_DATA_DIR=../MolADT-Bayes-Python/data/processed stack run moladtbayes -- infer-benchmark freesolv_moladt lwis
+   MOLADT_PROCESSED_DATA_DIR=../MolADT-Bayes-Python/data/processed stack run moladtbayes -- infer-benchmark freesolv_moladt_featurized lwis
    ```
 
 3. For an ADT-backed structural benchmark:
 
    ```bash
-   MOLADT_PROCESSED_DATA_DIR=../MolADT-Bayes-Python/data/processed stack run moladtbayes -- infer-benchmark qm9_moladt mh:0.9 256
+   MOLADT_PROCESSED_DATA_DIR=../MolADT-Bayes-Python/data/processed stack run moladtbayes -- infer-benchmark qm9_moladt_featurized mh:0.9 256
    ```
 
 ## Source Files

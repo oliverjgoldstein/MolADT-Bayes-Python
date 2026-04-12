@@ -33,7 +33,7 @@ Each predictive run writes only the two MoleculeNet comparison figures:
 - `qm9_mae_vs_moleculenet.svg`
 
 The FreeSolv figure shows local `Training`, `Validation`, and `Test` metrics, followed by the cited `Paper` baseline.
-The QM9 figure shows local `Training` and `Test` metrics, followed by the cited `Paper` baseline.
+The QM9 figure shows local `Training` and `Test` metrics, followed by the cited `Paper` baseline for the fixed `moladt_featurized + bayes_linear_student_t + optimize` Stan path.
 
 ## Other Useful Files
 
@@ -50,4 +50,12 @@ Use the files in this order:
 2. `freesolv_rmse_vs_moleculenet.svg` and `qm9_mae_vs_moleculenet.svg` for the paper comparison
 3. `details/` when you need raw rows for analysis or plotting
 
-For timing runs specifically, `details/zinc_timing.csv` separates the manifest CSV field-to-string baseline (`smiles_csv_string_parse`) from the local SMILES parser and MolADT file parser.
+For timing runs specifically, `details/zinc_timing.csv` separates:
+
+- the raw source-file read
+- the optional external-toolkit stages
+- the plain CSV field-to-string baseline (`smiles_csv_string_parse`)
+- the local MolADT SMILES parser (`smiles_library_parse`)
+- the local MolADT JSON file reader (`moladt_file_parse`)
+
+The top-level `timing_overview.svg` plots throughput on a log axis and labels each stage as I/O baseline, external toolkit, setup, string baseline, our parser, or our file reader.

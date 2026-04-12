@@ -29,6 +29,56 @@ SERIES_COLORS = {
     "moladt_geom": "#be123c",
     "paper": LITERATURE,
 }
+TIMING_OWNER_COLORS = {
+    "I/O baseline": "#1d4ed8",
+    "External toolkit": "#b45309",
+    "One-time setup": "#475569",
+    "String baseline": "#6d28d9",
+    "Our parser": "#0f766e",
+    "Our file reader": "#be123c",
+}
+TIMING_STAGE_META = {
+    "raw_file_read": {
+        "label": "Source file read",
+        "owner": "I/O baseline",
+        "description": "Reads raw SMILES lines from the normalized source file. No chemistry, parsing, or validation happens here.",
+    },
+    "smiles_parse_sanitize": {
+        "label": "Toolkit parse + sanitize",
+        "owner": "External toolkit",
+        "description": "An external chemistry toolkit parses each SMILES string into a molecular graph and applies its sanitization rules.",
+    },
+    "smiles_canonicalization": {
+        "label": "Toolkit canonical SMILES",
+        "owner": "External toolkit",
+        "description": "The same external toolkit rewrites each parsed molecule into one canonical SMILES form.",
+    },
+    "timing_library_prepare": {
+        "label": "Matched corpus build",
+        "owner": "One-time setup",
+        "description": "Builds the aligned timing corpus so every later stage runs on the same molecules and file count.",
+    },
+    "smiles_csv_string_parse": {
+        "label": "CSV field to string",
+        "owner": "String baseline",
+        "description": "Materializes the canonical SMILES field from the manifest CSV as a plain Python string. This is the floor cost before any chemistry work.",
+    },
+    "smiles_library_parse": {
+        "label": "SMILES to MolADT",
+        "owner": "Our parser",
+        "description": "Runs the local MolADT SMILES parser on those same canonical strings to build the typed molecule object.",
+    },
+    "moladt_file_parse": {
+        "label": "MolADT JSON to object",
+        "owner": "Our file reader",
+        "description": "Reads the already-structured MolADT JSON file and reconstructs the local typed molecule object from disk.",
+    },
+    "moladt_parse_render": {
+        "label": "MolADT parse + render",
+        "owner": "Our parser",
+        "description": "Parses a MolADT structure and renders it again through the local boundary path. This is an end-to-end local MolADT stage.",
+    },
+}
 
 
 def write_moleculenet_comparison_overviews(comparison_frame: pd.DataFrame, destination_dir: Path) -> None:
@@ -47,15 +97,9 @@ def write_moleculenet_comparison_overviews(comparison_frame: pd.DataFrame, desti
         selection_label = "Validation" if selection_split == "valid" else selection_split.title()
         include_validation_bar = dataset == "freesolv"
         value_max = max(train_value, valid_value if include_validation_bar else 0.0, test_value, paper_value, 1e-6) * 1.2
-        width = 640
-        height = 332
-        x0 = 24
-        y0 = 24
-        plot_x = x0 + 56
-        plot_y = y0 + 104
-        plot_width = width - 112
-        plot_height = 124
-        bar_width = 92
+        width = 900
+        x0 = 28
+        y0 = 28
         bars: list[tuple[str, float, str]] = [("Training", train_value, SPLIT_COLORS["train"])]
         if include_validation_bar:
             bars.append(("Validation", valid_value, SPLIT_COLORS["valid"]))
@@ -65,62 +109,110 @@ def write_moleculenet_comparison_overviews(comparison_frame: pd.DataFrame, desti
                 ("Paper", paper_value, SERIES_COLORS["paper"]),
             ]
         )
-        bar_gap = 28 if len(bars) == 4 else 48
         summary_text = (
-            "Training, validation, and held-out test scores from the selected local MolADT run, plus the cited MoleculeNet Table 3 baseline."
+            "Local MolADT benchmark run on the FreeSolv split. Bars show training, validation, test, and the cited MoleculeNet Table 3 baseline."
             if include_validation_bar
-            else "Training and held-out test scores from the validation-selected local MolADT run, plus the cited MoleculeNet Table 3 baseline."
+            else "Local MolADT benchmark run on the QM9 split. Bars show training, test, and the cited MoleculeNet Table 3 baseline."
         )
+        summary_lines = _wrap_text(summary_text, 92)
+        local_lines = _wrap_text(
+            f"Local: {str(row.get('representation', 'moladt'))} / {str(row['model'])} / {str(row['method'])}",
+            92,
+        )
+        selection_lines = _wrap_text(
+            f"Selection: {selection_label} {metric_name}; paper baseline: {str(row['paper_model_name'])} from MoleculeNet",
+            92,
+        )
+        note_lines = _wrap_text(str(row.get("note", "")), 96)[:3]
+        title_y = y0 + 40
+        summary_y = title_y + 28
+        header_height = (
+            22
+            + max(1, len(summary_lines)) * 18
+            + max(1, len(local_lines)) * 15
+            + max(1, len(selection_lines)) * 15
+            + 26
+        )
+        plot_x = x0 + 72
+        plot_y = summary_y + header_height
+        plot_width = width - 156
+        plot_height = 244
+        footer_height = max(1, len(note_lines)) * 14 + 34
+        height = int(plot_y + plot_height + footer_height + y0)
+        card_width = width - 56
+        card_height = height - 56
+        tick_count = 6
+        bar_gap = 34 if len(bars) == 4 else 58
+        bar_width = 118 if len(bars) == 4 else 138
         parts = [_svg_header(width, height)]
         parts.append(f'<rect width="{width}" height="{height}" fill="{BACKGROUND}" />')
-        parts.append(f'<rect x="{x0}" y="{y0}" width="{width - 48}" height="{height - 48}" rx="18" fill="{CARD_FILL}" stroke="{CARD_STROKE}" />')
+        parts.append(f'<rect x="{x0}" y="{y0}" width="{card_width}" height="{card_height}" rx="22" fill="{CARD_FILL}" stroke="{CARD_STROKE}" stroke-width="1.2" />')
         parts.append(
-            f'<text x="{x0 + 20}" y="{y0 + 30}" font-size="22" font-family="Georgia, serif" fill="{TEXT}">'
+            f'<text x="{x0 + 28}" y="{title_y}" font-size="34" font-family="Georgia, serif" fill="{TEXT}" font-weight="700">'
             f"{escape(str(row['dataset_label']))}: {escape(metric_name)}"
             "</text>"
         )
-        parts.append(
-            f'<text x="{x0 + 20}" y="{y0 + 50}" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">'
-            f"{summary_text}"
-            "</text>"
+        _append_wrapped_text(
+            parts,
+            x=x0 + 28,
+            y=summary_y,
+            lines=summary_lines,
+            font_size=17,
+            line_height=18,
+            fill=MUTED,
         )
-        parts.append(
-            f'<text x="{x0 + 20}" y="{y0 + 68}" font-size="11" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">'
-            f"Local: {escape(str(row.get('representation', 'moladt')))} / {escape(str(row['model']))} / {escape(str(row['method']))}"
-            "</text>"
+        local_y = summary_y + max(1, len(summary_lines)) * 18 + 10
+        _append_wrapped_text(
+            parts,
+            x=x0 + 28,
+            y=local_y,
+            lines=local_lines,
+            font_size=13,
+            line_height=15,
+            fill=MUTED,
         )
-        parts.append(
-            f'<text x="{x0 + 20}" y="{y0 + 84}" font-size="11" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">'
-            f"Selection: {escape(selection_label)} {escape(metric_name)}; Paper: {escape(str(row['paper_model_name']))} from MoleculeNet"
-            "</text>"
+        selection_y = local_y + max(1, len(local_lines)) * 15 + 8
+        _append_wrapped_text(
+            parts,
+            x=x0 + 28,
+            y=selection_y,
+            lines=selection_lines,
+            font_size=13,
+            line_height=15,
+            fill=MUTED,
         )
-        for step in range(5):
-            fraction = step / 4.0
+        for step in range(tick_count):
+            fraction = step / (tick_count - 1)
             y_value = value_max * fraction
             y = plot_y + plot_height - plot_height * fraction
             parts.append(f'<line x1="{plot_x}" y1="{y:.1f}" x2="{plot_x + plot_width}" y2="{y:.1f}" stroke="{GRID}" stroke-width="1" />')
             parts.append(
-                f'<text x="{plot_x - 8}" y="{y + 4:.1f}" text-anchor="end" font-size="10" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">{y_value:.2f}</text>'
+                f'<text x="{plot_x - 12}" y="{y + 5:.1f}" text-anchor="end" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">{y_value:.2f}</text>'
             )
-        parts.append(f'<line x1="{plot_x}" y1="{plot_y + plot_height}" x2="{plot_x + plot_width}" y2="{plot_y + plot_height}" stroke="{TEXT}" stroke-width="1.4" />')
+        parts.append(f'<line x1="{plot_x}" y1="{plot_y + plot_height}" x2="{plot_x + plot_width}" y2="{plot_y + plot_height}" stroke="{TEXT}" stroke-width="2" />')
         total_bar_width = len(bars) * bar_width + (len(bars) - 1) * bar_gap
         left_pad = plot_x + (plot_width - total_bar_width) / 2
         for index, (label, value, color) in enumerate(bars):
             x = left_pad + index * (bar_width + bar_gap)
             bar_height = (value / value_max) * plot_height if value_max > 0 else 0.0
             y = plot_y + plot_height - bar_height
-            parts.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_width}" height="{bar_height:.1f}" rx="10" fill="{color}" opacity="0.94" />')
+            parts.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_width}" height="{bar_height:.1f}" rx="18" fill="{color}" opacity="0.94" />')
             parts.append(
-                f'<text x="{x + bar_width / 2:.1f}" y="{y - 8:.1f}" text-anchor="middle" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}">{value:.3f}</text>'
+                f'<text x="{x + bar_width / 2:.1f}" y="{y - 14:.1f}" text-anchor="middle" font-size="14" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="600">{value:.3f}</text>'
             )
             parts.append(
-                f'<text x="{x + bar_width / 2:.1f}" y="{plot_y + plot_height + 22}" text-anchor="middle" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}">{escape(label)}</text>'
+                f'<text x="{x + bar_width / 2:.1f}" y="{plot_y + plot_height + 32}" text-anchor="middle" font-size="13" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}">{escape(label)}</text>'
             )
-        note_lines = _wrap_text(str(row.get("note", "")), 68)[:3]
-        for line_index, line in enumerate(note_lines):
-            parts.append(
-                f'<text x="{x0 + 20}" y="{height - 54 + line_index * 13}" font-size="10" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">{escape(line)}</text>'
-            )
+        note_y = plot_y + plot_height + 56
+        _append_wrapped_text(
+            parts,
+            x=x0 + 28,
+            y=note_y,
+            lines=note_lines,
+            font_size=11,
+            line_height=14,
+            fill=MUTED,
+        )
         parts.append("</svg>\n")
         destination.write_text("".join(parts), encoding="utf-8")
 
@@ -235,46 +327,96 @@ def write_timing_stage_overview(timing: pd.DataFrame, destination: Path) -> None
     rows = timing.copy()
     rows["_order"] = rows["stage"].map(order_index).fillna(len(stage_order)).astype(int)
     rows = rows.sort_values(["_order", "stage"]).reset_index(drop=True)
-    card_width = 980
-    card_height = 144 + len(rows) * 78
+    row_height = 96
+    card_width = 1220
+    card_height = 188 + len(rows) * row_height
     x0 = 24
     y0 = 24
     total_width = card_width + 48
     total_height = card_height + 48
-    chart_x = x0 + 318
-    chart_width = 510
+    chart_x = x0 + 552
+    chart_width = 574
     max_rate = max(float(rows["molecules_per_second"].max()), 1e-6) * 1.1
+    positive_rates = [float(value) for value in rows["molecules_per_second"] if float(value) > 0.0]
+    min_rate = min(positive_rates) if positive_rates else 1.0
+    log_min = math.floor(math.log10(min_rate))
+    log_max = math.ceil(math.log10(max_rate))
+    tick_values = [10.0**power for power in range(log_min, log_max + 1)]
+    if len(tick_values) == 1:
+        tick_values = [tick_values[0], tick_values[0] * 10.0]
+        log_max += 1
+
+    def rate_to_x(rate: float) -> float:
+        safe_rate = max(rate, tick_values[0])
+        if log_max == log_min:
+            return float(chart_x)
+        fraction = (math.log10(safe_rate) - log_min) / (log_max - log_min)
+        return chart_x + fraction * chart_width
 
     parts = [_svg_header(total_width, total_height)]
     parts.append(f'<rect width="{total_width}" height="{total_height}" fill="{BACKGROUND}" />')
     parts.append(f'<rect x="{x0}" y="{y0}" width="{card_width}" height="{card_height}" rx="18" fill="{CARD_FILL}" stroke="{CARD_STROKE}" />')
-    parts.append(f'<text x="{x0 + 24}" y="{y0 + 32}" font-size="20" font-family="Georgia, serif" fill="{TEXT}">Local timing overview</text>')
+    parts.append(f'<text x="{x0 + 24}" y="{y0 + 36}" font-size="24" font-family="Georgia, serif" fill="{TEXT}">Local timing overview</text>')
+    _append_wrapped_text(
+        parts,
+        x=x0 + 24,
+        y=y0 + 62,
+        lines=_wrap_text(
+            "This chart separates raw I/O, optional external-toolkit normalization, plain string baselines, and the local MolADT parser and file-reader stages.",
+            108,
+        ),
+        font_size=13,
+        line_height=16,
+        fill=MUTED,
+    )
     parts.append(
-        f'<text x="{x0 + 24}" y="{y0 + 54}" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">'
-        "This is an execution pipeline view: raw file IO, optional toolkit-assisted SMILES normalization, and the local MolADT ingest/render stages."
+        f'<text x="{chart_x}" y="{y0 + 108}" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="600">'
+        "Throughput (molecules / second, log scale; farther right is faster)"
         "</text>"
     )
+    axis_y = y0 + 132
+    for tick in tick_values:
+        tick_x = rate_to_x(tick)
+        parts.append(f'<line x1="{tick_x:.1f}" y1="{axis_y}" x2="{tick_x:.1f}" y2="{card_height + y0 - 24}" stroke="{GRID}" stroke-width="1" />')
+        parts.append(
+            f'<text x="{tick_x:.1f}" y="{axis_y - 8}" text-anchor="middle" font-size="11" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">{_format_rate_tick(tick)}</text>'
+        )
     for _, row in rows.iterrows():
         stage = str(row["stage"])
         stage_index = int(row["_order"])
-        y = y0 + 88 + stage_index * 78
-        bar_width = 0.0 if max_rate <= 0 else chart_width * (float(row["molecules_per_second"]) / max_rate)
-        description = str(row.get("description", ""))
-        parts.append(f'<text x="{x0 + 24}" y="{y + 16}" font-size="13" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}">{escape(stage)}</text>')
-        for line_index, line in enumerate(_wrap_text(description, 38)):
-            parts.append(
-                f'<text x="{x0 + 24}" y="{y + 32 + line_index * 13}" font-size="11" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">{escape(line)}</text>'
-            )
-        parts.append(f'<rect x="{chart_x}" y="{y}" width="{chart_width}" height="20" rx="10" fill="#e7e5e4" />')
-        parts.append(f'<rect x="{chart_x}" y="{y}" width="{bar_width:.1f}" height="20" rx="10" fill="{TIMING}" />')
+        y = y0 + 146 + stage_index * row_height
+        meta = TIMING_STAGE_META.get(stage, {})
+        display_label = str(meta.get("label", stage))
+        owner = str(meta.get("owner", "Local stage"))
+        owner_color = TIMING_OWNER_COLORS.get(owner, TIMING)
+        description = str(meta.get("description") or row.get("description", ""))
+        badge_width = max(88, min(150, 18 + len(owner) * 6))
+        parts.append(f'<rect x="{x0 + 24}" y="{y - 4}" width="{badge_width}" height="18" rx="9" fill="{owner_color}" opacity="0.12" />')
         parts.append(
-            f'<text x="{chart_x + chart_width + 12}" y="{y + 15}" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}">{float(row["molecules_per_second"]):.1f} mol/s</text>'
+            f'<text x="{x0 + 24 + badge_width / 2:.1f}" y="{y + 8}" text-anchor="middle" font-size="10" font-family="Helvetica, Arial, sans-serif" fill="{owner_color}" font-weight="600">{escape(owner)}</text>'
+        )
+        parts.append(f'<text x="{x0 + 24}" y="{y + 32}" font-size="15" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="600">{escape(display_label)}</text>')
+        parts.append(f'<text x="{x0 + 24}" y="{y + 48}" font-size="10" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">stage key: {escape(stage)}</text>')
+        for line_index, line in enumerate(_wrap_text(description, 52)[:2]):
+            parts.append(
+                f'<text x="{x0 + 24}" y="{y + 64 + line_index * 13}" font-size="11" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">{escape(line)}</text>'
+            )
+        bar_end_x = rate_to_x(float(row["molecules_per_second"])) if float(row["molecules_per_second"]) > 0.0 else chart_x
+        bar_width = max(3.0, bar_end_x - chart_x) if float(row["molecules_per_second"]) > 0.0 else 0.0
+        parts.append(f'<rect x="{chart_x}" y="{y + 12}" width="{chart_width}" height="16" rx="8" fill="#ece9e1" />')
+        if bar_width > 0.0:
+            parts.append(f'<rect x="{chart_x}" y="{y + 12}" width="{bar_width:.1f}" height="16" rx="8" fill="{owner_color}" opacity="0.92" />')
+        parts.append(
+            f'<text x="{chart_x + chart_width + 14}" y="{y + 25}" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}">{float(row["molecules_per_second"]):.1f} mol/s</text>'
         )
         parts.append(
-            f'<text x="{chart_x}" y="{y + 42}" font-size="11" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">'
-            f"runtime {float(row.get('total_runtime_seconds', 0.0)):.3f}s; "
+            f'<text x="{chart_x}" y="{y + 50}" font-size="11" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">'
+            f"count {int(row.get('molecule_count', 0))}; "
             f"success {int(row.get('success_count', 0))}/{int(row.get('molecule_count', 0))}; "
-            f"failures {int(row.get('failure_count', 0))}; median {float(row.get('median_latency_us', 0.0)):.1f} us"
+            f"failures {int(row.get('failure_count', 0))}; "
+            f"runtime {float(row.get('total_runtime_seconds', 0.0)):.3f}s; "
+            f"median {float(row.get('median_latency_us', 0.0)):.1f} us; "
+            f"p95 {float(row.get('p95_latency_us', 0.0)):.1f} us"
             "</text>"
         )
     parts.append("</svg>\n")
@@ -605,6 +747,34 @@ def _wrap_text(text: str, max_chars: int) -> list[str]:
     if not stripped:
         return []
     return wrap(stripped, width=max_chars, break_long_words=False, break_on_hyphens=False)
+
+
+def _format_rate_tick(value: float) -> str:
+    if value >= 1_000_000:
+        return f"{value / 1_000_000:.0f}M"
+    if value >= 1_000:
+        return f"{value / 1_000:.0f}k"
+    if value >= 1.0:
+        return f"{value:.0f}"
+    return f"{value:.1f}"
+
+
+def _append_wrapped_text(
+    parts: list[str],
+    *,
+    x: float,
+    y: float,
+    lines: list[str],
+    font_size: int,
+    line_height: int,
+    fill: str,
+    font_family: str = "Helvetica, Arial, sans-serif",
+) -> None:
+    for line_index, line in enumerate(lines or [""]):
+        parts.append(
+            f'<text x="{x}" y="{y + line_index * line_height}" font-size="{font_size}" '
+            f'font-family="{font_family}" fill="{fill}">{escape(line)}</text>'
+        )
 
 
 def _svg_header(width: int, height: int) -> str:

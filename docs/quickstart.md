@@ -53,8 +53,8 @@ make freesolv
 make timing
 ```
 
-- `make benchmark-small` is the quickest end-to-end benchmark check and keeps the older 2,000-row QM9 subset path.
-- `make qm9` runs the long full-data QM9 benchmark and writes `qm9_mae_vs_moleculenet.svg`.
+- `make benchmark-small` is the quickest end-to-end benchmark check and keeps the 2,000-row QM9 subset path.
+- `make qm9` runs the full-data QM9 benchmark on the fixed `moladt_featurized + bayes_linear_student_t + optimize` Stan path and writes `qm9_mae_vs_moleculenet.svg`.
 - `make freesolv` runs the long FreeSolv comparison and writes `freesolv_rmse_vs_moleculenet.svg`.
 - `make timing` builds the matched ADT/SMILES timing corpus and reports the CSV-string baseline alongside SMILES and MolADT parse stages.
 

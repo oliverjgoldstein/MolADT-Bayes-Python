@@ -35,22 +35,24 @@ def test_build_generalization_frame_uses_validation_selection_and_dataset_primar
             {"dataset": "freesolv", "representation": "moladt", "model": "bayes_hierarchical_shrinkage", "method": "optimize", "split": "train", "n_eval": 8, "rmse": 0.95, "mae": 0.78, "r2": 0.81, "mean_log_predictive_density": -0.95, "runtime_seconds": 2.0, "split_scheme": "subset:fractional_0.8/0.1/0.1", "source_row_count": 20, "used_row_count": 20},
             {"dataset": "freesolv", "representation": "moladt", "model": "bayes_hierarchical_shrinkage", "method": "optimize", "split": "valid", "n_eval": 1, "rmse": 1.00, "mae": 0.82, "r2": 0.79, "mean_log_predictive_density": -1.0, "runtime_seconds": 2.0, "split_scheme": "subset:fractional_0.8/0.1/0.1", "source_row_count": 20, "used_row_count": 20},
             {"dataset": "freesolv", "representation": "moladt", "model": "bayes_hierarchical_shrinkage", "method": "optimize", "split": "test", "n_eval": 1, "rmse": 1.10, "mae": 0.88, "r2": 0.77, "mean_log_predictive_density": -1.1, "runtime_seconds": 2.0, "split_scheme": "subset:fractional_0.8/0.1/0.1", "source_row_count": 20, "used_row_count": 20},
-            {"dataset": "qm9", "representation": "moladt", "model": "bayes_linear_student_t", "method": "sample", "split": "train", "n_eval": 8, "rmse": 0.060, "mae": 0.040, "r2": 0.90, "mean_log_predictive_density": -0.6, "runtime_seconds": 6.0, "split_scheme": "paper:110462/10000/10000", "source_row_count": 133885, "used_row_count": 130462},
-            {"dataset": "qm9", "representation": "moladt", "model": "bayes_linear_student_t", "method": "sample", "split": "valid", "n_eval": 1, "rmse": 0.061, "mae": 0.041, "r2": 0.89, "mean_log_predictive_density": -0.61, "runtime_seconds": 6.0, "split_scheme": "paper:110462/10000/10000", "source_row_count": 133885, "used_row_count": 130462},
-            {"dataset": "qm9", "representation": "moladt", "model": "bayes_linear_student_t", "method": "sample", "split": "test", "n_eval": 1, "rmse": 0.062, "mae": 0.042, "r2": 0.88, "mean_log_predictive_density": -0.62, "runtime_seconds": 6.0, "split_scheme": "paper:110462/10000/10000", "source_row_count": 133885, "used_row_count": 130462},
-            {"dataset": "qm9", "representation": "moladt", "model": "bayes_hierarchical_shrinkage", "method": "pathfinder", "split": "train", "n_eval": 8, "rmse": 0.050, "mae": 0.044, "r2": 0.91, "mean_log_predictive_density": -0.5, "runtime_seconds": 3.0, "split_scheme": "paper:110462/10000/10000", "source_row_count": 133885, "used_row_count": 130462},
-            {"dataset": "qm9", "representation": "moladt", "model": "bayes_hierarchical_shrinkage", "method": "pathfinder", "split": "valid", "n_eval": 1, "rmse": 0.051, "mae": 0.040, "r2": 0.90, "mean_log_predictive_density": -0.51, "runtime_seconds": 3.0, "split_scheme": "paper:110462/10000/10000", "source_row_count": 133885, "used_row_count": 130462},
-            {"dataset": "qm9", "representation": "moladt", "model": "bayes_hierarchical_shrinkage", "method": "pathfinder", "split": "test", "n_eval": 1, "rmse": 0.052, "mae": 0.046, "r2": 0.89, "mean_log_predictive_density": -0.52, "runtime_seconds": 3.0, "split_scheme": "paper:110462/10000/10000", "source_row_count": 133885, "used_row_count": 130462},
+            {"dataset": "qm9", "representation": "moladt", "model": "bayes_linear_student_t", "method": "sample", "split": "train", "n_eval": 8, "rmse": 0.060, "mae": 0.049, "r2": 0.90, "mean_log_predictive_density": -0.6, "runtime_seconds": 6.0, "split_scheme": "paper:110462/10000/10000", "source_row_count": 133885, "used_row_count": 130462},
+            {"dataset": "qm9", "representation": "moladt", "model": "bayes_linear_student_t", "method": "sample", "split": "valid", "n_eval": 1, "rmse": 0.061, "mae": 0.048, "r2": 0.89, "mean_log_predictive_density": -0.61, "runtime_seconds": 6.0, "split_scheme": "paper:110462/10000/10000", "source_row_count": 133885, "used_row_count": 130462},
+            {"dataset": "qm9", "representation": "moladt", "model": "bayes_linear_student_t", "method": "sample", "split": "test", "n_eval": 1, "rmse": 0.062, "mae": 0.049, "r2": 0.88, "mean_log_predictive_density": -0.62, "runtime_seconds": 6.0, "split_scheme": "paper:110462/10000/10000", "source_row_count": 133885, "used_row_count": 130462},
+            {"dataset": "qm9", "representation": "moladt_featurized", "model": "bayes_linear_student_t", "method": "optimize", "split": "train", "n_eval": 8, "rmse": 0.050, "mae": 0.044, "r2": 0.91, "mean_log_predictive_density": -0.5, "runtime_seconds": 3.0, "split_scheme": "paper:110462/10000/10000", "source_row_count": 133885, "used_row_count": 130462},
+            {"dataset": "qm9", "representation": "moladt_featurized", "model": "bayes_linear_student_t", "method": "optimize", "split": "valid", "n_eval": 1, "rmse": 0.051, "mae": 0.040, "r2": 0.90, "mean_log_predictive_density": -0.51, "runtime_seconds": 3.0, "split_scheme": "paper:110462/10000/10000", "source_row_count": 133885, "used_row_count": 130462},
+            {"dataset": "qm9", "representation": "moladt_featurized", "model": "bayes_linear_student_t", "method": "optimize", "split": "test", "n_eval": 1, "rmse": 0.052, "mae": 0.046, "r2": 0.89, "mean_log_predictive_density": -0.52, "runtime_seconds": 3.0, "split_scheme": "paper:110462/10000/10000", "source_row_count": 133885, "used_row_count": 130462},
         ]
     )
 
     generalization = _build_generalization_frame(metrics).sort_values(["dataset"]).reset_index(drop=True)
 
     freesolv = generalization.loc[generalization["dataset"] == "freesolv"].iloc[0]
-    qm9 = generalization.loc[generalization["dataset"] == "qm9"].iloc[0]
+    qm9 = generalization.loc[
+        (generalization["dataset"] == "qm9") & (generalization["representation"] == "moladt_featurized")
+    ].iloc[0]
     assert freesolv["method"] == "optimize"
     assert freesolv["test_rmse"] == pytest.approx(1.10)
-    assert qm9["method"] == "pathfinder"
+    assert qm9["method"] == "optimize"
     assert qm9["test_mae"] == pytest.approx(0.046)
     assert qm9["test_rmse"] == pytest.approx(0.052)
 
@@ -83,9 +85,9 @@ def test_build_simple_review_frame_attaches_moleculenet_context() -> None:
             },
             {
                 "dataset": "qm9",
-                "representation": "moladt",
+                "representation": "moladt_featurized",
                 "model": "bayes_linear_student_t",
-                "method": "sample",
+                "method": "optimize",
                 "split_scheme": "paper:110462/10000/10000",
                 "source_row_count": 133885,
                 "used_row_count": 130462,
@@ -123,6 +125,8 @@ def test_build_simple_review_frame_attaches_moleculenet_context() -> None:
     assert "MoleculeNet Table 3" in freesolv["note"]
 
     assert qm9["local_metric_name"] == "MAE"
+    assert qm9["representation"] == "moladt_featurized"
+    assert qm9["method"] == "optimize"
     assert qm9["local_metric_value"] == pytest.approx(0.042)
     assert qm9["train_metric_value"] == pytest.approx(0.040)
     assert qm9["valid_metric_value"] == pytest.approx(0.041)
@@ -220,14 +224,14 @@ def test_moleculenet_comparison_graphs_write_expected_svg_files(tmp_path) -> Non
             {
                 "dataset": "qm9",
                 "dataset_label": "QM9",
-                "representation": "moladt",
+                "representation": "moladt_featurized",
                 "local_metric_name": "MAE",
                 "train_metric_value": 0.040,
                 "valid_metric_value": 0.041,
                 "test_metric_value": 0.042,
                 "local_metric_value": 0.042,
                 "model": "bayes_linear_student_t",
-                "method": "sample",
+                "method": "optimize",
                 "paper_metric_value": 2.35,
                 "selection_split": "valid",
                 "paper_model_name": "DTNN",
@@ -254,6 +258,7 @@ def test_moleculenet_comparison_graphs_write_expected_svg_files(tmp_path) -> Non
     assert ">Validation</text>" not in qm9_svg
     assert "Test" in qm9_svg
     assert "Paper" in qm9_svg
+    assert "moladt_featurized" in qm9_svg
     assert "DTNN" in qm9_svg
 
 

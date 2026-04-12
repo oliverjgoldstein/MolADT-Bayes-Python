@@ -350,10 +350,19 @@ def _find_freesolv_database_json(downloads: FreeSolvDownloads) -> Path:
 
 
 def _find_freesolv_sdf_dir(downloads: FreeSolvDownloads) -> Path:
+    candidates: list[Path] = []
     for root in _candidate_freesolv_roots(downloads.repo_extract_dir):
-        candidate = root / "sdffiles"
-        if candidate.is_dir() and any(candidate.glob("*.sdf")):
-            return candidate
+        for candidate in sorted(root.glob("sdffiles*")):
+            if candidate.is_dir() and any(candidate.glob("*.sdf")):
+                candidates.append(candidate)
+    if candidates:
+        candidates.sort(
+            key=lambda path: (
+                0 if "v3000" in path.name.lower() or "v3000" in path.as_posix().lower() else 1,
+                path.as_posix(),
+            )
+        )
+        return candidates[0]
     raise FileNotFoundError("Could not find FreeSolv sdffiles/ with SDF records")
 
 
