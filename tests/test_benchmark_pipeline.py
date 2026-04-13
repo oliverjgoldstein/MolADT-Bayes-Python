@@ -5,6 +5,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
@@ -51,7 +52,7 @@ def test_download_path_resolution_is_deterministic() -> None:
     assert zinc_normalized_source_name("1M", "2D", ".csv") == "zinc15_1M_2D.csv"
 
 
-def test_download_freesolv_prefers_vendored_snapshot(tmp_path, monkeypatch) -> None:
+def test_download_freesolv_prefers_vendored_snapshot_when_metadata_is_present(tmp_path, monkeypatch) -> None:
     import scripts.download_data as download_data
 
     raw_dir = tmp_path / "raw"
@@ -60,6 +61,7 @@ def test_download_freesolv_prefers_vendored_snapshot(tmp_path, monkeypatch) -> N
     sdf_dir.mkdir(parents=True)
     (freesolv_dir / "SAMPL.csv").write_text("smiles,expt\nO,-1.0\n", encoding="utf-8")
     (sdf_dir / "demo.sdf").write_text("demo\n", encoding="utf-8")
+    (freesolv_dir / "database.json").write_text("{}", encoding="utf-8")
     monkeypatch.setattr(download_data, "RAW_DATA_DIR", raw_dir)
 
     def fail_download(*args, **kwargs):
@@ -72,6 +74,45 @@ def test_download_freesolv_prefers_vendored_snapshot(tmp_path, monkeypatch) -> N
     assert downloads.csv_path == freesolv_dir / "SAMPL.csv"
     assert downloads.repo_archive_path is None
     assert downloads.repo_extract_dir == freesolv_dir
+
+
+def test_download_freesolv_fetches_metadata_archive_when_vendored_snapshot_is_incomplete(tmp_path, monkeypatch) -> None:
+    import scripts.download_data as download_data
+
+    raw_dir = tmp_path / "raw"
+    freesolv_dir = raw_dir / "freesolv"
+    sdf_dir = freesolv_dir / "sdffiles"
+    sdf_dir.mkdir(parents=True)
+    csv_path = freesolv_dir / "SAMPL.csv"
+    csv_path.write_text("smiles,expt\nO,-1.0\n", encoding="utf-8")
+    (sdf_dir / "demo.sdf").write_text("demo\n", encoding="utf-8")
+    archive_path = freesolv_dir / "FreeSolv-master.zip"
+    extract_dir = freesolv_dir / "FreeSolv-master"
+    monkeypatch.setattr(download_data, "RAW_DATA_DIR", raw_dir)
+
+    def fake_download(url, destination, force=False):
+        if destination == csv_path:
+            return csv_path
+        if destination == archive_path:
+            archive_path.write_text("zip", encoding="utf-8")
+            return archive_path
+        raise AssertionError(f"Unexpected download target: {destination}")
+
+    monkeypatch.setattr(download_data, "download_file", fake_download)
+
+    def fake_extract(archive, destination, force=False):
+        metadata_path = extract_dir / "FreeSolv-master" / "database.json"
+        metadata_path.parent.mkdir(parents=True)
+        metadata_path.write_text("{}", encoding="utf-8")
+        return extract_dir
+
+    monkeypatch.setattr(download_data, "extract_archive", fake_extract)
+
+    downloads = download_data.download_freesolv()
+
+    assert downloads.csv_path == csv_path
+    assert downloads.repo_archive_path == archive_path
+    assert downloads.repo_extract_dir == extract_dir
 
 
 def test_download_qm9_prefers_vendored_snapshot(tmp_path, monkeypatch) -> None:
@@ -885,7 +926,7 @@ def test_process_qm9_fixed_contract_skips_legacy_smiles_exports(tmp_path, monkey
     assert artifacts.moladt_featurized_export is not None
 
 
-def test_load_freesolv_sdf_dataset_falls_back_when_database_json_is_missing(tmp_path, monkeypatch) -> None:
+def test_load_freesolv_sdf_dataset_requires_database_json(tmp_path, monkeypatch) -> None:
     import scripts.process_freesolv as process_freesolv
 
     sdf_dir = tmp_path / "sdffiles"
@@ -897,30 +938,11 @@ def test_load_freesolv_sdf_dataset_falls_back_when_database_json_is_missing(tmp_
         repo_extract_dir = tmp_path
         csv_path = tmp_path / "SAMPL.csv"
 
-    aligned = pd.DataFrame(
-        [
-            {
-                "mol_id": "freesolv_0001",
-                "smiles": "O",
-                "smiles_canonical": "O",
-                "iupac": "water",
-                "expt": -6.0,
-                "sdf_relpath": "sdffiles/mobley_1.sdf",
-                "sdf_record_index": 0,
-                "moladt_molecule": object(),
-            }
-        ]
-    )
     monkeypatch.setattr(process_freesolv, "_find_freesolv_database_json", lambda downloads: None)
     monkeypatch.setattr(process_freesolv, "_find_freesolv_sdf_dir", lambda downloads: sdf_dir)
-    monkeypatch.setattr(process_freesolv, "_canonicalize_freesolv_csv", lambda downloads: (pd.DataFrame([{"mol_id": "freesolv_0001", "smiles": "O", "smiles_canonical": "O", "iupac": "water", "expt": -6.0}]), []))
-    monkeypatch.setattr(process_freesolv, "_align_freesolv_sdf", lambda downloads, processed_frame: (aligned, []))
 
-    frame, failures, source_sdf_count = process_freesolv._load_freesolv_sdf_dataset(FakeDownloads())
-
-    assert len(frame) == 1
-    assert failures == []
-    assert source_sdf_count == 2
+    with pytest.raises(FileNotFoundError, match="database.json is missing"):
+        process_freesolv._load_freesolv_sdf_dataset(FakeDownloads())
 
 
 def test_find_freesolv_database_json_recurses_into_nested_snapshot(tmp_path) -> None:

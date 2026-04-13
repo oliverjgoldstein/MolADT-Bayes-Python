@@ -78,6 +78,13 @@ def _prefer_v3000_path(candidates: tuple[Path, ...]) -> Path:
     return ordered[0]
 
 
+def _freesolv_snapshot_has_metadata(target_dir: Path) -> bool:
+    direct_candidate = target_dir / "database.json"
+    if direct_candidate.is_file():
+        return True
+    return any(path.is_file() for path in target_dir.rglob("database.json"))
+
+
 def _resolve_qm9_sources(extract_dir: Path) -> tuple[Path, Path]:
     sdf_candidates = tuple(
         sorted((extract_dir / candidate) for candidate in ("qm9_v3000.sdf", "gdb9_v3000.sdf") if (extract_dir / candidate).exists())
@@ -115,9 +122,12 @@ def download_freesolv(*, force: bool = False) -> FreeSolvDownloads:
     target_dir = ensure_directory(freesolv_raw_dir())
     csv_path = target_dir / "SAMPL.csv"
     vendored_sdf_dir = target_dir / "sdffiles"
-    if not force and csv_path.exists() and vendored_sdf_dir.is_dir() and any(vendored_sdf_dir.glob("*.sdf")):
+    vendored_snapshot_exists = csv_path.exists() and vendored_sdf_dir.is_dir() and any(vendored_sdf_dir.glob("*.sdf"))
+    if not force and vendored_snapshot_exists and _freesolv_snapshot_has_metadata(target_dir):
         log(f"Using vendored FreeSolv snapshot under {target_dir}")
         return FreeSolvDownloads(csv_path=csv_path, repo_archive_path=None, repo_extract_dir=target_dir)
+    if not force and vendored_snapshot_exists:
+        log(f"Vendored FreeSolv snapshot under {target_dir} is missing database.json; downloading FreeSolv metadata archive")
     csv_path = download_file(FREESOLV_CSV_URL, csv_path, force=force)
     repo_archive_path = download_file(FREESOLV_REPO_ZIP_URL, target_dir / "FreeSolv-master.zip", force=force)
     repo_extract_dir = extract_archive(repo_archive_path, target_dir / "FreeSolv-master", force=force)

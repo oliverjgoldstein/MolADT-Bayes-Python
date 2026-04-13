@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pandas as pd
 from moladt.io.sdf import iter_sdf_records
-from moladt.io.smiles import molecule_to_smiles
 
 from .common import DEFAULT_SEED, FailureRecord, PROCESSED_DATA_DIR, ensure_directory, extract_archive, find_files, log, log_stage, write_failure_csv
 from .download_data import FreeSolvDownloads, download_freesolv
@@ -480,9 +479,10 @@ def _load_freesolv_sdf_dataset(
     sdf_paths = sorted(sdf_dir.glob("*.sdf"))
     database_path = _find_freesolv_database_json(downloads)
     if database_path is None:
-        processed_frame, csv_failures = _canonicalize_freesolv_csv(downloads)
-        aligned_frame, alignment_failures = _align_freesolv_sdf(downloads, processed_frame)
-        return aligned_frame, [*csv_failures, *alignment_failures], len(sdf_paths)
+        raise FileNotFoundError(
+            "FreeSolv database.json is missing. The benchmark requires the FreeSolv metadata archive so SDF molecules "
+            "can be joined directly to targets instead of falling back to SMILES recovery."
+        )
 
     payload = json.loads(database_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
@@ -557,80 +557,6 @@ def _load_freesolv_sdf_dataset(
             }
         )
     return pd.DataFrame(rows).sort_values("mol_id").reset_index(drop=True), failures, len(sdf_paths)
-
-
-def _canonicalize_freesolv_csv(downloads: FreeSolvDownloads) -> tuple[pd.DataFrame, list[FailureRecord]]:
-    raw = pd.read_csv(downloads.csv_path)
-    if "smiles" not in raw.columns or "expt" not in raw.columns:
-        raise ValueError("FreeSolv SAMPL.csv must contain `smiles` and `expt` columns")
-    rows: list[dict[str, object]] = []
-    failures: list[FailureRecord] = []
-    for index, record in raw.iterrows():
-        mol_id = f"freesolv_{index + 1:04d}"
-        raw_smiles = str(record["smiles"]).strip()
-        try:
-            canonical = canonicalize_smiles(raw_smiles)
-        except Exception as exc:
-            failures.append(FailureRecord(dataset="freesolv", mol_id=mol_id, stage="canonicalize_smiles", error=str(exc)))
-            continue
-        rows.append(
-            {
-                "mol_id": mol_id,
-                "smiles": raw_smiles,
-                "smiles_canonical": canonical,
-                "iupac": str(record.get("iupac", "")).strip(),
-                "expt": float(record["expt"]),
-            }
-        )
-    return pd.DataFrame(rows), failures
-
-
-def _align_freesolv_sdf(downloads: FreeSolvDownloads, processed_frame: pd.DataFrame) -> tuple[pd.DataFrame, list[FailureRecord]]:
-    sdf_paths = find_files(downloads.repo_extract_dir, ("*.sdf",))
-    if not sdf_paths:
-        sdf_archives = find_files(downloads.repo_extract_dir, ("sdffiles*.tar.gz", "*sdffiles*.tgz"))
-        for archive_path in sdf_archives:
-            extracted_dir = extract_archive(
-                archive_path,
-                archive_path.parent / archive_path.name.removesuffix(".tar.gz").removesuffix(".tgz"),
-            )
-            sdf_paths.extend(find_files(extracted_dir, ("*.sdf",)))
-    if not sdf_paths:
-        return pd.DataFrame(), []
-    by_smiles: dict[str, list[dict[str, object]]] = {}
-    for record in processed_frame.to_dict(orient="records"):
-        by_smiles.setdefault(str(record["smiles_canonical"]), []).append(record)
-    aligned_rows: list[dict[str, object]] = []
-    failures: list[FailureRecord] = []
-    for sdf_path in sdf_paths:
-        for record_index, record in enumerate(iter_sdf_records(sdf_path)):
-            mol_id = f"{sdf_path.stem}:{record_index}"
-            try:
-                canonical = canonicalize_smiles(molecule_to_smiles(record.molecule))
-            except Exception as exc:
-                failures.append(FailureRecord(dataset="freesolv", mol_id=mol_id, stage="render_smiles", error=str(exc)))
-                continue
-            matches = by_smiles.get(canonical, [])
-            if len(matches) == 1:
-                match = matches[0]
-                aligned_rows.append(
-                    {
-                        "mol_id": str(match["mol_id"]),
-                        "smiles": str(match["smiles"]),
-                        "smiles_canonical": canonical,
-                        "iupac": str(match.get("iupac", "")).strip(),
-                        "expt": float(match["expt"]),
-                        "sdf_relpath": str(sdf_path.relative_to(downloads.repo_extract_dir)),
-                        "sdf_record_index": record_index,
-                        "moladt_molecule": record.molecule,
-                    }
-                )
-            elif len(matches) > 1:
-                failures.append(FailureRecord(dataset="freesolv", mol_id=mol_id, stage="align_sdf", error=f"Ambiguous canonical SMILES match: {canonical}"))
-    if not aligned_rows:
-        return pd.DataFrame(), failures
-    deduplicated = pd.DataFrame(aligned_rows).sort_values(["mol_id", "sdf_relpath", "sdf_record_index"]).drop_duplicates(subset=["mol_id"], keep="first")
-    return deduplicated.reset_index(drop=True), failures
 
 
 def build_parser() -> argparse.ArgumentParser:
