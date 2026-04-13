@@ -396,8 +396,14 @@ def copy_if_needed(source: Path, destination: Path, *, force: bool = False) -> P
     try:
         with source.open("rb") as source_handle, temp_path.open("wb") as destination_handle:
             _copy_stream(source_handle, destination_handle, reporter)
+        copied_size = temp_path.stat().st_size
+        if copied_size != source_size:
+            raise IOError(f"Copied {display_path(source)} to {display_path(temp_path)} with {copied_size} bytes, expected {source_size}")
         shutil.copystat(source, temp_path)
         temp_path.replace(destination)
+        final_size = destination.stat().st_size
+        if final_size != source_size:
+            raise IOError(f"Copied {display_path(source)} to {display_path(destination)} with {final_size} bytes, expected {source_size}")
         if reporter is not None:
             reporter.finish()
     except Exception:

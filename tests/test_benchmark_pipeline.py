@@ -120,6 +120,38 @@ def test_download_qm9_prefers_v3000_file_when_archive_contains_one(tmp_path, mon
     assert downloads.sdf_path == extract_dir / "gdb9_v3000.sdf"
 
 
+def test_download_qm9_refreshes_truncated_cached_copy_from_extracted_source(tmp_path, monkeypatch) -> None:
+    import scripts.download_data as download_data
+
+    raw_dir = tmp_path / "raw"
+    qm9_dir = raw_dir / "qm9"
+    extract_dir = qm9_dir / "extracted"
+    extract_dir.mkdir(parents=True)
+    cached_sdf = qm9_dir / "qm9.sdf"
+    cached_csv = qm9_dir / "qm9.sdf.csv"
+    source_sdf = extract_dir / "qm9.sdf"
+    source_csv = extract_dir / "qm9.csv"
+    cached_sdf.write_text("partial\n", encoding="utf-8")
+    cached_csv.write_text("mol_id,mu\nmol_1,0.1\n", encoding="utf-8")
+    source_sdf.write_text("complete sdf payload\n", encoding="utf-8")
+    source_csv.write_text("mol_id,mu\nmol_1,0.1\nmol_2,0.2\n", encoding="utf-8")
+    monkeypatch.setattr(download_data, "RAW_DATA_DIR", raw_dir)
+
+    def fail_download(*args, **kwargs):
+        raise AssertionError("download_qm9 should repair from the extracted source without hitting the network")
+
+    monkeypatch.setattr(download_data, "download_first", fail_download)
+    monkeypatch.setattr(download_data, "download_file", fail_download)
+
+    downloads = download_qm9()
+
+    assert downloads.sdf_path == cached_sdf
+    assert downloads.csv_path == cached_csv
+    assert cached_sdf.read_text(encoding="utf-8") == source_sdf.read_text(encoding="utf-8")
+    assert cached_csv.read_text(encoding="utf-8") == source_csv.read_text(encoding="utf-8")
+    assert downloads.extract_dir == extract_dir
+
+
 def test_download_zinc_prefers_vendored_snapshot(tmp_path, monkeypatch) -> None:
     import scripts.download_data as download_data
 

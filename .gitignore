@@ -40,13 +40,18 @@ data/raw/freesolv/*
 !data/raw/freesolv/sdffiles/**
 !data/raw/qm9/
 data/raw/qm9/*
-# Keep the raw QM9 SDF local; GitHub rejects it above 100 MB.
+# Keep the raw QM9 cache local. The copied SDF is large, the extracted archive payload is transient,
+# and interrupted copies should never become visible to Git.
+data/raw/qm9/qm9.sdf
+data/raw/qm9/*.part
+data/raw/qm9/extracted/
 !data/raw/qm9/qm9.sdf.csv
 !data/raw/zinc/
 data/raw/zinc/*
 !data/raw/zinc/zinc15_250K_2D.csv
 data/processed/
 results/
+*.part
 
 # Local editor settings
 .idea/

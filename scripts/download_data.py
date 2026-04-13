@@ -78,6 +78,39 @@ def _prefer_v3000_path(candidates: tuple[Path, ...]) -> Path:
     return ordered[0]
 
 
+def _resolve_qm9_sources(extract_dir: Path) -> tuple[Path, Path]:
+    sdf_candidates = tuple(
+        sorted((extract_dir / candidate) for candidate in ("qm9_v3000.sdf", "gdb9_v3000.sdf") if (extract_dir / candidate).exists())
+    )
+    if not sdf_candidates:
+        sdf_candidates = tuple(sorted(extract_dir.rglob("*V3000*.sdf"))) + tuple(sorted(extract_dir.rglob("*v3000*.sdf")))
+    if sdf_candidates:
+        sdf_source = _prefer_v3000_path(sdf_candidates)
+    else:
+        sdf_source = require_single_file(extract_dir, ("qm9.sdf", "gdb9.sdf", "*.sdf"), "QM9 SDF")
+    csv_candidates = ("qm9.sdf.csv", "gdb9.sdf.csv", "qm9.csv", "*.csv")
+    try:
+        csv_source = require_single_file(extract_dir, csv_candidates, "QM9 target CSV")
+    except FileNotFoundError:
+        csv_source = download_file(QM9_CSV_URL, qm9_raw_dir() / "qm9.csv", force=False)
+    return sdf_source, csv_source
+
+
+def _qm9_cached_copy_matches_sources(target_dir: Path, sdf_path: Path, csv_path: Path) -> tuple[bool, Path | None, Path | None]:
+    extract_dir = target_dir / "extracted"
+    if not extract_dir.exists():
+        return True, None, None
+    try:
+        sdf_source, csv_source = _resolve_qm9_sources(extract_dir)
+    except FileNotFoundError:
+        return True, None, None
+    return (
+        sdf_path.stat().st_size == sdf_source.stat().st_size and csv_path.stat().st_size == csv_source.stat().st_size,
+        sdf_source,
+        csv_source,
+    )
+
+
 def download_freesolv(*, force: bool = False) -> FreeSolvDownloads:
     target_dir = ensure_directory(freesolv_raw_dir())
     csv_path = target_dir / "SAMPL.csv"
@@ -96,22 +129,18 @@ def download_qm9(*, force: bool = False) -> QM9Downloads:
     sdf_path = target_dir / "qm9.sdf"
     csv_path = target_dir / "qm9.sdf.csv"
     if not force and sdf_path.exists() and csv_path.exists():
-        log(f"Using vendored QM9 snapshot under {target_dir}")
-        return QM9Downloads(sdf_path=sdf_path, csv_path=csv_path, archive_path=None, extract_dir=target_dir)
+        snapshot_matches, cached_sdf_source, cached_csv_source = _qm9_cached_copy_matches_sources(target_dir, sdf_path, csv_path)
+        if snapshot_matches:
+            log(f"Using vendored QM9 snapshot under {target_dir}")
+            return QM9Downloads(sdf_path=sdf_path, csv_path=csv_path, archive_path=None, extract_dir=target_dir)
+        if cached_sdf_source is not None and cached_csv_source is not None:
+            log(f"Refreshing cached QM9 snapshot under {target_dir} because the copied files do not match the extracted source")
+            sdf_path = copy_if_needed(cached_sdf_source, sdf_path, force=True)
+            csv_path = copy_if_needed(cached_csv_source, csv_path, force=True)
+            return QM9Downloads(sdf_path=sdf_path, csv_path=csv_path, archive_path=None, extract_dir=target_dir / "extracted")
     archive_path = download_first(QM9_TAR_URLS, target_dir / "qm9.tar.gz", force=force)
     extract_dir = extract_archive(archive_path, target_dir / "extracted", force=force)
-    sdf_candidates = tuple(sorted((extract_dir / candidate) for candidate in ("qm9_v3000.sdf", "gdb9_v3000.sdf") if (extract_dir / candidate).exists()))
-    if not sdf_candidates:
-        sdf_candidates = tuple(sorted(extract_dir.rglob("*V3000*.sdf"))) + tuple(sorted(extract_dir.rglob("*v3000*.sdf")))
-    if sdf_candidates:
-        sdf_source = _prefer_v3000_path(sdf_candidates)
-    else:
-        sdf_source = require_single_file(extract_dir, ("qm9.sdf", "gdb9.sdf", "*.sdf"), "QM9 SDF")
-    csv_candidates = ("qm9.sdf.csv", "gdb9.sdf.csv", "qm9.csv", "*.csv")
-    try:
-        csv_source = require_single_file(extract_dir, csv_candidates, "QM9 target CSV")
-    except FileNotFoundError:
-        csv_source = download_file(QM9_CSV_URL, target_dir / "qm9.csv", force=force)
+    sdf_source, csv_source = _resolve_qm9_sources(extract_dir)
     sdf_path = copy_if_needed(sdf_source, sdf_path, force=force)
     csv_path = copy_if_needed(csv_source, csv_path, force=force)
     return QM9Downloads(sdf_path=sdf_path, csv_path=csv_path, archive_path=archive_path, extract_dir=extract_dir)

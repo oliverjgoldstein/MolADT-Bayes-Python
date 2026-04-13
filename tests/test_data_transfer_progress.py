@@ -141,6 +141,28 @@ def test_copy_if_needed_reports_progress(capsys, tmp_path: Path) -> None:
         common.GITHUB_FILE_SIZE_LIMIT_BYTES = original_limit
 
 
+def test_copy_if_needed_rejects_truncated_copy(monkeypatch, tmp_path: Path) -> None:
+    source = tmp_path / "source.bin"
+    destination = tmp_path / "copied.bin"
+    source.write_bytes(b"abcdefgh")
+
+    def partial_copy(source_handle, destination_handle, reporter, *, chunk_size=common.TRANSFER_CHUNK_SIZE_BYTES):
+        del reporter, chunk_size
+        destination_handle.write(source_handle.read(3))
+
+    monkeypatch.setattr(common, "_copy_stream", partial_copy)
+
+    try:
+        common.copy_if_needed(source, destination)
+    except IOError as exc:
+        assert "expected 8" in str(exc)
+    else:
+        raise AssertionError("copy_if_needed should reject a truncated copy")
+
+    assert not destination.exists()
+    assert not (tmp_path / "copied.bin.part").exists()
+
+
 def test_small_download_does_not_emit_progress_meter(capsys, monkeypatch, tmp_path: Path) -> None:
     destination = tmp_path / "small.bin"
     monkeypatch.setattr(common, "GITHUB_FILE_SIZE_LIMIT_BYTES", 1024)
