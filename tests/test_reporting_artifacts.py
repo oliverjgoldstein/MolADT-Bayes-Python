@@ -262,6 +262,44 @@ def test_moleculenet_comparison_graphs_write_expected_svg_files(tmp_path) -> Non
     assert "DTNN" in qm9_svg
 
 
+def test_qm9_graph_keeps_training_and_test_values_in_their_own_bars(tmp_path) -> None:
+    review = pd.DataFrame(
+        [
+            {
+                "dataset": "qm9",
+                "dataset_label": "QM9",
+                "representation": "moladt_featurized",
+                "local_metric_name": "MAE",
+                "train_metric_value": 0.111,
+                "valid_metric_value": 0.222,
+                "test_metric_value": 0.333,
+                "local_metric_value": 0.333,
+                "model": "catboost_uncertainty",
+                "method": "predictive",
+                "paper_metric_value": 2.35,
+                "selection_split": "valid",
+                "paper_model_name": "DTNN",
+                "paper_source_title": "MoleculeNet: a benchmark for molecular machine learning",
+                "note": "Local split differs from the paper split.",
+            },
+        ]
+    )
+
+    comparison = _build_moleculenet_comparison_frame(review)
+
+    assert comparison.loc[0, "train_value"] == pytest.approx(0.111)
+    assert comparison.loc[0, "test_value"] == pytest.approx(0.333)
+    assert comparison.loc[0, "local_value"] == pytest.approx(0.333)
+
+    write_moleculenet_comparison_overviews(comparison, tmp_path)
+    qm9_svg = (tmp_path / "qm9_mae_vs_moleculenet.svg").read_text(encoding="utf-8")
+
+    assert ">0.111</text>" in qm9_svg
+    assert ">0.333</text>" in qm9_svg
+    assert ">0.222</text>" not in qm9_svg
+    assert qm9_svg.index(">0.111</text>") < qm9_svg.index(">0.333</text>")
+
+
 def test_timing_stage_overview_writes_svg(tmp_path) -> None:
     timing = pd.DataFrame(
         [
