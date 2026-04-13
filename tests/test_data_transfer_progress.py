@@ -84,7 +84,7 @@ def test_download_first_retries_after_partial_failure(capsys, monkeypatch, tmp_p
 
     assert result == destination
     assert destination.read_bytes() == b"final"
-    assert not (tmp_path / "payload.bin.part").exists()
+    assert not list(tmp_path.glob("payload.bin*.part"))
     output = capsys.readouterr().out
     assert "Download failed from https://example.test/first.bin" in output
 
@@ -160,7 +160,22 @@ def test_copy_if_needed_rejects_truncated_copy(monkeypatch, tmp_path: Path) -> N
         raise AssertionError("copy_if_needed should reject a truncated copy")
 
     assert not destination.exists()
-    assert not (tmp_path / "copied.bin.part").exists()
+    assert not list(tmp_path.glob("copied.bin*.part"))
+
+
+def test_temporary_path_uses_unique_suffixes(tmp_path: Path) -> None:
+    destination = tmp_path / "payload.bin"
+
+    first = common._temporary_path(destination)
+    second = common._temporary_path(destination)
+
+    assert first != second
+    assert first.parent == destination.parent
+    assert second.parent == destination.parent
+    assert first.name.startswith("payload.bin.")
+    assert second.name.startswith("payload.bin.")
+    assert first.suffix == ".part"
+    assert second.suffix == ".part"
 
 
 def test_small_download_does_not_emit_progress_meter(capsys, monkeypatch, tmp_path: Path) -> None:

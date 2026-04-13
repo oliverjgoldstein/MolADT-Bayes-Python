@@ -7,6 +7,7 @@ import sys
 import tarfile
 import time
 import zipfile
+import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, BinaryIO, Iterable, Sequence
@@ -221,7 +222,7 @@ def _build_progress_reporter(
 
 
 def _temporary_path(destination: Path) -> Path:
-    return destination.with_name(destination.name + ".part")
+    return destination.with_name(f"{destination.name}.{os.getpid()}.{uuid.uuid4().hex}.part")
 
 
 def _safe_member_destination(destination_dir: Path, member_name: str) -> Path:
