@@ -10,7 +10,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from scripts.features import FeatureTable, featurize_moladt_featurized_geometry_records, featurize_moladt_geometry_records
-from scripts.geometry_runner import _import_geometry_stack
+from scripts.geometry_runner import _import_geometry_stack, _train_member
 from scripts.model_errors import OptionalModelDependencyError
 from scripts.model_registry import RegisteredModel
 from scripts.run_all import _extend_with_property_results, _parse_extra_models, _uses_sdf_only_qm9_predictive_contract, build_parser
@@ -327,3 +327,130 @@ def test_dimenet_reports_missing_torch_sparse_dependency(monkeypatch) -> None:
 
     with pytest.raises(OptionalModelDependencyError, match="torch-sparse"):
         _import_geometry_stack(model_name="dimenetpp_ensemble")
+
+
+def test_train_member_logs_every_epoch(monkeypatch, capsys) -> None:
+    import scripts.geometry_runner as geometry_runner
+
+    torch = pytest.importorskip("torch")
+
+    class DummyBatch:
+        def __init__(self, x, y):
+            self.x = x
+            self.y = y
+
+        def to(self, device):
+            del device
+            return self
+
+    class BatchScaleModel(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.weight = torch.nn.Parameter(torch.tensor(0.0))
+
+        def forward(self, batch):
+            return batch.x.view(-1) * self.weight
+
+    validation_predictions = [0.3, 0.2]
+
+    def fake_predict_loader(**kwargs):
+        del kwargs
+        value = validation_predictions.pop(0)
+        return {
+            "predicted_mean": np.asarray([value], dtype=float),
+            "actual": np.asarray([0.0], dtype=float),
+            "mol_ids": ("mol_1",),
+        }
+
+    monkeypatch.setattr(geometry_runner, "_predict_loader", fake_predict_loader)
+
+    model = BatchScaleModel()
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+    batch = DummyBatch(torch.tensor([[1.0]], dtype=torch.float32), torch.tensor([1.0], dtype=torch.float32))
+
+    _train_member(
+        torch=torch,
+        model=model,
+        optimizer=optimizer,
+        train_loader=[batch],
+        valid_loader=[batch],
+        device=torch.device("cpu"),
+        target_mean=0.0,
+        target_std=1.0,
+        max_epochs=2,
+        patience=5,
+        gradient_clip_norm=5.0,
+        progress_label="visnet_ensemble:demo/sdf_geom",
+        seed_index=1,
+        seed_count=1,
+        verbose=True,
+    )
+
+    output = capsys.readouterr().out
+    assert "epoch 1/2" in output
+    assert "epoch 2/2" in output
+
+
+def test_train_member_stops_immediately_on_nan_validation_and_restores_best(monkeypatch) -> None:
+    import scripts.geometry_runner as geometry_runner
+
+    torch = pytest.importorskip("torch")
+
+    class DummyBatch:
+        def __init__(self, x, y):
+            self.x = x
+            self.y = y
+
+        def to(self, device):
+            del device
+            return self
+
+    class BatchScaleModel(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.weight = torch.nn.Parameter(torch.tensor(0.0))
+
+        def forward(self, batch):
+            return batch.x.view(-1) * self.weight
+
+    saved_weight: dict[str, torch.Tensor] = {}
+    validation_predictions = [0.2, float("nan")]
+
+    def fake_predict_loader(*, model, **kwargs):
+        del kwargs
+        value = validation_predictions.pop(0)
+        if np.isfinite(value):
+            saved_weight["value"] = model.weight.detach().clone()
+        return {
+            "predicted_mean": np.asarray([value], dtype=float),
+            "actual": np.asarray([0.0], dtype=float),
+            "mol_ids": ("mol_1",),
+        }
+
+    monkeypatch.setattr(geometry_runner, "_predict_loader", fake_predict_loader)
+
+    model = BatchScaleModel()
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+    batch = DummyBatch(torch.tensor([[1.0]], dtype=torch.float32), torch.tensor([1.0], dtype=torch.float32))
+
+    history = _train_member(
+        torch=torch,
+        model=model,
+        optimizer=optimizer,
+        train_loader=[batch],
+        valid_loader=[batch],
+        device=torch.device("cpu"),
+        target_mean=0.0,
+        target_std=1.0,
+        max_epochs=5,
+        patience=30,
+        gradient_clip_norm=5.0,
+        progress_label="visnet_ensemble:demo/sdf_geom",
+        seed_index=1,
+        seed_count=1,
+        verbose=False,
+    )
+
+    assert len(history["training_curves"]) == 2
+    assert history["training_curves"][1]["valid_rmse"] != history["training_curves"][1]["valid_rmse"]
+    assert torch.allclose(model.weight.detach(), saved_weight["value"])

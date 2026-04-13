@@ -923,6 +923,55 @@ def test_load_freesolv_sdf_dataset_falls_back_when_database_json_is_missing(tmp_
     assert source_sdf_count == 2
 
 
+def test_find_freesolv_database_json_recurses_into_nested_snapshot(tmp_path) -> None:
+    from scripts.download_data import FreeSolvDownloads
+    from scripts.process_freesolv import _find_freesolv_database_json
+
+    nested = tmp_path / "FreeSolv-master" / "FreeSolv-master" / "metadata"
+    nested.mkdir(parents=True)
+    database_path = nested / "database.json"
+    database_path.write_text("{}", encoding="utf-8")
+
+    downloads = FreeSolvDownloads(csv_path=tmp_path / "SAMPL.csv", repo_archive_path=None, repo_extract_dir=tmp_path)
+
+    assert _find_freesolv_database_json(downloads) == database_path
+
+
+def test_find_freesolv_sdf_dir_recurses_into_nested_snapshot(tmp_path) -> None:
+    from scripts.download_data import FreeSolvDownloads
+    from scripts.process_freesolv import _find_freesolv_sdf_dir
+
+    sdf_dir = tmp_path / "FreeSolv-master" / "FreeSolv-master" / "sdffiles" / "sdffiles"
+    sdf_dir.mkdir(parents=True)
+    (sdf_dir / "mobley_1.sdf").write_text("", encoding="utf-8")
+
+    downloads = FreeSolvDownloads(csv_path=tmp_path / "SAMPL.csv", repo_archive_path=None, repo_extract_dir=tmp_path)
+
+    assert _find_freesolv_sdf_dir(downloads) == sdf_dir
+
+
+def test_freesolv_split_partition_matches_baseline_counts_for_full_dataset() -> None:
+    from scripts.process_freesolv import _freesolv_split_partition
+
+    partition = _freesolv_split_partition(642, seed=1)
+
+    assert len(partition.train_indices) == 513
+    assert len(partition.valid_indices) == 64
+    assert len(partition.test_indices) == 65
+    assert partition.scheme == "moleculenet_random_like:513/64/65"
+
+
+def test_freesolv_split_partition_scales_baseline_counts_when_rows_are_missing() -> None:
+    from scripts.process_freesolv import _freesolv_split_partition
+
+    partition = _freesolv_split_partition(186, seed=1)
+
+    assert len(partition.train_indices) == 149
+    assert len(partition.valid_indices) == 18
+    assert len(partition.test_indices) == 19
+    assert partition.scheme.startswith("moleculenet_random_like_scaled:")
+
+
 def test_featurize_moladt_smiles_dataframe_uses_plain_moladt_feature_schema() -> None:
     frame = pd.DataFrame([{"mol_id": "mol-1", "smiles": "O", "target": 1.0}])
 

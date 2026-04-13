@@ -289,16 +289,40 @@ def _train_member(
     for epoch in range(1, max_epochs + 1):
         model.train()
         batch_losses: list[float] = []
+        encountered_non_finite_train_loss = False
         for batch in train_loader:
             batch = batch.to(device)
             optimizer.zero_grad(set_to_none=True)
             prediction = model(batch)
             target = (batch.y.view(-1) - target_mean) / target_std
             loss = nnf.mse_loss(prediction, target)
+            if not bool(torch.isfinite(loss).all().item()):
+                encountered_non_finite_train_loss = True
+                break
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), gradient_clip_norm)
             optimizer.step()
             batch_losses.append(float(loss.detach().cpu().item()))
+        train_loss = float(np.mean(batch_losses)) if batch_losses else float("nan")
+        if encountered_non_finite_train_loss or not np.isfinite(train_loss):
+            training_curves.append(
+                {
+                    "epoch": epoch,
+                    "train_loss": train_loss,
+                    "valid_rmse": float("nan"),
+                }
+            )
+            if verbose:
+                best_display = f"{best_valid_rmse:.4f}" if np.isfinite(best_valid_rmse) else "none"
+                log(
+                    f"[{progress_label}] member {seed_index}/{seed_count} epoch {epoch}/{max_epochs} "
+                    f"train_loss={train_loss:.4f} valid_rmse=nan best={best_display}"
+                )
+                log(
+                    f"[{progress_label}] member {seed_index}/{seed_count} encountered a non-finite training loss at epoch {epoch}; "
+                    f"stopping member and restoring the best checkpoint."
+                )
+            break
         valid_payload = _predict_loader(
             torch=torch,
             model=model,
@@ -311,16 +335,29 @@ def _train_member(
         training_curves.append(
             {
                 "epoch": epoch,
-                "train_loss": float(np.mean(batch_losses)) if batch_losses else float("nan"),
+                "train_loss": train_loss,
                 "valid_rmse": valid_rmse,
             }
         )
-        if verbose and (epoch == 1 or epoch % 25 == 0):
+        if verbose:
+            best_display = (
+                f"{min(float(row['valid_rmse']) for row in training_curves if np.isfinite(float(row['valid_rmse']))):.4f}"
+                if any(np.isfinite(float(row["valid_rmse"])) for row in training_curves)
+                else "none"
+            )
             log(
                 f"[{progress_label}] member {seed_index}/{seed_count} epoch {epoch}/{max_epochs} "
                 f"train_loss={training_curves[-1]['train_loss']:.4f} valid_rmse={valid_rmse:.4f} "
-                f"best={min(float(row['valid_rmse']) for row in training_curves):.4f}"
+                f"best={best_display}"
             )
+        if not np.isfinite(valid_rmse):
+            if verbose:
+                best_display = f"{best_valid_rmse:.4f}" if np.isfinite(best_valid_rmse) else "none"
+                log(
+                    f"[{progress_label}] member {seed_index}/{seed_count} encountered a non-finite validation RMSE at epoch {epoch}; "
+                    f"stopping member and restoring the best checkpoint {best_display}."
+                )
+            break
         if valid_rmse < best_valid_rmse:
             best_valid_rmse = valid_rmse
             best_state = {key: value.detach().cpu().clone() for key, value in model.state_dict().items()}
@@ -336,6 +373,10 @@ def _train_member(
                 break
     if best_state is not None:
         model.load_state_dict(best_state)
+    elif any(not np.isfinite(float(row["train_loss"])) or not np.isfinite(float(row["valid_rmse"])) for row in training_curves):
+        raise RuntimeError(
+            f"[{progress_label}] member {seed_index}/{seed_count} diverged before producing a finite validation checkpoint."
+        )
     return {"training_curves": training_curves}
 
 

@@ -36,6 +36,12 @@ class FreeSolvArtifacts:
     failure_csv_paths: tuple[Path, ...]
 
 
+FREESOLV_BASELINE_TRAIN_SIZE = 513
+FREESOLV_BASELINE_VALID_SIZE = 64
+FREESOLV_BASELINE_TEST_SIZE = 65
+FREESOLV_BASELINE_TOTAL = FREESOLV_BASELINE_TRAIN_SIZE + FREESOLV_BASELINE_VALID_SIZE + FREESOLV_BASELINE_TEST_SIZE
+
+
 def _align_feature_tables(tables: dict[str, FeatureTable]) -> dict[str, FeatureTable]:
     non_empty = {name: table for name, table in tables.items() if not table.rows.empty}
     if not non_empty:
@@ -170,9 +176,7 @@ def process_freesolv_dataset(
             moladt_table = aligned_tabular["moladt"]
         split_partition = None
         if not moladt_featurized_table.rows.empty:
-            from .splits import deterministic_split_partition
-
-            split_partition = deterministic_split_partition(len(moladt_featurized_table.rows), seed=seed)
+            split_partition = _freesolv_split_partition(len(moladt_featurized_table.rows), seed=seed)
         if include_legacy_tabular:
             assert smiles_table is not None
             assert moladt_table is not None
@@ -197,9 +201,7 @@ def process_freesolv_dataset(
             moladt_export = None
         typed_split_partition = None
         if not moladt_featurized_table.rows.empty:
-            from .splits import deterministic_split_partition
-
-            typed_split_partition = deterministic_split_partition(len(moladt_featurized_table.rows), seed=seed)
+            typed_split_partition = _freesolv_split_partition(len(moladt_featurized_table.rows), seed=seed)
             moladt_featurized_export = export_standardized_splits(
                 moladt_featurized_table,
                 dataset_name="freesolv",
@@ -309,9 +311,7 @@ def process_freesolv_dataset(
             moladt_geom_table = aligned_geom["moladt_geom"]
             geom_split_partition = None
             if not sdf_geom_table.rows.empty:
-                from .splits import deterministic_split_partition
-
-                geom_split_partition = deterministic_split_partition(len(sdf_geom_table.rows), seed=seed)
+                geom_split_partition = _freesolv_split_partition(len(sdf_geom_table.rows), seed=seed)
             if not sdf_geom_table.rows.empty:
                 geometric_exports["sdf_geom"] = export_geometric_splits(
                     sdf_geom_table,
@@ -375,28 +375,92 @@ def _candidate_freesolv_roots(root: Path) -> tuple[Path, ...]:
 
 
 def _find_freesolv_database_json(downloads: FreeSolvDownloads) -> Path | None:
+    direct_candidates: list[Path] = []
     for root in _candidate_freesolv_roots(downloads.repo_extract_dir):
         candidate = root / "database.json"
         if candidate.is_file():
-            return candidate
+            direct_candidates.append(candidate)
+    if direct_candidates:
+        direct_candidates.sort(key=lambda path: (len(path.parts), path.as_posix()))
+        return direct_candidates[0]
+    recursive_candidates: list[Path] = []
+    for root in _candidate_freesolv_roots(downloads.repo_extract_dir):
+        recursive_candidates.extend(find_files(root, ("database.json",)))
+    if recursive_candidates:
+        recursive_candidates = sorted(dict.fromkeys(recursive_candidates), key=lambda path: (len(path.parts), path.as_posix()))
+        return recursive_candidates[0]
     return None
 
 
 def _find_freesolv_sdf_dir(downloads: FreeSolvDownloads) -> Path:
     candidates: list[Path] = []
     for root in _candidate_freesolv_roots(downloads.repo_extract_dir):
-        for candidate in sorted(root.glob("sdffiles*")):
+        for candidate in sorted(root.rglob("sdffiles*")):
             if candidate.is_dir() and any(candidate.glob("*.sdf")):
                 candidates.append(candidate)
     if candidates:
+        candidates = sorted(dict.fromkeys(candidates), key=lambda path: path.as_posix())
         candidates.sort(
             key=lambda path: (
                 0 if "v3000" in path.name.lower() or "v3000" in path.as_posix().lower() else 1,
+                len(path.parts),
                 path.as_posix(),
             )
         )
         return candidates[0]
     raise FileNotFoundError("Could not find FreeSolv sdffiles/ with SDF records")
+
+
+def _scaled_split_sizes_from_baseline(row_count: int) -> tuple[int, int, int]:
+    if row_count <= 2:
+        raise ValueError("At least three rows are required for train/valid/test splitting")
+    baseline_sizes = (
+        FREESOLV_BASELINE_TRAIN_SIZE,
+        FREESOLV_BASELINE_VALID_SIZE,
+        FREESOLV_BASELINE_TEST_SIZE,
+    )
+    raw_sizes = tuple(row_count * size / FREESOLV_BASELINE_TOTAL for size in baseline_sizes)
+    split_sizes = [max(1, int(raw_size)) for raw_size in raw_sizes]
+    total_assigned = sum(split_sizes)
+    if total_assigned > row_count:
+        while total_assigned > row_count:
+            largest_index = max(range(3), key=lambda index: (split_sizes[index], baseline_sizes[index]))
+            if split_sizes[largest_index] <= 1:
+                break
+            split_sizes[largest_index] -= 1
+            total_assigned -= 1
+    if total_assigned < row_count:
+        remainders = [raw_size - int(raw_size) for raw_size in raw_sizes]
+        for index in sorted(range(3), key=lambda value: (remainders[value], baseline_sizes[value]), reverse=True):
+            if total_assigned >= row_count:
+                break
+            split_sizes[index] += 1
+            total_assigned += 1
+    return split_sizes[0], split_sizes[1], split_sizes[2]
+
+
+def _freesolv_split_partition(row_count: int, *, seed: int = DEFAULT_SEED):
+    from .splits import deterministic_split_partition
+
+    train_size, valid_size, test_size = _scaled_split_sizes_from_baseline(row_count)
+    if row_count == FREESOLV_BASELINE_TOTAL:
+        split_scheme = (
+            f"moleculenet_random_like:{FREESOLV_BASELINE_TRAIN_SIZE}/"
+            f"{FREESOLV_BASELINE_VALID_SIZE}/{FREESOLV_BASELINE_TEST_SIZE}"
+        )
+    else:
+        split_scheme = (
+            f"moleculenet_random_like_scaled:{train_size}/{valid_size}/{test_size}"
+            f"_from_{FREESOLV_BASELINE_TRAIN_SIZE}/{FREESOLV_BASELINE_VALID_SIZE}/{FREESOLV_BASELINE_TEST_SIZE}"
+        )
+    return deterministic_split_partition(
+        row_count,
+        seed=seed,
+        train_size=train_size,
+        valid_size=valid_size,
+        test_size=test_size,
+        scheme=split_scheme,
+    )
 
 
 def _load_freesolv_metadata(downloads: FreeSolvDownloads) -> dict[str, dict[str, object]]:
