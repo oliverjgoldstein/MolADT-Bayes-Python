@@ -7,17 +7,15 @@ This repo prepares the benchmark datasets, exports aligned MolADT matrices, fits
 ```bash
 make python-cmdstan-install
 make freesolv
-make qm9
-make benchmark-small
+make qm9long
 make timing
 ./.venv/bin/python -m scripts.run_all freesolv --verbose
-./.venv/bin/python -m scripts.run_all qm9 --models "" --extra-models catboost_uncertainty,visnet_ensemble --verbose
+./.venv/bin/python -m scripts.run_all qm9 --split-mode long --include-moladt-predictive --models "" --extra-models catboost_uncertainty,visnet_ensemble --verbose
 ./.venv/bin/python -m scripts.run_all benchmark --paper-mode --verbose
 ```
 
 - `make freesolv` runs the long FreeSolv benchmark path, imports all `642` vendored SDF structures as the molecule source, and compares the fixed local Stan run against MoleculeNet Table 3 on RMSE
-- `make qm9` runs the recovered QM9 `mu` predictive path with `catboost_uncertainty` on the SDF-backed `moladt_featurized` tabular export and `visnet_ensemble` on the geometry exports
-- `make benchmark-small` keeps the older lighter `QM9_LIMIT=2000` subset path available for a faster local check
+- `make qm9long` runs the full-data QM9 `mu` predictive path with `catboost_uncertainty` on the SDF-backed `moladt_featurized` tabular export and `visnet_ensemble` on the geometry exports
 - `make timing` runs the separate ZINC timing/interoperability pass
 - `make python-cmdstan-install` is the one-time local CmdStan install step required before the Stan benchmark targets
 
@@ -31,6 +29,9 @@ The benchmark contract is deliberately narrow:
 - the QM9 figure shows `Training`, `Test`, then `Paper`
 - FreeSolv uses one fixed benchmark path: `moladt_featurized` with the `bayes_gp_rbf_screened` model fit by Stan `laplace`
 - QM9 uses the focused predictive path: `catboost_uncertainty` on `moladt_featurized`, and `visnet_ensemble` on the geometry exports
+- QM9 long uses all aligned local QM9 molecules under a deterministic `80/10/10` split. With the current `133,885`-row local bundle, that is `107,108 / 13,388 / 13,389`.
+- QM9 long uses seed `102`, matching the second seed from the old QM9 optional-model seed schedule
+- QM9 geometry training runs one ViSNet member for at most `25` epochs and logs every epoch in verbose mode
 - the paper bar is the matching MoleculeNet row only
 - FreeSolv uses RMSE
 - QM9 `mu` uses MAE
@@ -52,7 +53,7 @@ The benchmark graph uses the fixed FreeSolv Stan run and the validation-selected
 - FreeSolv compares the local MolADT RMSE against the MoleculeNet Table 3 MPNN RMSE row `1.15`.
 - QM9 `mu` compares the local MolADT MAE against the MoleculeNet Table 3 DTNN MAE row `2.35`.
 
-`make qm9` defaults back to the local subset split `1600 / 200 / 200`, with base seed `1`. In paper mode the optional-model seeds are `1, 102, 203, 304, 405`.
+`make qm9long` does not use the old subset split. It runs on the full local QM9 alignment with seed `102` and a single ViSNet member.
 
 ## Timing
 

@@ -56,7 +56,7 @@ Python still fits the benchmark Stan models for the export-compatible baseline p
 - FreeSolv: `bayes_gp_rbf_screened`
 - QM9 Stan baseline: `bayes_linear_student_t`
 
-The Haskell baseline is aligned to the exported linear `X/y` format used by the Python Stan workflow for QM9. It does not re-derive the feature matrix locally, and it is separate from the focused Python `make qm9` CatBoost + ViSNet path.
+The Haskell baseline is aligned to the exported linear `X/y` format used by the Python Stan workflow for QM9. It does not re-derive the feature matrix locally, and it is separate from the focused Python `make qm9long` CatBoost + ViSNet path.
 
 Shared modeling assumptions that matter for interop:
 
@@ -70,7 +70,7 @@ Shared modeling assumptions that matter for interop:
 
    ```bash
    ./.venv/bin/python -m scripts.run_all freesolv
-   ./.venv/bin/python -m scripts.run_all qm9 --limit 2000 --split-mode subset
+   ./.venv/bin/python -m scripts.process_qm9 --split-mode long
    ```
 
 2. In the Haskell repo, point the consumer at the processed directory:

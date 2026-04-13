@@ -5,7 +5,7 @@ Each focused run writes a small timestamped bundle under `results/`.
 ## Main Locations
 
 - FreeSolv: `results/freesolv/run_<timestamp>/`
-- QM9: `results/qm9/run_<timestamp>/` for the default focused run, or `results/qm9/paper/run_<timestamp>/` when you explicitly request the paper-sized split
+- QM9: `results/qm9/long/run_<timestamp>/` for the full-data `qm9long` run
 - combined benchmark: `results/paper/run_<timestamp>/` for the default long run, or `results/run_<timestamp>/` for explicit lighter overrides
 - ZINC timing: `results/timing/run_<timestamp>/`
 

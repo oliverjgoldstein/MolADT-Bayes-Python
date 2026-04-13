@@ -76,20 +76,15 @@ Benchmark outputs stay local. `results/` is generated on your machine rather tha
 
 ```bash
 make freesolv
-make qm9
-make qm9small
-make qm9paper
+make qm9long
 make timing
-make benchmark-small
 ```
 
 - `make freesolv`: FreeSolv RMSE comparison. Fixed path `moladt_featurized + bayes_gp_rbf_screened + laplace`. Writes `results/freesolv/run_.../freesolv_rmse_vs_moleculenet.svg`.
-- `make qm9` or `make qm9small`: focused QM9 `mu` MAE comparison on the local subset `1600 / 200 / 200`, with `catboost_uncertainty` on the SDF-backed `moladt_featurized` tabular export and `visnet_ensemble` on the geometry exports. Writes `results/qm9/run_.../qm9_mae_vs_moleculenet.svg`.
-- `make qm9paper`: the same CatBoost + ViSNet comparison on the paper-sized QM9 split `110,462 / 10,000 / 10,000`. Writes `results/qm9/paper/run_.../qm9_mae_vs_moleculenet.svg`.
+- `make qm9long`: full-data QM9 `mu` MAE comparison over all aligned local QM9 molecules, with `catboost_uncertainty` on the SDF-backed `moladt_featurized` tabular export and `visnet_ensemble` on the geometry exports. The current local bundle yields `107,108 / 13,388 / 13,389` train / validation / test rows under the deterministic `80/10/10` long split. ViSNet runs one member, caps geometry training at `25` epochs, uses seed `102` (the second seed from the old QM9 seed schedule), and prints every epoch when `BENCHMARK_VERBOSE=1`. Writes `results/qm9/long/run_.../qm9_mae_vs_moleculenet.svg`.
 - `make timing`: ZINC ingest and runtime comparison. It separates raw I/O, optional external-toolkit stages, a plain string baseline, our SMILES parser, and our MolADT file reader. Writes `results/timing/paper/run_.../timing_overview.svg`.
-- `make benchmark-small`: lighter QM9 subset check for faster local iteration.
 
-Results are written under timestamped directories in `results/`, mainly `results/freesolv/run_.../`, `results/qm9/run_.../`, `results/qm9/paper/run_.../`, and `results/timing/paper/run_.../`.
+Results are written under timestamped directories in `results/`, mainly `results/freesolv/run_.../`, `results/qm9/long/run_.../`, and `results/timing/paper/run_.../`.
 
 The FreeSolv figure shows `Training`, `Validation`, `Test`, and `Paper`. The QM9 figure shows `Training`, `Test`, and `Paper`.
 

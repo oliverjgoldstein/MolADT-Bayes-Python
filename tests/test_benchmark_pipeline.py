@@ -926,6 +926,89 @@ def test_process_qm9_fixed_contract_skips_legacy_smiles_exports(tmp_path, monkey
     assert artifacts.moladt_featurized_export is not None
 
 
+def test_qm9_long_split_uses_all_rows_fractionally(tmp_path, monkeypatch) -> None:
+    import scripts.process_qm9 as process_qm9
+    import scripts.splits as splits
+
+    processed_dir = tmp_path / "processed"
+    monkeypatch.setattr(process_qm9, "PROCESSED_DATA_DIR", processed_dir)
+    monkeypatch.setattr(splits, "PROCESSED_DATA_DIR", processed_dir)
+
+    class FakeDownloads:
+        sdf_path = tmp_path / "qm9.sdf"
+        csv_path = tmp_path / "qm9.csv"
+
+    monkeypatch.setattr(process_qm9, "download_qm9", lambda force=False: FakeDownloads())
+    aligned_frame = pd.DataFrame(
+        [
+            {"mol_id": f"qm9_{index:06d}", "smiles": "O", "mu": float(index), "sdf_record_index": index, "moladt_molecule": object()}
+            for index in range(12)
+        ]
+    )
+    monkeypatch.setattr(process_qm9, "_build_qm9_aligned_frame", lambda *args, **kwargs: (aligned_frame, []))
+    monkeypatch.setattr(
+        process_qm9,
+        "featurize_moladt_featurized_records",
+        lambda *args, **kwargs: FeatureTable(
+            rows=pd.DataFrame(
+                [
+                    {"mol_id": f"qm9_{index:06d}", "mu": float(index), "sdf_record_index": index, "x1": float(index), "x2": float(index + 1)}
+                    for index in range(12)
+                ]
+            ),
+            feature_names=("x1", "x2"),
+            feature_groups={"x1": "group_a", "x2": "group_b"},
+            failures=(),
+        ),
+    )
+    monkeypatch.setattr(
+        process_qm9,
+        "featurize_sdf_geometry_records",
+        lambda *args, **kwargs: process_qm9.GeometricFeatureTable(
+            rows=pd.DataFrame(
+                [
+                    {"mol_id": f"qm9_{index:06d}", "smiles": "O", "mu": float(index), "sdf_record_index": index}
+                    for index in range(12)
+                ]
+            ),
+            atomic_numbers=tuple(np.asarray([8], dtype=np.int64) for _ in range(12)),
+            coordinates=tuple(np.asarray([[0.0, 0.0, 0.0]], dtype=float) for _ in range(12)),
+            global_feature_names=("z_mean",),
+            global_feature_groups={"z_mean": "geometry_atoms"},
+            global_features=np.asarray([[8.0] for _ in range(12)], dtype=float),
+            failures=(),
+        ),
+    )
+    monkeypatch.setattr(
+        process_qm9,
+        "featurize_moladt_geometry_records",
+        lambda *args, **kwargs: process_qm9.GeometricFeatureTable(
+            rows=pd.DataFrame(
+                [
+                    {"mol_id": f"qm9_{index:06d}", "smiles": "O", "mu": float(index), "sdf_record_index": index}
+                    for index in range(12)
+                ]
+            ),
+            atomic_numbers=tuple(np.asarray([8], dtype=np.int64) for _ in range(12)),
+            coordinates=tuple(np.asarray([[0.0, 0.0, 0.0]], dtype=float) for _ in range(12)),
+            global_feature_names=("weight",),
+            global_feature_groups={"weight": "adt_composition"},
+            global_features=np.asarray([[18.0] for _ in range(12)], dtype=float),
+            failures=(),
+        ),
+    )
+
+    artifacts = process_qm9.process_qm9_dataset(limit=12, split_mode="long", include_legacy_tabular=False)
+
+    bundle = artifacts.moladt_featurized_export
+    assert bundle is not None
+    assert bundle.split_scheme == "long:fractional_0.8/0.1/0.1"
+    assert bundle.used_row_count == 12
+    assert len(bundle.y_train) == 9
+    assert len(bundle.y_valid) == 1
+    assert len(bundle.y_test) == 2
+
+
 def test_load_freesolv_sdf_dataset_requires_database_json(tmp_path, monkeypatch) -> None:
     import scripts.process_freesolv as process_freesolv
 

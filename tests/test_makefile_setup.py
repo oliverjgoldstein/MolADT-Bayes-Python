@@ -66,7 +66,7 @@ def test_makefile_benchmark_defaults_to_verbose_output(tmp_path: Path) -> None:
     assert "./.venv/bin/python -m scripts.run_all benchmark" in result.stdout
     assert "Running combined MolADT benchmark bundle." in result.stdout
     assert "--paper-mode" in result.stdout
-    assert "--qm9-split-mode paper" in result.stdout
+    assert "--qm9-split-mode long" in result.stdout
     assert "--qm9-limit 2000" not in result.stdout
     assert "--verbose" in result.stdout
 
@@ -94,7 +94,7 @@ def test_makefile_qm9_target_prints_recovered_predictive_path(tmp_path: Path) ->
     _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
 
     result = subprocess.run(
-        ["make", "-C", str(tmp_path), "-n", "qm9", "SYSTEM_PYTHON=python3"],
+        ["make", "-C", str(tmp_path), "-n", "qm9long", "SYSTEM_PYTHON=python3"],
         capture_output=True,
         text=True,
         check=True,
@@ -103,49 +103,32 @@ def test_makefile_qm9_target_prints_recovered_predictive_path(tmp_path: Path) ->
     assert "Running reviewer-facing QM9 comparison." in result.stdout
     assert "paper baseline: MoleculeNet DTNN MAE 2.35" in result.stdout
     assert "./.venv/bin/python -m scripts.run_all qm9" in result.stdout
-    assert "qm9small" in result.stdout
+    assert "qm9_split_mode: long" in result.stdout
+    assert "qm9_limit: full-local-download" in result.stdout
+    assert "seed: 102" in result.stdout
+    assert "geometry_max_epochs: 25" in result.stdout
+    assert "geometry_seed_count: 1" in result.stdout
 
 
-def test_makefile_qm9small_target_uses_subset_predictive_path(tmp_path: Path) -> None:
+def test_makefile_qm9long_target_uses_full_predictive_path(tmp_path: Path) -> None:
     _copy_makefile(tmp_path)
     _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
 
     result = subprocess.run(
-        ["make", "-C", str(tmp_path), "-n", "qm9small", "SYSTEM_PYTHON=python3"],
+        ["make", "-C", str(tmp_path), "-n", "qm9long", "SYSTEM_PYTHON=python3"],
         capture_output=True,
         text=True,
         check=True,
     )
 
     assert "Running reviewer-facing QM9 comparison." in result.stdout
-    assert "inference_preset: default" in result.stdout
-    assert "qm9_split_mode: subset" in result.stdout
-    assert "qm9_limit: 2000" in result.stdout
-    assert "stan_methods: (disabled)" in result.stdout
-    assert "stan_models: (disabled)" in result.stdout
-    assert "extra_models: catboost_uncertainty,visnet_ensemble" in result.stdout
-    assert '--limit 2000 --split-mode subset --include-moladt-predictive --models "" --extra-models catboost_uncertainty,visnet_ensemble' in result.stdout
-
-
-def test_makefile_qm9paper_target_uses_paper_predictive_path(tmp_path: Path) -> None:
-    _copy_makefile(tmp_path)
-    _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
-
-    result = subprocess.run(
-        ["make", "-C", str(tmp_path), "-n", "qm9paper", "SYSTEM_PYTHON=python3"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-
-    assert "Running reviewer-facing QM9 comparison." in result.stdout
-    assert "inference_preset: paper" in result.stdout
-    assert "qm9_split_mode: paper" in result.stdout
+    assert "inference_preset: long" in result.stdout
+    assert "qm9_split_mode: long" in result.stdout
     assert "qm9_limit: full-local-download" in result.stdout
     assert "stan_methods: (disabled)" in result.stdout
     assert "stan_models: (disabled)" in result.stdout
     assert "extra_models: catboost_uncertainty,visnet_ensemble" in result.stdout
-    assert '--split-mode paper --paper-mode --include-moladt-predictive --models "" --extra-models catboost_uncertainty,visnet_ensemble' in result.stdout
+    assert '--seed 102 --split-mode long --include-moladt-predictive --models "" --extra-models catboost_uncertainty,visnet_ensemble' in result.stdout
 
 
 def test_makefile_benchmark_defaults_to_timestamped_results_directory(tmp_path: Path) -> None:
@@ -184,32 +167,22 @@ def test_makefile_paper_benchmark_uses_timestamped_paper_subdirectory(tmp_path: 
     assert re.search(r"MOLADT_RESULTS_DIR=results/paper/run_\d{8}_\d{6}", result.stdout)
 
 
-def test_makefile_benchmark_small_target_uses_qm9_subset_mode(tmp_path: Path) -> None:
+def test_makefile_help_only_advertises_qm9long(tmp_path: Path) -> None:
     _copy_makefile(tmp_path)
     _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
 
     result = subprocess.run(
-        ["make", "-C", str(tmp_path), "-n", "benchmark-small", "SYSTEM_PYTHON=python3"],
+        ["make", "-C", str(tmp_path), "help", "SYSTEM_PYTHON=python3"],
         capture_output=True,
         text=True,
         check=True,
     )
 
-    assert "benchmark INFERENCE_PRESET=default QM9_LIMIT=2000 QM9_SPLIT_MODE=subset" in result.stdout
-
-
-def test_makefile_benchmark_paper_target_enables_paper_split(tmp_path: Path) -> None:
-    _copy_makefile(tmp_path)
-    _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
-
-    result = subprocess.run(
-        ["make", "-C", str(tmp_path), "-n", "benchmark-paper", "SYSTEM_PYTHON=python3"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-
-    assert "benchmark INFERENCE_PRESET=paper QM9_LIMIT= QM9_SPLIT_MODE=paper" in result.stdout
+    assert "make qm9long" in result.stdout
+    assert "make qm9small" not in result.stdout
+    assert "make qm9paper" not in result.stdout
+    assert "make benchmark-small" not in result.stdout
+    assert "make benchmark-paper" not in result.stdout
 
 
 def test_makefile_catboost_geom_model_target_writes_model_results_subdirectory(tmp_path: Path) -> None:

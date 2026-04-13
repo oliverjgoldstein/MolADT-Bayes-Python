@@ -97,7 +97,7 @@ def process_qm9_dataset(
     seed: int = DEFAULT_SEED,
     force: bool = False,
     limit: int | None = None,
-    split_mode: str = "subset",
+    split_mode: str = "long",
     include_legacy_tabular: bool = True,
     verbose: bool = False,
 ) -> QM9Artifacts:
@@ -116,7 +116,13 @@ def process_qm9_dataset(
         )
     downloads = download_qm9(force=force)
     ensure_directory(PROCESSED_DATA_DIR)
-    combined_frame, failures = _build_qm9_aligned_frame(downloads.sdf_path, downloads.csv_path, limit=limit, verbose=verbose)
+    combined_frame, failures = _build_qm9_aligned_frame(
+        downloads.sdf_path,
+        downloads.csv_path,
+        limit=limit,
+        progress_total_stages=total_stages,
+        verbose=verbose,
+    )
     if verbose:
         log(
             f"[qm9 1/{total_stages}] aligned_rows={len(combined_frame)} "
@@ -348,6 +354,7 @@ def _build_qm9_aligned_frame(
     csv_path: Path,
     *,
     limit: int | None,
+    progress_total_stages: int = 5,
     verbose: bool = False,
 ) -> tuple[pd.DataFrame, list[FailureRecord]]:
     targets = pd.read_csv(csv_path)
@@ -380,7 +387,7 @@ def _build_qm9_aligned_frame(
         if verbose and len(rows) % 5000 == 0:
             target_total = min(limit, len(targets)) if limit is not None else len(targets)
             log(
-                f"[qm9 1/5] aligned_rows={len(rows)}/{target_total} "
+                f"[qm9 1/{progress_total_stages}] aligned_rows={len(rows)}/{target_total} "
                 f"processing_failures={len(failures)}"
             )
     if not rows:
@@ -393,7 +400,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--limit", type=int, default=None)
-    parser.add_argument("--split-mode", choices=("subset", "paper"), default="subset")
+    parser.add_argument("--split-mode", choices=("subset", "paper", "long"), default="long")
     parser.add_argument("--verbose", action="store_true")
     return parser
 
@@ -421,6 +428,12 @@ def _qm9_split_partition(row_count: int, *, seed: int, split_mode: str):
             valid_size=QM9_PAPER_VALID_SIZE,
             test_size=QM9_PAPER_TEST_SIZE,
             scheme="paper:110462/10000/10000",
+        )
+    if split_mode == "long":
+        return deterministic_split_partition(
+            row_count,
+            seed=seed,
+            scheme="long:fractional_0.8/0.1/0.1",
         )
     if split_mode != "subset":
         raise ValueError(f"Unsupported QM9 split mode {split_mode}")

@@ -433,7 +433,7 @@ def _geometry_defaults(dataset_name: str, model_name: str) -> dict[str, float | 
     if dataset_name == "freesolv":
         base.update({"batch_size": 32, "max_epochs": 400, "patience": 50})
     else:
-        base.update({"batch_size": 128, "max_epochs": 200, "patience": 30})
+        base.update({"batch_size": 128, "max_epochs": 25, "patience": 25})
     return base
 
 

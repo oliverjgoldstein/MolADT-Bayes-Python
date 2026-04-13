@@ -14,11 +14,13 @@ The two user-facing benchmark commands are intentionally different:
   - tabular representation: `moladt_featurized`
   - tabular model: `catboost_uncertainty`
   - geometry models: `visnet_ensemble` on the SDF-backed geometry exports
-  - default scale: local subset `1600 / 200 / 200`
-  - default seed: `1`
-  - paper-mode seeds: `1, 102, 203, 304, 405`
+  - long split: deterministic `80/10/10` over all aligned local QM9 rows
+  - current local counts: `107,108 / 13,388 / 13,389`
+  - geometry epochs: `25`
+  - default seed: `102`
+  - geometry members: `1`
 
-`make qm9` does not use the fixed Stan path anymore. It runs the focused CatBoost + ViSNet comparison and then plots the validation-selected local result against the MoleculeNet DTNN MAE row.
+`make qm9long` does not use the fixed Stan path anymore. It runs the full-data CatBoost + ViSNet comparison and then plots the validation-selected local result against the MoleculeNet DTNN MAE row.
 
 ## Representation Contract
 
@@ -100,12 +102,14 @@ For QM9, the benchmark contract is:
 - tabular model: `catboost_uncertainty`
 - geometry exports: `sdf_geom`, `moladt_geom`
 - geometry model: `visnet_ensemble`
-- default run size: subset `1600 / 200 / 200`
-- paper override: `INFERENCE_PRESET=paper QM9_LIMIT= QM9_SPLIT_MODE=paper make qm9`
+- split mode: `long`
+- run size: all aligned local QM9 rows under the deterministic `80/10/10` split
+- current local counts: `107,108 / 13,388 / 13,389`
+- geometry training cap: `25` epochs with one member
 
-That QM9 choice is deliberate. `mu` is a directional 3D target, so the old front-door path used a strong non-linear tabular baseline for the featurized MolADT descriptors and a geometry-aware ViSNet path for the coordinate-bearing export. The slow run you remembered was the geometry model path, not the later Stan `optimize` shortcut. The recovered default `make qm9` target matches that earlier setup.
+That QM9 choice is deliberate. `mu` is a directional 3D target, so the front-door path uses a strong non-linear tabular baseline for the featurized MolADT descriptors and a geometry-aware ViSNet path for the coordinate-bearing export. The long run is still dominated by the geometry model path, not the older Stan `optimize` shortcut.
 
-Reports compare the fixed FreeSolv benchmark run and the focused QM9 predictive run to MoleculeNet only:
+Reports compare the fixed FreeSolv benchmark run and the full-data QM9 predictive run to MoleculeNet only:
 
 - FreeSolv: local MolADT RMSE versus MoleculeNet MPNN RMSE `1.15`
 - QM9 `mu`: local MolADT MAE versus MoleculeNet DTNN MAE `2.35`
@@ -118,7 +122,7 @@ This is the smallest programmatic example of the recovered QM9 tabular path:
 from scripts.process_qm9 import process_qm9_dataset
 from scripts.tabular_runner import CatBoostRunConfig, run_catboost_uncertainty
 
-artifacts = process_qm9_dataset(limit=2000, split_mode="subset", verbose=True)
+artifacts = process_qm9_dataset(split_mode="long", include_legacy_tabular=False, verbose=True)
 bundle = artifacts.moladt_featurized_export
 assert bundle is not None
 
@@ -133,20 +137,18 @@ summary_rows, prediction_rows, artifact_rows = run_catboost_uncertainty(
 )
 ```
 
-`make qm9` also runs `visnet_ensemble` on the geometry export, then keeps the best local validation-selected QM9 row for the final paper-comparison figure.
+`make qm9long` also runs `visnet_ensemble` on the geometry export, then keeps the best local validation-selected QM9 row for the final paper-comparison figure.
 
 ## Benchmark Commands
 
 ```bash
 make freesolv
-make qm9
-make benchmark-small
+make qm9long
 make timing
 ```
 
 - `make freesolv` writes the `Training` / `Validation` / `Test` / `Paper` FreeSolv figure
-- `make qm9` writes the `Training` / `Test` / `Paper` QM9 figure for the focused CatBoost + ViSNet path
-- `make benchmark-small` keeps the lighter subset benchmark path available
+- `make qm9long` writes the `Training` / `Test` / `Paper` QM9 figure for the full-data CatBoost + ViSNet path
 - `make timing` is the separate ingest/interoperability timing path
 
 For the broader protocol and result bundle, see [Inference and benchmarks](inference-and-benchmarks.md).

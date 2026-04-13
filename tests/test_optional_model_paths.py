@@ -10,7 +10,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from scripts.features import FeatureTable, featurize_moladt_featurized_geometry_records, featurize_moladt_geometry_records
-from scripts.geometry_runner import _import_geometry_stack, _train_member
+from scripts.geometry_runner import _geometry_defaults, _import_geometry_stack, _train_member
 from scripts.model_errors import OptionalModelDependencyError
 from scripts.model_registry import RegisteredModel
 from scripts.run_all import _extend_with_property_results, _parse_extra_models, _uses_sdf_only_qm9_predictive_contract, build_parser
@@ -47,6 +47,14 @@ def test_run_all_models_parser_defaults_to_models_command() -> None:
 
     assert args.command == "models"
     assert args.include_moladt_predictive is True
+    assert args.qm9_split_mode == "long"
+
+
+def test_run_all_qm9_parser_defaults_to_long_split() -> None:
+    args = build_parser().parse_args(["qm9"])
+
+    assert args.command == "qm9"
+    assert args.split_mode == "long"
 
 
 def test_models_command_defaults_include_both_geometry_families() -> None:
@@ -454,3 +462,10 @@ def test_train_member_stops_immediately_on_nan_validation_and_restores_best(monk
     assert len(history["training_curves"]) == 2
     assert history["training_curves"][1]["valid_rmse"] != history["training_curves"][1]["valid_rmse"]
     assert torch.allclose(model.weight.detach(), saved_weight["value"])
+
+
+def test_qm9_geometry_defaults_use_25_epochs() -> None:
+    defaults = _geometry_defaults("qm9", "visnet_ensemble")
+
+    assert defaults["max_epochs"] == 25
+    assert defaults["patience"] == 25

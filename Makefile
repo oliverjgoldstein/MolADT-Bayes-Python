@@ -18,7 +18,7 @@ AUTO_APPROVE_FIXES ?= 0
 
 INFERENCE_PRESET ?= paper
 QM9_LIMIT ?=
-QM9_SPLIT_MODE ?= paper
+QM9_SPLIT_MODE ?= long
 ZINC_DATASET_SIZE ?= 250K
 ZINC_DATASET_DIMENSION ?= 2D
 ZINC_LIMIT ?=
@@ -53,7 +53,7 @@ VARIATIONAL_ITERATIONS_DEFAULT := 15000
 OPTIMIZE_ITERATIONS_DEFAULT := 5000
 PATHFINDER_PATHS_DEFAULT := 8
 PREDICTIVE_DRAWS_DEFAULT := 2000
-RUNTIME_HINT := often several hours on an M1 Pro, with the paper-sized QM9 split (110462/10000/10000) and the full ZINC 250K timing pass
+RUNTIME_HINT := often several hours on an M1 Pro, with the paper preset and the full ZINC 250K timing pass
 else
 METHODS_DEFAULT := sample,variational,pathfinder,optimize,laplace
 SAMPLE_CHAINS_DEFAULT := 2
@@ -64,7 +64,7 @@ VARIATIONAL_ITERATIONS_DEFAULT := 5000
 OPTIMIZE_ITERATIONS_DEFAULT := 2000
 PATHFINDER_PATHS_DEFAULT := 4
 PREDICTIVE_DRAWS_DEFAULT := 500
-RUNTIME_HINT := usually 15-45 minutes after CmdStan is built, with QM9_LIMIT=2000 and the full ZINC 250K timing pass
+RUNTIME_HINT := usually 15-45 minutes after CmdStan is built, with the default Stan preset and the full ZINC 250K timing pass
 endif
 
 ifeq ($(INFERENCE_PRESET),paper)
@@ -114,12 +114,11 @@ TOOLCHAIN_ENV := $(if $(DARWIN_SDKROOT),env CC="$(DARWIN_CLANG)" CXX="$(DARWIN_C
 MODEL_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),models/paper/run_$(RUN_TIMESTAMP),models/run_$(RUN_TIMESTAMP))
 TIMING_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),timing/paper/run_$(RUN_TIMESTAMP),timing/run_$(RUN_TIMESTAMP))
 FREESOLV_RESULTS_SUBDIR := freesolv/run_$(RUN_TIMESTAMP)
-QM9_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),qm9/paper/run_$(RUN_TIMESTAMP),qm9/run_$(RUN_TIMESTAMP))
 BEST_QM9_EXTRA_MODELS := catboost_uncertainty,visnet_ensemble
-QM9_SMALL_RESULTS_SUBDIR := qm9/run_$(RUN_TIMESTAMP)
-QM9_PAPER_RESULTS_SUBDIR := qm9/paper/run_$(RUN_TIMESTAMP)
+QM9_LONG_RESULTS_SUBDIR := qm9/long/run_$(RUN_TIMESTAMP)
+QM9_LONG_SEED := 102
 
-.PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-activate python-parse python-parse-smiles python-to-smiles python-pretty-example python-benchmark-qm9 python-benchmark-zinc freesolv qm9 qm9small qm9paper benchmark benchmark-small benchmark-paper benchmark-bg timing catboost-geom-model catboost-geom-model-paper model
+.PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-activate python-parse python-parse-smiles python-to-smiles python-pretty-example python-benchmark-qm9 python-benchmark-zinc freesolv qm9long benchmark benchmark-bg timing catboost-geom-model catboost-geom-model-paper model
 
 help:
 	@printf "%s\n" \
@@ -134,16 +133,12 @@ help:
 	"  make python-to-smiles       Render molecules/benzene.sdf to SMILES" \
 		"  make python-pretty-example  Render EXAMPLE=ferrocene or EXAMPLE=diborane" \
 		"  make freesolv              Run the long FreeSolv MolADT-vs-MoleculeNet Stan comparison" \
-		"  make qm9                   Alias for make qm9small" \
-		"  make qm9small              Run the focused QM9 subset benchmark (1600/200/200)" \
-		"  make qm9paper              Run the focused QM9 paper-sized benchmark (110462/10000/10000)" \
+		"  make qm9long               Run the full-data QM9 CatBoost + ViSNet benchmark (25 geometry epochs)" \
 		"  make benchmark              Run the combined FreeSolv + QM9 MolADT Stan comparison bundle" \
-		"  make benchmark-small        Run the lighter 2000-row QM9 subset comparison" \
-		"  make benchmark-paper        Re-run the paper-sized QM9 split (110462/10000/10000) explicitly" \
 		"  make benchmark-bg           Run the benchmark in the foreground and mirror output to the active results directory" \
 		"  make timing                 Build the local ZINC timing corpus and compare SMILES vs MolADT parse times" \
-		"  default long run: make benchmark" \
-		"  quicker subset run: make benchmark-small" \
+		"  default full QM9 run: make qm9long" \
+		"  full benchmark bundle: make benchmark" \
 		"  quieter run: BENCHMARK_VERBOSE=0 make benchmark" \
 		"" \
 		"Current inference configuration:" \
@@ -457,44 +452,26 @@ freesolv:
 	"  expected figure: results/$(FREESOLV_RESULTS_SUBDIR)/freesolv_rmse_vs_moleculenet.svg"
 	MOLADT_RESULTS_DIR=results/$(FREESOLV_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all freesolv $(VERBOSE_ARG) $(FREESOLV_BENCHMARK_ARGS)
 
-qm9:
-	@$(MAKE) --no-print-directory qm9small
-
-qm9small:
+qm9long:
 	@printf "%s\n" \
 	"Running reviewer-facing QM9 comparison." \
 	"  repo: MolADT-Bayes-Python" \
 	"  command: scripts.run_all qm9" \
 	"  dataset: QM9 (mu task, MolADT only)" \
-	"  results_dir: results/$(QM9_SMALL_RESULTS_SUBDIR)" \
+	"  results_dir: results/$(QM9_LONG_RESULTS_SUBDIR)" \
 	"  paper baseline: MoleculeNet DTNN MAE 2.35" \
-	"  inference_preset: default" \
-	"  qm9_split_mode: subset" \
-	"  qm9_limit: 2000" \
-	"  stan_methods: (disabled)" \
-	"  stan_models: (disabled)" \
-	"  extra_models: $(BEST_QM9_EXTRA_MODELS)" \
-	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
-	"  expected figure: results/$(QM9_SMALL_RESULTS_SUBDIR)/qm9_mae_vs_moleculenet.svg"
-	MOLADT_RESULTS_DIR=results/$(QM9_SMALL_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 --limit 2000 --split-mode subset --include-moladt-predictive --models "" --extra-models $(BEST_QM9_EXTRA_MODELS) $(VERBOSE_ARG)
-
-qm9paper:
-	@printf "%s\n" \
-	"Running reviewer-facing QM9 comparison." \
-	"  repo: MolADT-Bayes-Python" \
-	"  command: scripts.run_all qm9" \
-	"  dataset: QM9 (mu task, MolADT only)" \
-	"  results_dir: results/$(QM9_PAPER_RESULTS_SUBDIR)" \
-	"  paper baseline: MoleculeNet DTNN MAE 2.35" \
-	"  inference_preset: paper" \
-	"  qm9_split_mode: paper" \
+	"  inference_preset: long" \
+	"  qm9_split_mode: long" \
 	"  qm9_limit: full-local-download" \
 	"  stan_methods: (disabled)" \
 	"  stan_models: (disabled)" \
 	"  extra_models: $(BEST_QM9_EXTRA_MODELS)" \
+	"  seed: $(QM9_LONG_SEED)" \
+	"  geometry_max_epochs: 25" \
+	"  geometry_seed_count: 1" \
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
-	"  expected figure: results/$(QM9_PAPER_RESULTS_SUBDIR)/qm9_mae_vs_moleculenet.svg"
-	MOLADT_RESULTS_DIR=results/$(QM9_PAPER_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 --split-mode paper --paper-mode --include-moladt-predictive --models "" --extra-models $(BEST_QM9_EXTRA_MODELS) $(VERBOSE_ARG)
+	"  expected figure: results/$(QM9_LONG_RESULTS_SUBDIR)/qm9_mae_vs_moleculenet.svg"
+	MOLADT_RESULTS_DIR=results/$(QM9_LONG_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 --seed $(QM9_LONG_SEED) --split-mode long --include-moladt-predictive --models "" --extra-models $(BEST_QM9_EXTRA_MODELS) $(VERBOSE_ARG)
 
 benchmark:
 	@printf "%s\n" \
@@ -517,12 +494,6 @@ benchmark:
 	"  paper baselines: FreeSolv RMSE 1.15; QM9 DTNN MAE 2.35" \
 	"  expected outputs: $(RESULTS_ROOT)/results.csv, $(RESULTS_ROOT)/freesolv_rmse_vs_moleculenet.svg, $(RESULTS_ROOT)/qm9_mae_vs_moleculenet.svg"
 	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all benchmark $(QM9_LIMIT_BENCHMARK_ARG) --qm9-split-mode $(QM9_SPLIT_MODE) $(if $(filter paper,$(INFERENCE_PRESET)),--paper-mode,) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
-
-benchmark-small:
-	@$(MAKE) --no-print-directory benchmark INFERENCE_PRESET=default QM9_LIMIT=2000 QM9_SPLIT_MODE=subset
-
-benchmark-paper:
-	@$(MAKE) --no-print-directory benchmark INFERENCE_PRESET=paper QM9_LIMIT= QM9_SPLIT_MODE=paper
 
 benchmark-bg:
 	@mkdir -p $(dir $(BENCHMARK_LOG))
