@@ -1,8 +1,8 @@
 # Models and Features
 
-This repo benchmarks MolADT by exporting descriptor matrices from the typed molecule object and then fitting either Stan, CatBoost, or geometry-aware neural models to those exports.
+This repo benchmarks MolADT by exporting descriptor matrices from the typed molecule object and then fitting either Stan or geometry-aware neural models to those exports.
 
-## Front-Door Benchmark Paths
+## Benchmark Paths
 
 The two user-facing benchmark commands are intentionally different:
 
@@ -10,17 +10,16 @@ The two user-facing benchmark commands are intentionally different:
   - representation: `moladt_featurized`
   - model: `bayes_gp_rbf_screened`
   - algorithm: Stan `laplace`
-- QM9 keeps the recovered predictive path that was producing the strong `mu` results:
-  - tabular representation: `moladt_featurized`
-  - tabular model: `catboost_uncertainty`
-  - geometry models: `visnet_ensemble` on the SDF-backed geometry exports
+- QM9 uses one geometry path:
+  - geometry representation: `moladt_featurized_geom`
+  - geometry model: `visnet_ensemble`
   - long split: deterministic `80/10/10` over all aligned local QM9 rows
   - current local counts: `107,108 / 13,388 / 13,389`
   - geometry epochs: `25`
   - default seed: `102`
   - geometry members: `1`
 
-`make qm9long` does not use the fixed Stan path anymore. It runs the full-data CatBoost + ViSNet comparison and then plots the validation-selected local result against the MoleculeNet DTNN MAE row.
+`make qm9long` does not use the Stan path. It runs a full-data ViSNet benchmark on `moladt_featurized_geom` and plots the local result against the MoleculeNet DTNN MAE row.
 
 ## Representation Contract
 
@@ -60,7 +59,7 @@ For the published benchmark comparison, these descriptors are computed from the 
 
 ### `moladt_featurized`
 
-This is the feature-rich MolADT branch used by the current FreeSolv benchmark and the tabular side of the current QM9 benchmark.
+This is the feature-rich MolADT branch used by the current FreeSolv benchmark and as the global descriptor source for the current QM9 geometry benchmark.
 
 It keeps the compact MolADT descriptors and adds:
 
@@ -80,7 +79,6 @@ The repo contains these predictive model families:
 - `bayes_linear_student_t`
 - `bayes_hierarchical_shrinkage`
 - `bayes_gp_rbf_screened`
-- `catboost_uncertainty`
 - `visnet_ensemble`
 - `dimenetpp_ensemble`
 
@@ -98,16 +96,14 @@ For FreeSolv, the benchmark contract is:
 
 For QM9, the benchmark contract is:
 
-- tabular export: `moladt_featurized`
-- tabular model: `catboost_uncertainty`
-- geometry exports: `sdf_geom`, `moladt_geom`
+- geometry export: `moladt_featurized_geom`
 - geometry model: `visnet_ensemble`
 - split mode: `long`
 - run size: all aligned local QM9 rows under the deterministic `80/10/10` split
 - current local counts: `107,108 / 13,388 / 13,389`
 - geometry training cap: `25` epochs with one member
 
-That QM9 choice is deliberate. `mu` is a directional 3D target, so the front-door path uses a strong non-linear tabular baseline for the featurized MolADT descriptors and a geometry-aware ViSNet path for the coordinate-bearing export. The long run is still dominated by the geometry model path, not the older Stan `optimize` shortcut.
+That QM9 choice is deliberate. `mu` is a directional 3D target, so the benchmark uses a geometry model with the full MolADT feature bundle derived from the aligned SDF molecules. The long run is a geometry benchmark, not the older Stan shortcut.
 
 Reports compare the fixed FreeSolv benchmark run and the full-data QM9 predictive run to MoleculeNet only:
 
@@ -116,28 +112,21 @@ Reports compare the fixed FreeSolv benchmark run and the full-data QM9 predictiv
 
 ## Example Code
 
-This is the smallest programmatic example of the recovered QM9 tabular path:
+This is the smallest programmatic example of the current QM9 geometry path:
 
 ```python
 from scripts.process_qm9 import process_qm9_dataset
-from scripts.tabular_runner import CatBoostRunConfig, run_catboost_uncertainty
+from scripts.geometry_runner import GeometryRunConfig, run_geometry_ensemble
 
 artifacts = process_qm9_dataset(split_mode="long", include_legacy_tabular=False, verbose=True)
-bundle = artifacts.moladt_featurized_export
-assert bundle is not None
-
-config = CatBoostRunConfig(
-    seeds=(1,),
-    search_hyperparameters=True,
-)
-
-summary_rows, prediction_rows, artifact_rows = run_catboost_uncertainty(
+bundle = artifacts.geometric_exports["moladt_featurized_geom"]
+metrics_rows, prediction_rows, training_curve_rows, artifact_rows = run_geometry_ensemble(
     bundle,
-    config=config,
+    config=GeometryRunConfig(model_name="visnet_ensemble", seeds=(102,), verbose=True),
 )
 ```
 
-`make qm9long` also runs `visnet_ensemble` on the geometry export, then keeps the best local validation-selected QM9 row for the final paper-comparison figure.
+`make qm9long` runs exactly that ViSNet path on `moladt_featurized_geom`, then writes the local QM9 row for the final paper-comparison figure.
 
 ## Benchmark Commands
 
@@ -148,7 +137,7 @@ make timing
 ```
 
 - `make freesolv` writes the `Training` / `Validation` / `Test` / `Paper` FreeSolv figure
-- `make qm9long` writes the `Training` / `Test` / `Paper` QM9 figure for the full-data CatBoost + ViSNet path
+- `make qm9long` writes the `Training` / `Test` / `Paper` QM9 figure for the full-data ViSNet path
 - `make timing` is the separate ingest/interoperability timing path
 
 For the broader protocol and result bundle, see [Inference and benchmarks](inference-and-benchmarks.md).

@@ -1,6 +1,6 @@
 # Inference and Benchmarks
 
-This repo prepares the benchmark datasets, exports aligned MolADT matrices, fits the configured predictive models, and writes the comparison bundle.
+This repo prepares the benchmark datasets, exports aligned MolADT matrices, fits the configured models, and writes the comparison bundle.
 
 ## Main Commands
 
@@ -10,28 +10,28 @@ make freesolv
 make qm9long
 make timing
 ./.venv/bin/python -m scripts.run_all freesolv --verbose
-./.venv/bin/python -m scripts.run_all qm9 --split-mode long --include-moladt-predictive --models "" --extra-models catboost_uncertainty,visnet_ensemble --verbose
+./.venv/bin/python -m scripts.run_all qm9 --split-mode long --include-moladt-predictive --models "" --extra-models visnet_ensemble --preferred-qm9-geometry-representation moladt_featurized_geom --verbose
 ./.venv/bin/python -m scripts.run_all benchmark --paper-mode --verbose
 ```
 
 - `make freesolv` runs the long FreeSolv benchmark path, imports all `642` vendored SDF structures as the molecule source, and compares the fixed local Stan run against MoleculeNet Table 3 on RMSE
-- `make qm9long` runs the full-data QM9 `mu` predictive path with `catboost_uncertainty` on the SDF-backed `moladt_featurized` tabular export and `visnet_ensemble` on the geometry exports
+- `make qm9long` runs the full-data QM9 `mu` predictive path with `visnet_ensemble` on the SDF-backed `moladt_featurized_geom` export
 - `make timing` runs the separate ZINC timing/interoperability pass
 - `make python-cmdstan-install` is the one-time local CmdStan install step required before the Stan benchmark targets
 
 ## Benchmark Contract
 
-The benchmark contract is deliberately narrow:
+The benchmark contract is narrow on purpose:
 
 - `moladt_featurized`
   The same boundary SMILES or aligned SDF record is parsed into the typed MolADT object and featurized from that object with pair, radial, angle, torsion, and bonding-system channels.
 - the FreeSolv figure shows `Training`, `Validation`, `Test`, then `Paper`
 - the QM9 figure shows `Training`, `Test`, then `Paper`
 - FreeSolv uses one fixed benchmark path: `moladt_featurized` with the `bayes_gp_rbf_screened` model fit by Stan `laplace`
-- QM9 uses the focused predictive path: `catboost_uncertainty` on `moladt_featurized`, and `visnet_ensemble` on the geometry exports
+- QM9 uses one fixed path: `visnet_ensemble` on `moladt_featurized_geom`
 - QM9 long uses all aligned local QM9 molecules under a deterministic `80/10/10` split. With the current `133,885`-row local bundle, that is `107,108 / 13,388 / 13,389`.
 - QM9 long uses seed `102`, matching the second seed from the old QM9 optional-model seed schedule
-- QM9 geometry training runs one ViSNet member for at most `25` epochs and logs every epoch in verbose mode
+- QM9 geometry training runs one ViSNet member for at most `25` epochs and logs every epoch in verbose mode with validation RMSE and MAE
 - the paper bar is the matching MoleculeNet row only
 - FreeSolv uses RMSE
 - QM9 `mu` uses MAE
@@ -46,7 +46,7 @@ The aligned Stan models are:
 - [`bayes_hierarchical_shrinkage`](../stan/bayes_hierarchical_shrinkage.stan)
 - [`bayes_gp_rbf_screened`](../stan/bayes_gp_rbf_screened.stan)
 
-The benchmark graph uses the fixed FreeSolv Stan run and the validation-selected local QM9 predictive run.
+The benchmark graph uses the fixed FreeSolv Stan run and the fixed `qm9long` ViSNet run.
 
 ## Dataset Meaning
 
@@ -59,7 +59,7 @@ The benchmark graph uses the fixed FreeSolv Stan run and the validation-selected
 
 `make timing` is not the same question as the predictive benchmark.
 
-It writes a ZINC timing bundle under `results/timing/run_<timestamp>/` and reports a pipeline:
+With the default `paper` preset, it writes a ZINC timing bundle under `results/timing/paper/run_<timestamp>/`. If you override the preset away from `paper`, the path becomes `results/timing/run_<timestamp>/`. The timing bundle reports a pipeline:
 
 - raw file I/O baseline
 - optional external-toolkit SMILES normalization
@@ -68,7 +68,7 @@ It writes a ZINC timing bundle under `results/timing/run_<timestamp>/` and repor
 - local MolADT SMILES parsing
 - local MolADT JSON file loading
 
-Treat it as an interoperability and runtime benchmark, not as the central representation-quality comparison. The timing SVG uses a log throughput axis so large stage gaps remain readable without overlapping labels.
+Treat it as an interoperability and runtime benchmark, not as the main model comparison. The timing SVG uses a log throughput axis so large stage gaps remain readable without overlapping labels.
 
 ## Outputs
 

@@ -14,6 +14,7 @@ from .features import (
     FeatureTable,
     GeometricFeatureTable,
     featurize_moladt_featurized_records,
+    featurize_moladt_featurized_geometry_records,
     featurize_moladt_geometry_records,
     featurize_moladt_smiles_dataframe,
     featurize_sdf_geometry_records,
@@ -294,9 +295,27 @@ def process_qm9_dataset(
     moladt_geom_failure_path = PROCESSED_DATA_DIR / "qm9_moladt_geometry_failures.csv"
     write_failure_csv(moladt_geom_failure_path, moladt_geom_table.failures)
     failure_paths.append(moladt_geom_failure_path)
-    aligned_geom = _align_geometric_tables({"sdf_geom": sdf_geom_table, "moladt_geom": moladt_geom_table})
+    moladt_featurized_geom_table = featurize_moladt_featurized_geometry_records(
+        combined_frame,
+        dataset_name="qm9_moladt_featurized_geom",
+        mol_id_column="mol_id",
+        mol_column="moladt_molecule",
+        target_column="mu",
+        record_index_column="sdf_record_index",
+    )
+    moladt_featurized_geom_failure_path = PROCESSED_DATA_DIR / "qm9_moladt_featurized_geometry_failures.csv"
+    write_failure_csv(moladt_featurized_geom_failure_path, moladt_featurized_geom_table.failures)
+    failure_paths.append(moladt_featurized_geom_failure_path)
+    aligned_geom = _align_geometric_tables(
+        {
+            "sdf_geom": sdf_geom_table,
+            "moladt_geom": moladt_geom_table,
+            "moladt_featurized_geom": moladt_featurized_geom_table,
+        }
+    )
     sdf_geom_table = aligned_geom["sdf_geom"]
     moladt_geom_table = aligned_geom["moladt_geom"]
+    moladt_featurized_geom_table = aligned_geom["moladt_featurized_geom"]
     geometric_exports: dict[str, GeometricDatasetSpec] = {}
     geom_row_count = len(sdf_geom_table.rows) if not sdf_geom_table.rows.empty else len(moladt_geom_table.rows)
     geom_split_partition = _qm9_split_partition(geom_row_count, seed=seed, split_mode=split_mode) if geom_row_count else None
@@ -330,6 +349,22 @@ def process_qm9_dataset(
             log(
                 f"[qm9 {geometry_stage_index}/{total_stages}] moladt_geom_rows={len(moladt_geom_table.rows)} "
                 f"moladt_geom_feature_failures={len(moladt_geom_table.failures)} "
+                f"train={len(geom_export.train_indices)} valid={len(geom_export.valid_indices)} test={len(geom_export.test_indices)}"
+            )
+    if not moladt_featurized_geom_table.rows.empty:
+        geometric_exports["moladt_featurized_geom"] = export_geometric_splits(
+            moladt_featurized_geom_table,
+            dataset_name="qm9",
+            representation="moladt_featurized_geom",
+            target_name="mu",
+            seed=seed,
+            split_partition=geom_split_partition,
+        )
+        if verbose:
+            geom_export = geometric_exports["moladt_featurized_geom"]
+            log(
+                f"[qm9 {geometry_stage_index}/{total_stages}] moladt_featurized_geom_rows={len(moladt_featurized_geom_table.rows)} "
+                f"moladt_featurized_geom_feature_failures={len(moladt_featurized_geom_table.failures)} "
                 f"train={len(geom_export.train_indices)} valid={len(geom_export.valid_indices)} test={len(geom_export.test_indices)}"
             )
     if verbose:

@@ -12,20 +12,20 @@ Diborane, ferrocene, and morphine are useful examples.
 - ferrocene in standard SMILES: `[CH-]1C=CC=C1.[CH-]1C=CC=C1.[Fe+2]`
 - morphine in standard stereochemical SMILES: `CN1CC[C@]23C4=C5C=CC(O)=C4O[C@H]2[C@@H](O)C=C[C@H]3[C@H]1C5`
 
-Those are useful boundary strings, but they are weak central objects.
+Those are useful interchange formats, but they are awkward as the main in-memory representation.
 
 - diborane wants explicit `3c-2e` bridges
 - ferrocene wants shared Cp/metal bonding systems
 - morphine pushes fused-ring structure and stereo flags into a linear notation
 
-MolADT keeps that chemistry as typed atoms, local bonds, bonding systems, and stereo annotations. The repo is built around that object so that functions over molecules can respect the invariances of the molecular structure, rather than the accidental choices made by a boundary string syntax.
+MolADT keeps that chemistry as typed atoms, local bonds, bonding systems, and stereo annotations. The code in this repo works over that object directly instead of treating a string format as the primary model.
 
 ## Quick Start
 
 ```bash
 make python-setup
 ./.venv/bin/python -m moladt.cli parse-smiles "c1ccccc1"
-# once, before Stan benchmarks
+# once, before Stan-backed targets such as FreeSolv
 make python-cmdstan-install
 ```
 
@@ -68,7 +68,7 @@ The local QM9 and vendored FreeSolv raw files in this workspace are still V2000.
 
 - the Python MolADT types, parser, renderer, and pretty-printer
 - example molecules including diborane, ferrocene, and morphine
-- Stan-oriented feature generation and local benchmark tooling
+- feature generation, Stan models, and local benchmark tooling
 
 ## Benchmarking
 
@@ -81,7 +81,7 @@ make timing
 ```
 
 - `make freesolv`: FreeSolv RMSE comparison. Fixed path `moladt_featurized + bayes_gp_rbf_screened + laplace`. Writes `results/freesolv/run_.../freesolv_rmse_vs_moleculenet.svg`.
-- `make qm9long`: full-data QM9 `mu` MAE comparison over all aligned local QM9 molecules, with `catboost_uncertainty` on the SDF-backed `moladt_featurized` tabular export and `visnet_ensemble` on the geometry exports. The current local bundle yields `107,108 / 13,388 / 13,389` train / validation / test rows under the deterministic `80/10/10` long split. ViSNet runs one member, caps geometry training at `25` epochs, uses seed `102` (the second seed from the old QM9 seed schedule), and prints every epoch when `BENCHMARK_VERBOSE=1`. Writes `results/qm9/long/run_.../qm9_mae_vs_moleculenet.svg`.
+- `make qm9long`: full QM9 `mu` MAE comparison over all aligned local QM9 molecules, using `visnet_ensemble` on `moladt_featurized_geom`. That export keeps the atomic numbers and coordinates from the SDF record and adds the full MolADT feature bundle from the same molecule. The current local bundle yields `107,108 / 13,388 / 13,389` train / validation / test rows under the deterministic `80/10/10` long split. ViSNet runs one member for at most `25` epochs with seed `102`, and the verbose run prints every epoch with validation RMSE and MAE. Writes `results/qm9/long/run_.../qm9_mae_vs_moleculenet.svg`.
 - `make timing`: ZINC ingest and runtime comparison. It separates raw I/O, optional external-toolkit stages, a plain string baseline, our SMILES parser, and our MolADT file reader. Writes `results/timing/paper/run_.../timing_overview.svg`.
 
 Results are written under timestamped directories in `results/`, mainly `results/freesolv/run_.../`, `results/qm9/long/run_.../`, and `results/timing/paper/run_.../`.

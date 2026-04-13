@@ -108,6 +108,12 @@ def _add_common_benchmark_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--full-qm9", action="store_true", help="Run QM9 without a local source-row limit")
     parser.add_argument("--geom-model", choices=("visnet", "dimenetpp"), default=None, help="Convenience flag that appends the matching geometry ensemble model")
     parser.add_argument("--skip-geom", action="store_true", help="Disable optional geometry-model runs even if they are listed elsewhere")
+    parser.add_argument(
+        "--preferred-qm9-geometry-representation",
+        choices=("sdf_geom", "moladt_geom", "moladt_featurized_geom"),
+        default=None,
+        help="Restrict QM9 geometry runs to one exported representation",
+    )
     parser.add_argument("--verbose", action="store_true")
 
 
@@ -169,6 +175,7 @@ def main(argv: list[str] | None = None) -> int:
         qm9_split_mode = "paper" if args.paper_mode else args.split_mode
         if args.verbose:
             log(f"Starting QM9 benchmark with limit={qm9_limit}, split_mode={qm9_split_mode}")
+            log("QM9 target: mu (dipole moment)")
             log(f"Results directory: {display_path(RESULTS_DIR)}")
             log_stage("benchmark", 1, 3, "Preparing QM9 exports")
         artifacts = process_qm9_dataset(
@@ -210,6 +217,7 @@ def main(argv: list[str] | None = None) -> int:
                 f"(qm9_limit={qm9_limit}, qm9_split_mode={qm9_split_mode}, "
                 f"MolADT-only Stan comparison, extra_models={','.join(extra_models) or '(none)'})"
             )
+            log("QM9 target: mu (dipole moment)")
             log(f"Results directory: {display_path(RESULTS_DIR)}")
             log_stage("benchmark", 1, 3, "Running FreeSolv benchmark flow")
         freesolv = process_freesolv_dataset(
@@ -456,7 +464,18 @@ def _extend_with_property_results(
         elif model_name in GEOMETRIC_MODEL_REGISTRY:
             runner = GEOMETRIC_MODEL_REGISTRY[model_name].runner
             try:
-                for bundle in getattr(artifacts, "geometric_exports", {}).values():
+                geometric_exports = getattr(artifacts, "geometric_exports", {})
+                preferred_qm9_geometry = getattr(args, "preferred_qm9_geometry_representation", None)
+                geometric_bundles = list(geometric_exports.values())
+                if preferred_qm9_geometry is not None:
+                    geometric_bundles = [
+                        bundle for bundle in geometric_bundles if getattr(bundle, "representation", "") == preferred_qm9_geometry
+                    ]
+                    if not geometric_bundles:
+                        raise RuntimeError(
+                            f"Preferred QM9 geometry representation `{preferred_qm9_geometry}` was not exported"
+                        )
+                for bundle in geometric_bundles:
                     rows, predictions, training_curves, artifact_manifest = runner(
                         bundle,
                         config=GeometryRunConfig(model_name=model_name, seeds=extra_seeds, verbose=args.verbose),

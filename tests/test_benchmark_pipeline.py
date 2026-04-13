@@ -827,6 +827,24 @@ def test_process_qm9_creates_processed_directory_before_writing(tmp_path, monkey
             failures=(),
         ),
     )
+    monkeypatch.setattr(
+        process_qm9,
+        "featurize_moladt_featurized_geometry_records",
+        lambda *args, **kwargs: process_qm9.GeometricFeatureTable(
+            rows=pd.DataFrame(
+                [
+                    {"mol_id": f"qm9_{index:06d}", "smiles": "O", "mu": float(index), "sdf_record_index": index}
+                    for index in range(12)
+                ]
+            ),
+            atomic_numbers=tuple(np.asarray([8], dtype=np.int64) for _ in range(12)),
+            coordinates=tuple(np.asarray([[0.0, 0.0, 0.0]], dtype=float) for _ in range(12)),
+            global_feature_names=("pair_count_c_o",),
+            global_feature_groups={"pair_count_c_o": "adt_typed_pairs"},
+            global_features=np.asarray([[1.0] for _ in range(12)], dtype=float),
+            failures=(),
+        ),
+    )
 
     def fake_export_standardized_splits(*args, **kwargs):
         assert processed_dir.is_dir()
@@ -919,11 +937,30 @@ def test_process_qm9_fixed_contract_skips_legacy_smiles_exports(tmp_path, monkey
             failures=(),
         ),
     )
+    monkeypatch.setattr(
+        process_qm9,
+        "featurize_moladt_featurized_geometry_records",
+        lambda *args, **kwargs: process_qm9.GeometricFeatureTable(
+            rows=pd.DataFrame(
+                [
+                    {"mol_id": f"qm9_{index:06d}", "smiles": "O", "mu": float(index), "sdf_record_index": index}
+                    for index in range(12)
+                ]
+            ),
+            atomic_numbers=tuple(np.asarray([8], dtype=np.int64) for _ in range(12)),
+            coordinates=tuple(np.asarray([[0.0, 0.0, 0.0]], dtype=float) for _ in range(12)),
+            global_feature_names=("pair_count_c_o",),
+            global_feature_groups={"pair_count_c_o": "adt_typed_pairs"},
+            global_features=np.asarray([[1.0] for _ in range(12)], dtype=float),
+            failures=(),
+        ),
+    )
 
     artifacts = process_qm9.process_qm9_dataset(limit=12, split_mode="subset", include_legacy_tabular=False)
 
     assert set(artifacts.tabular_exports) == {"moladt_featurized"}
     assert artifacts.moladt_featurized_export is not None
+    assert "moladt_featurized_geom" in artifacts.geometric_exports
 
 
 def test_qm9_long_split_uses_all_rows_fractionally(tmp_path, monkeypatch) -> None:
@@ -997,6 +1034,24 @@ def test_qm9_long_split_uses_all_rows_fractionally(tmp_path, monkeypatch) -> Non
             failures=(),
         ),
     )
+    monkeypatch.setattr(
+        process_qm9,
+        "featurize_moladt_featurized_geometry_records",
+        lambda *args, **kwargs: process_qm9.GeometricFeatureTable(
+            rows=pd.DataFrame(
+                [
+                    {"mol_id": f"qm9_{index:06d}", "smiles": "O", "mu": float(index), "sdf_record_index": index}
+                    for index in range(12)
+                ]
+            ),
+            atomic_numbers=tuple(np.asarray([8], dtype=np.int64) for _ in range(12)),
+            coordinates=tuple(np.asarray([[0.0, 0.0, 0.0]], dtype=float) for _ in range(12)),
+            global_feature_names=("pair_count_c_o",),
+            global_feature_groups={"pair_count_c_o": "adt_typed_pairs"},
+            global_features=np.asarray([[1.0] for _ in range(12)], dtype=float),
+            failures=(),
+        ),
+    )
 
     artifacts = process_qm9.process_qm9_dataset(limit=12, split_mode="long", include_legacy_tabular=False)
 
@@ -1007,6 +1062,7 @@ def test_qm9_long_split_uses_all_rows_fractionally(tmp_path, monkeypatch) -> Non
     assert len(bundle.y_train) == 9
     assert len(bundle.y_valid) == 1
     assert len(bundle.y_test) == 2
+    assert "moladt_featurized_geom" in artifacts.geometric_exports
 
 
 def test_load_freesolv_sdf_dataset_requires_database_json(tmp_path, monkeypatch) -> None:

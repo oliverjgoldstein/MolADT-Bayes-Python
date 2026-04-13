@@ -51,7 +51,9 @@ def run_geometry_ensemble(
     member_predictions: dict[str, list[np.ndarray]] = {"train": [], "valid": [], "test": []}
     parameter_count: int | None = None
     progress_label = f"{config.model_name}:{bundle.dataset_name}/{bundle.representation}"
+    target_label = _describe_target(bundle.dataset_name, bundle.target_name)
     if config.verbose:
+        log(f"[{progress_label}] predicting target {target_label}")
         log(f"[{progress_label}] training ensemble with {len(config.seeds)} member(s)")
     start = time.perf_counter()
     for seed_index, seed in enumerate(config.seeds, start=1):
@@ -86,6 +88,7 @@ def run_geometry_ensemble(
             patience=int(dataset_defaults["patience"]),
             gradient_clip_norm=float(dataset_defaults["gradient_clip_norm"]),
             progress_label=progress_label,
+            target_name=bundle.target_name,
             seed_index=seed_index,
             seed_count=len(config.seeds),
             verbose=config.verbose,
@@ -132,10 +135,14 @@ def run_geometry_ensemble(
             )["predicted_mean"]
         )
         if config.verbose:
-            best_valid_rmse = min(float(row["valid_rmse"]) for row in history["training_curves"])
+            best_row = min(
+                (row for row in history["training_curves"] if np.isfinite(float(row["valid_rmse"]))),
+                key=lambda row: float(row["valid_rmse"]),
+            )
             log(
                 f"[{progress_label}] finished member {seed_index}/{len(config.seeds)} "
-                f"with best validation RMSE {best_valid_rmse:.4f}"
+                f"with best validation RMSE {float(best_row['valid_rmse']):.4f} "
+                f"and MAE {float(best_row['valid_mae']):.4f}"
             )
     runtime_seconds = time.perf_counter() - start
     if config.verbose:
@@ -277,6 +284,7 @@ def _train_member(
     patience: int,
     gradient_clip_norm: float,
     progress_label: str,
+    target_name: str,
     seed_index: int,
     seed_count: int,
     verbose: bool,
@@ -284,6 +292,7 @@ def _train_member(
     nnf = torch.nn.functional
     best_state: dict[str, Any] | None = None
     best_valid_rmse = float("inf")
+    best_valid_mae = float("inf")
     epochs_without_improvement = 0
     training_curves: list[dict[str, float | int]] = []
     for epoch in range(1, max_epochs + 1):
@@ -310,13 +319,16 @@ def _train_member(
                     "epoch": epoch,
                     "train_loss": train_loss,
                     "valid_rmse": float("nan"),
+                    "valid_mae": float("nan"),
                 }
             )
             if verbose:
-                best_display = f"{best_valid_rmse:.4f}" if np.isfinite(best_valid_rmse) else "none"
+                best_rmse_display = f"{best_valid_rmse:.4f}" if np.isfinite(best_valid_rmse) else "none"
+                best_mae_display = f"{best_valid_mae:.4f}" if np.isfinite(best_valid_mae) else "none"
                 log(
                     f"[{progress_label}] member {seed_index}/{seed_count} epoch {epoch}/{max_epochs} "
-                    f"train_loss={train_loss:.4f} valid_rmse=nan best={best_display}"
+                    f"target={target_name} train_loss={train_loss:.4f} valid_rmse=nan valid_mae=nan "
+                    f"best_rmse={best_rmse_display} best_mae={best_mae_display}"
                 )
                 log(
                     f"[{progress_label}] member {seed_index}/{seed_count} encountered a non-finite training loss at epoch {epoch}; "
@@ -332,43 +344,47 @@ def _train_member(
             target_std=target_std,
         )
         valid_rmse = float(np.sqrt(np.mean(np.square(valid_payload["predicted_mean"] - valid_payload["actual"]))))
+        valid_mae = float(np.mean(np.abs(valid_payload["predicted_mean"] - valid_payload["actual"])))
         training_curves.append(
             {
                 "epoch": epoch,
                 "train_loss": train_loss,
                 "valid_rmse": valid_rmse,
+                "valid_mae": valid_mae,
             }
         )
+        improved = bool(np.isfinite(valid_rmse) and valid_rmse < best_valid_rmse)
+        if improved:
+            best_valid_rmse = valid_rmse
+            best_valid_mae = valid_mae
+            best_state = {key: value.detach().cpu().clone() for key, value in model.state_dict().items()}
+            epochs_without_improvement = 0
         if verbose:
-            best_display = (
-                f"{min(float(row['valid_rmse']) for row in training_curves if np.isfinite(float(row['valid_rmse']))):.4f}"
-                if any(np.isfinite(float(row["valid_rmse"])) for row in training_curves)
-                else "none"
-            )
+            best_rmse_display = f"{best_valid_rmse:.4f}" if np.isfinite(best_valid_rmse) else "none"
+            best_mae_display = f"{best_valid_mae:.4f}" if np.isfinite(best_valid_mae) else "none"
             log(
                 f"[{progress_label}] member {seed_index}/{seed_count} epoch {epoch}/{max_epochs} "
-                f"train_loss={training_curves[-1]['train_loss']:.4f} valid_rmse={valid_rmse:.4f} "
-                f"best={best_display}"
+                f"target={target_name} train_loss={training_curves[-1]['train_loss']:.4f} "
+                f"valid_rmse={valid_rmse:.4f} valid_mae={valid_mae:.4f} "
+                f"best_rmse={best_rmse_display} best_mae={best_mae_display}"
             )
         if not np.isfinite(valid_rmse):
             if verbose:
-                best_display = f"{best_valid_rmse:.4f}" if np.isfinite(best_valid_rmse) else "none"
+                best_rmse_display = f"{best_valid_rmse:.4f}" if np.isfinite(best_valid_rmse) else "none"
+                best_mae_display = f"{best_valid_mae:.4f}" if np.isfinite(best_valid_mae) else "none"
                 log(
                     f"[{progress_label}] member {seed_index}/{seed_count} encountered a non-finite validation RMSE at epoch {epoch}; "
-                    f"stopping member and restoring the best checkpoint {best_display}."
+                    f"stopping member and restoring the best checkpoint "
+                    f"(best_rmse={best_rmse_display}, best_mae={best_mae_display})."
                 )
             break
-        if valid_rmse < best_valid_rmse:
-            best_valid_rmse = valid_rmse
-            best_state = {key: value.detach().cpu().clone() for key, value in model.state_dict().items()}
-            epochs_without_improvement = 0
-        else:
+        if not improved:
             epochs_without_improvement += 1
             if epochs_without_improvement >= patience:
                 if verbose:
                     log(
                         f"[{progress_label}] member {seed_index}/{seed_count} early stopped at epoch {epoch} "
-                        f"with best validation RMSE {best_valid_rmse:.4f}"
+                        f"with best validation RMSE {best_valid_rmse:.4f} and MAE {best_valid_mae:.4f}"
                     )
                 break
     if best_state is not None:
@@ -435,6 +451,12 @@ def _geometry_defaults(dataset_name: str, model_name: str) -> dict[str, float | 
     else:
         base.update({"batch_size": 128, "max_epochs": 25, "patience": 25})
     return base
+
+
+def _describe_target(dataset_name: str, target_name: str) -> str:
+    if dataset_name == "qm9" and target_name == "mu":
+        return "mu (dipole moment)"
+    return target_name
 
 
 def _write_geometry_artifact_manifest(

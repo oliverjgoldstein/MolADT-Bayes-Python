@@ -323,6 +323,63 @@ def test_extend_with_property_results_skips_smiles_tabular_bundle(monkeypatch) -
     assert seen_representations == ["moladt_featurized"]
 
 
+def test_extend_with_property_results_prefers_requested_qm9_geometry_representation(monkeypatch) -> None:
+    import scripts.run_all as run_all
+
+    seen_representations: list[str] = []
+
+    def fake_geometry_runner(bundle, config):
+        del config
+        seen_representations.append(bundle.representation)
+        return [], [], [], []
+
+    monkeypatch.setitem(
+        run_all.GEOMETRIC_MODEL_REGISTRY,
+        "visnet_ensemble",
+        RegisteredModel(name="visnet_ensemble", input_kind="geometric", runner=fake_geometry_runner),
+    )
+    monkeypatch.setattr(run_all, "write_stan_data_json", lambda *args, **kwargs: None)
+    artifacts = SimpleNamespace(
+        moladt_export=SimpleNamespace(),
+        tabular_exports={},
+        geometric_exports={
+            "sdf_geom": SimpleNamespace(representation="sdf_geom"),
+            "moladt_geom": SimpleNamespace(representation="moladt_geom"),
+            "moladt_featurized_geom": SimpleNamespace(representation="moladt_featurized_geom"),
+        },
+    )
+    args = SimpleNamespace(
+        methods="",
+        models="",
+        seed=102,
+        sample_chains=1,
+        sample_warmup=1,
+        sample_draws=1,
+        approximation_draws=1,
+        variational_iterations=1,
+        optimize_iterations=1,
+        pathfinder_paths=1,
+        predictive_draws=1,
+        verbose=False,
+        num_seeds=1,
+        paper_mode=False,
+        preferred_qm9_geometry_representation="moladt_featurized_geom",
+    )
+
+    _extend_with_property_results(
+        artifacts,
+        [],
+        [],
+        [],
+        [],
+        [],
+        ("visnet_ensemble",),
+        args,
+    )
+
+    assert seen_representations == ["moladt_featurized_geom"]
+
+
 def test_dimenet_reports_missing_torch_sparse_dependency(monkeypatch) -> None:
     import scripts.geometry_runner as geometry_runner
 
@@ -389,6 +446,7 @@ def test_train_member_logs_every_epoch(monkeypatch, capsys) -> None:
         patience=5,
         gradient_clip_norm=5.0,
         progress_label="visnet_ensemble:demo/sdf_geom",
+        target_name="mu",
         seed_index=1,
         seed_count=1,
         verbose=True,
@@ -397,6 +455,8 @@ def test_train_member_logs_every_epoch(monkeypatch, capsys) -> None:
     output = capsys.readouterr().out
     assert "epoch 1/2" in output
     assert "epoch 2/2" in output
+    assert "valid_mae=" in output
+    assert "target=mu" in output
 
 
 def test_train_member_stops_immediately_on_nan_validation_and_restores_best(monkeypatch) -> None:
@@ -454,6 +514,7 @@ def test_train_member_stops_immediately_on_nan_validation_and_restores_best(monk
         patience=30,
         gradient_clip_norm=5.0,
         progress_label="visnet_ensemble:demo/sdf_geom",
+        target_name="mu",
         seed_index=1,
         seed_count=1,
         verbose=False,
@@ -461,6 +522,7 @@ def test_train_member_stops_immediately_on_nan_validation_and_restores_best(monk
 
     assert len(history["training_curves"]) == 2
     assert history["training_curves"][1]["valid_rmse"] != history["training_curves"][1]["valid_rmse"]
+    assert history["training_curves"][1]["valid_mae"] != history["training_curves"][1]["valid_mae"]
     assert torch.allclose(model.weight.detach(), saved_weight["value"])
 
 

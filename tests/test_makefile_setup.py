@@ -105,6 +105,7 @@ def test_makefile_qm9_target_prints_recovered_predictive_path(tmp_path: Path) ->
     assert "./.venv/bin/python -m scripts.run_all qm9" in result.stdout
     assert "qm9_split_mode: long" in result.stdout
     assert "qm9_limit: full-local-download" in result.stdout
+    assert "target_property: mu (dipole moment)" in result.stdout
     assert "seed: 102" in result.stdout
     assert "geometry_max_epochs: 25" in result.stdout
     assert "geometry_seed_count: 1" in result.stdout
@@ -127,8 +128,12 @@ def test_makefile_qm9long_target_uses_full_predictive_path(tmp_path: Path) -> No
     assert "qm9_limit: full-local-download" in result.stdout
     assert "stan_methods: (disabled)" in result.stdout
     assert "stan_models: (disabled)" in result.stdout
-    assert "extra_models: catboost_uncertainty,visnet_ensemble" in result.stdout
-    assert '--seed 102 --split-mode long --include-moladt-predictive --models "" --extra-models catboost_uncertainty,visnet_ensemble' in result.stdout
+    assert "geometry_representation: moladt_featurized_geom" in result.stdout
+    assert "geometry_model: visnet_ensemble" in result.stdout
+    assert "per_epoch_logs: train_loss + validation RMSE + validation MAE" in result.stdout
+    assert "benchmark_verbose=1 (forced for qm9long)" in result.stdout
+    assert "PYTHONUNBUFFERED=1 MOLADT_RESULTS_DIR=results/qm9/long/run_" in result.stdout
+    assert '--seed 102 --split-mode long --include-moladt-predictive --models "" --extra-models visnet_ensemble --preferred-qm9-geometry-representation moladt_featurized_geom --verbose' in result.stdout
 
 
 def test_makefile_benchmark_defaults_to_timestamped_results_directory(tmp_path: Path) -> None:

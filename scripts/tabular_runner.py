@@ -137,25 +137,34 @@ def run_catboost_uncertainty(
                 seed=seed,
             )
         )
-        metrics_rows.extend(
-            _evaluate_catboost_split(
-                model=model,
-                X_train=X_train,
-                y_train=y_train,
-                mol_ids_train=bundle.mol_ids_train,
-                X_valid=X_valid,
-                y_valid=y_valid,
-                mol_ids_valid=bundle.mol_ids_valid,
-                X_test=X_test,
-                y_test=y_test,
-                mol_ids_test=bundle.mol_ids_test,
-                bundle=bundle,
-                runtime_seconds=runtime_seconds,
-                seed=seed,
-                virtual_ensembles_count=config.virtual_ensembles_count,
-                prediction_rows=prediction_rows,
-            )
+        seed_metric_rows = _evaluate_catboost_split(
+            model=model,
+            X_train=X_train,
+            y_train=y_train,
+            mol_ids_train=bundle.mol_ids_train,
+            X_valid=X_valid,
+            y_valid=y_valid,
+            mol_ids_valid=bundle.mol_ids_valid,
+            X_test=X_test,
+            y_test=y_test,
+            mol_ids_test=bundle.mol_ids_test,
+            bundle=bundle,
+            runtime_seconds=runtime_seconds,
+            seed=seed,
+            virtual_ensembles_count=config.virtual_ensembles_count,
+            prediction_rows=prediction_rows,
         )
+        metrics_rows.extend(seed_metric_rows)
+        if config.verbose:
+            train_row = next(row for row in seed_metric_rows if str(row["split"]) == "train")
+            valid_row = next(row for row in seed_metric_rows if str(row["split"]) == "valid")
+            test_row = next(row for row in seed_metric_rows if str(row["split"]) == "test")
+            log(
+                f"[catboost_uncertainty:{progress_label}] seed {seed_index}/{len(config.seeds)} "
+                f"train_rmse={float(train_row['rmse']):.4f} train_mae={float(train_row['mae']):.4f} "
+                f"valid_rmse={float(valid_row['rmse']):.4f} valid_mae={float(valid_row['mae']):.4f} "
+                f"test_rmse={float(test_row['rmse']):.4f} test_mae={float(test_row['mae']):.4f}"
+            )
     return metrics_rows, prediction_rows, artifact_rows
 
 
@@ -272,6 +281,7 @@ def _search_best_params(
     search_space = _CATBOOST_SEARCH_SPACES.get(dataset_name, _CATBOOST_SEARCH_SPACES["qm9"])
     search_keys = ("depth", "learning_rate", "l2_leaf_reg", "iterations", "min_data_in_leaf")
     best_score = float("inf")
+    best_mae = float("inf")
     best_params = dict(defaults)
     total_candidates = int(np.prod([len(search_space[key]) for key in search_keys], dtype=int))
     if verbose:
@@ -297,18 +307,20 @@ def _search_best_params(
             virtual_ensembles_count=virtual_ensembles_count,
         )
         rmse = float(np.sqrt(np.mean(np.square(predicted_mean - y_valid))))
+        mae = float(np.mean(np.abs(predicted_mean - y_valid)))
         if rmse < best_score:
             best_score = rmse
+            best_mae = mae
             best_params = candidate
             if verbose:
                 log(
                     f"[catboost_uncertainty:{progress_label}] new best validation RMSE {best_score:.4f} "
-                    f"at {candidate_index}/{total_candidates}"
+                    f"validation MAE {best_mae:.4f} at {candidate_index}/{total_candidates}"
                 )
         elif verbose and (candidate_index == 1 or candidate_index == total_candidates or candidate_index % 10 == 0):
             log(
                 f"[catboost_uncertainty:{progress_label}] searched {candidate_index}/{total_candidates} "
-                f"candidates; best validation RMSE {best_score:.4f}"
+                f"candidates; best validation RMSE {best_score:.4f} best validation MAE {best_mae:.4f}"
             )
     return best_params
 

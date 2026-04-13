@@ -6,7 +6,7 @@ The main README is the short entry point. This folder keeps the rest.
 
 - represent the molecule as a typed MolADT object
 - derive MolADT descriptor matrices from that object
-- run the local Stan benchmarks on FreeSolv and QM9
+- run the fixed Stan benchmark on FreeSolv and the fixed ViSNet benchmark on QM9
 - compare the fixed local MolADT benchmark paths to MoleculeNet only
 
 For the shortest path, start with [Quickstart](quickstart.md). For the benchmark story, go straight to [Inference and benchmarks](inference-and-benchmarks.md).

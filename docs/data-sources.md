@@ -1,6 +1,6 @@
 # Data Sources
 
-This repo vendors the raw benchmark source files used by the front-door workflows so the main commands do not need to fetch them first. The repo still ignores generated archives, extracted scratch directories, processed tables, and benchmark outputs.
+This repo vendors the raw benchmark source files used by the main workflows so the main commands do not need to fetch them first. The repo still ignores generated archives, extracted scratch directories, processed tables, and benchmark outputs.
 
 ## FreeSolv
 

@@ -576,8 +576,6 @@ def featurize_moladt_featurized_geometry_records(
     target_column: str,
     record_index_column: str | None = None,
 ) -> GeometricFeatureTable:
-    # Legacy richer geometry helper kept for side experiments. The current
-    # public benchmark reports `sdf_geom` and `moladt_geom` instead.
     rows: list[dict[str, Any]] = []
     atomic_numbers: list[np.ndarray] = []
     coordinates: list[np.ndarray] = []
@@ -589,10 +587,10 @@ def featurize_moladt_featurized_geometry_records(
         target = float(getattr(record, target_column))
         raw_molecule = getattr(record, mol_column)
         try:
-            canonical = canonical_smiles_from_mol(raw_molecule)
-            moladt_record = rdkit_mol_to_moladt_record(raw_molecule)
-            descriptor_dict = compute_moladt_featurized_descriptors(moladt_record.molecule)
-            ordered_atoms = [moladt_record.molecule.atoms[atom_id] for atom_id in sorted(moladt_record.molecule.atoms)]
+            molecule = _coerce_moladt_molecule(raw_molecule)
+            canonical = canonical_smiles_from_molecule(molecule)
+            descriptor_dict = compute_moladt_featurized_descriptors(molecule)
+            ordered_atoms = [molecule.atoms[atom_id] for atom_id in sorted(molecule.atoms)]
             z = np.asarray([atom.attributes.atomic_number for atom in ordered_atoms], dtype=np.int64)
             pos = np.asarray(
                 [

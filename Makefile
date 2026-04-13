@@ -114,7 +114,7 @@ TOOLCHAIN_ENV := $(if $(DARWIN_SDKROOT),env CC="$(DARWIN_CLANG)" CXX="$(DARWIN_C
 MODEL_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),models/paper/run_$(RUN_TIMESTAMP),models/run_$(RUN_TIMESTAMP))
 TIMING_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),timing/paper/run_$(RUN_TIMESTAMP),timing/run_$(RUN_TIMESTAMP))
 FREESOLV_RESULTS_SUBDIR := freesolv/run_$(RUN_TIMESTAMP)
-BEST_QM9_EXTRA_MODELS := catboost_uncertainty,visnet_ensemble
+BEST_QM9_EXTRA_MODELS := visnet_ensemble
 QM9_LONG_RESULTS_SUBDIR := qm9/long/run_$(RUN_TIMESTAMP)
 QM9_LONG_SEED := 102
 
@@ -132,9 +132,9 @@ help:
 	"  make python-parse-smiles    Parse c1ccccc1" \
 	"  make python-to-smiles       Render molecules/benzene.sdf to SMILES" \
 		"  make python-pretty-example  Render EXAMPLE=ferrocene or EXAMPLE=diborane" \
-		"  make freesolv              Run the long FreeSolv MolADT-vs-MoleculeNet Stan comparison" \
-		"  make qm9long               Run the full-data QM9 CatBoost + ViSNet benchmark (25 geometry epochs)" \
-		"  make benchmark              Run the combined FreeSolv + QM9 MolADT Stan comparison bundle" \
+		"  make freesolv              Run the long FreeSolv MolADT-vs-MoleculeNet comparison" \
+		"  make qm9long               Run the full-data QM9 ViSNet benchmark on rich SDF-backed MolADT geometry" \
+		"  make benchmark              Run the combined FreeSolv + QM9 comparison bundle" \
 		"  make benchmark-bg           Run the benchmark in the foreground and mirror output to the active results directory" \
 		"  make timing                 Build the local ZINC timing corpus and compare SMILES vs MolADT parse times" \
 		"  default full QM9 run: make qm9long" \
@@ -463,15 +463,18 @@ qm9long:
 	"  inference_preset: long" \
 	"  qm9_split_mode: long" \
 	"  qm9_limit: full-local-download" \
+	"  target_property: mu (dipole moment)" \
+	"  geometry_representation: moladt_featurized_geom" \
 	"  stan_methods: (disabled)" \
 	"  stan_models: (disabled)" \
-	"  extra_models: $(BEST_QM9_EXTRA_MODELS)" \
+	"  geometry_model: $(BEST_QM9_EXTRA_MODELS)" \
 	"  seed: $(QM9_LONG_SEED)" \
 	"  geometry_max_epochs: 25" \
 	"  geometry_seed_count: 1" \
-	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
+	"  per_epoch_logs: train_loss + validation RMSE + validation MAE" \
+	"  benchmark_verbose=1 (forced for qm9long)" \
 	"  expected figure: results/$(QM9_LONG_RESULTS_SUBDIR)/qm9_mae_vs_moleculenet.svg"
-	MOLADT_RESULTS_DIR=results/$(QM9_LONG_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 --seed $(QM9_LONG_SEED) --split-mode long --include-moladt-predictive --models "" --extra-models $(BEST_QM9_EXTRA_MODELS) $(VERBOSE_ARG)
+	PYTHONUNBUFFERED=1 MOLADT_RESULTS_DIR=results/$(QM9_LONG_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 --seed $(QM9_LONG_SEED) --split-mode long --include-moladt-predictive --models "" --extra-models $(BEST_QM9_EXTRA_MODELS) --preferred-qm9-geometry-representation moladt_featurized_geom --verbose
 
 benchmark:
 	@printf "%s\n" \
