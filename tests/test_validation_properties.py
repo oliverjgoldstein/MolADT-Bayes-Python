@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from moladt.chem.dietz import AtomId, mk_bonding_system, mk_edge
-from moladt.chem.molecule import Atom, Molecule, neighbors_sigma
+from moladt.chem.molecule import Atom, Molecule
+from moladt.chem.molecule_ops import neighbors_sigma
 from moladt.chem.validate import used_electrons_at, validate_molecule
 from moladt.examples import benzene
 
@@ -48,4 +49,3 @@ def test_benzene_electron_accounting() -> None:
         system = total - sigma
         assert system == 1.0
         assert total == 4.0
-

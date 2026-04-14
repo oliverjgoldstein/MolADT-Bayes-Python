@@ -10,8 +10,8 @@ from typing import Any
 import pandas as pd
 import psutil
 
-from moladt.chem.molecule import Molecule
 from moladt.io.sdf import SDFRecord, parse_sdf_record
+from moladt.io.molecule_json import molecule_from_json, molecule_to_json_bytes
 
 from .common import PROCESSED_DATA_DIR, RESULTS_DIR, display_path, ensure_directory, format_progress, log, log_stage
 from .download_data import download_zinc
@@ -325,7 +325,7 @@ def _prepare_timing_library(
             sdf_relative_path = Path("sdf_library") / f"{mol_id}.sdf"
             moladt_relative_path = Path("moladt_library") / f"{mol_id}.moladt.json"
             sdf_payload = entry.block_text.rstrip("\n") + "\n$$$$\n"
-            moladt_payload = entry.record.molecule.to_json_bytes()
+            moladt_payload = molecule_to_json_bytes(entry.record.molecule)
             (library_root / sdf_relative_path).write_text(sdf_payload, encoding="latin-1")
             (library_root / moladt_relative_path).write_bytes(moladt_payload)
             records.append(
@@ -398,7 +398,7 @@ def _measure_moladt_library_parse(
         error = ""
         success = True
         try:
-            Molecule.from_json(payload)
+            molecule_from_json(payload)
         except Exception as exc:
             success = False
             error = str(exc)

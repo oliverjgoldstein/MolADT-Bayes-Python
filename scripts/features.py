@@ -12,7 +12,8 @@ import numpy as np
 import pandas as pd
 
 from moladt.chem.dietz import mk_edge
-from moladt.chem.molecule import AtomicSymbol, Molecule, effective_order
+from moladt.chem.molecule import AtomicSymbol, Molecule
+from moladt.chem.molecule_ops import effective_order
 from moladt.inference import compute_descriptors as compute_moladt_descriptors
 from moladt.inference.descriptors import coordinate_descriptors
 from moladt.io.sdf import parse_sdf_record

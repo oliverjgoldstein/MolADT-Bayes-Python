@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ..chem.dietz import AtomId, Edge, NonNegative, SystemId, mk_bonding_system
 from ..chem.molecule import AtomicSymbol, Molecule
-from ._literal import atom, bond
+from ._literal import atom, atom_map, sigma_bonds
 
 
 def _edge_set(atom_pairs: tuple[tuple[AtomId, AtomId], ...]) -> frozenset[Edge]:
@@ -28,55 +28,50 @@ fe_to_ring1 = tuple((fe, atom_id) for atom_id in ring1_c)
 fe_to_ring2 = tuple((fe, atom_id) for atom_id in ring2_c)
 
 ferrocene_pretty = Molecule(
-    atoms={
-        atom.atom_id: atom
-        for atom in (
-            atom(1, AtomicSymbol.Fe, 0.000, 0.000, 0.000),
-            atom(2, AtomicSymbol.C, 1.180, 0.000, 1.660),
-            atom(3, AtomicSymbol.C, 0.365, 1.122, 1.660),
-            atom(4, AtomicSymbol.C, -0.955, 0.694, 1.660),
-            atom(5, AtomicSymbol.C, -0.955, -0.694, 1.660),
-            atom(6, AtomicSymbol.C, 0.365, -1.122, 1.660),
-            atom(7, AtomicSymbol.C, 0.955, 0.694, -1.660),
-            atom(8, AtomicSymbol.C, -0.365, 1.122, -1.660),
-            atom(9, AtomicSymbol.C, -1.180, 0.000, -1.660),
-            atom(10, AtomicSymbol.C, -0.365, -1.122, -1.660),
-            atom(11, AtomicSymbol.C, 0.955, -0.694, -1.660),
-            atom(12, AtomicSymbol.H, 2.270, 0.000, 1.660),
-            atom(13, AtomicSymbol.H, 0.702, 2.158, 1.660),
-            atom(14, AtomicSymbol.H, -1.836, 1.334, 1.660),
-            atom(15, AtomicSymbol.H, -1.836, -1.334, 1.660),
-            atom(16, AtomicSymbol.H, 0.702, -2.158, 1.660),
-            atom(17, AtomicSymbol.H, 1.836, 1.334, -1.660),
-            atom(18, AtomicSymbol.H, -0.702, 2.158, -1.660),
-            atom(19, AtomicSymbol.H, -2.270, 0.000, -1.660),
-            atom(20, AtomicSymbol.H, -0.702, -2.158, -1.660),
-            atom(21, AtomicSymbol.H, 1.836, -1.334, -1.660),
-        )
-    },
-    local_bonds=frozenset(
-        {
-            bond(2, 3),
-            bond(2, 6),
-            bond(2, 12),
-            bond(3, 4),
-            bond(3, 13),
-            bond(4, 5),
-            bond(4, 14),
-            bond(5, 6),
-            bond(5, 15),
-            bond(6, 16),
-            bond(7, 8),
-            bond(7, 11),
-            bond(7, 17),
-            bond(8, 9),
-            bond(8, 18),
-            bond(9, 10),
-            bond(9, 19),
-            bond(10, 11),
-            bond(10, 20),
-            bond(11, 21),
-        }
+    atoms=atom_map(
+        atom(1, AtomicSymbol.Fe, 0.000, 0.000, 0.000),
+        atom(2, AtomicSymbol.C, 1.180, 0.000, 1.660),
+        atom(3, AtomicSymbol.C, 0.365, 1.122, 1.660),
+        atom(4, AtomicSymbol.C, -0.955, 0.694, 1.660),
+        atom(5, AtomicSymbol.C, -0.955, -0.694, 1.660),
+        atom(6, AtomicSymbol.C, 0.365, -1.122, 1.660),
+        atom(7, AtomicSymbol.C, 0.955, 0.694, -1.660),
+        atom(8, AtomicSymbol.C, -0.365, 1.122, -1.660),
+        atom(9, AtomicSymbol.C, -1.180, 0.000, -1.660),
+        atom(10, AtomicSymbol.C, -0.365, -1.122, -1.660),
+        atom(11, AtomicSymbol.C, 0.955, -0.694, -1.660),
+        atom(12, AtomicSymbol.H, 2.270, 0.000, 1.660),
+        atom(13, AtomicSymbol.H, 0.702, 2.158, 1.660),
+        atom(14, AtomicSymbol.H, -1.836, 1.334, 1.660),
+        atom(15, AtomicSymbol.H, -1.836, -1.334, 1.660),
+        atom(16, AtomicSymbol.H, 0.702, -2.158, 1.660),
+        atom(17, AtomicSymbol.H, 1.836, 1.334, -1.660),
+        atom(18, AtomicSymbol.H, -0.702, 2.158, -1.660),
+        atom(19, AtomicSymbol.H, -2.270, 0.000, -1.660),
+        atom(20, AtomicSymbol.H, -0.702, -2.158, -1.660),
+        atom(21, AtomicSymbol.H, 1.836, -1.334, -1.660),
+    ),
+    local_bonds=sigma_bonds(
+        (2, 3),
+        (2, 6),
+        (2, 12),
+        (3, 4),
+        (3, 13),
+        (4, 5),
+        (4, 14),
+        (5, 6),
+        (5, 15),
+        (6, 16),
+        (7, 8),
+        (7, 11),
+        (7, 17),
+        (8, 9),
+        (8, 18),
+        (9, 10),
+        (9, 19),
+        (10, 11),
+        (10, 20),
+        (11, 21),
     ),
     systems=(
         (

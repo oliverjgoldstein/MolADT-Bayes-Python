@@ -7,14 +7,8 @@ from typing import Iterable
 from .coordinate import Coordinate
 from .dietz import AtomId, BondingSystem, Edge
 from .dietz import SystemId
-from .molecule import (
-    Atom,
-    Molecule,
-    SmilesAtomStereo,
-    SmilesBondStereo,
-    effective_order,
-    neighbors_sigma,
-)
+from .molecule import Atom, Molecule, SmilesAtomStereo, SmilesBondStereo
+from .molecule_ops import effective_order, neighbors_sigma
 from .orbital import (
     Orbital,
     PureDOrbital,

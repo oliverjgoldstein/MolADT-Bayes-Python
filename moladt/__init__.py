@@ -6,13 +6,13 @@ from .chem.molecule import (
     AtomicSymbol,
     ElementAttributes,
     Molecule,
-    MutableMolecule,
     SmilesAtomStereo,
     SmilesAtomStereoClass,
     SmilesBondStereo,
     SmilesBondStereoDirection,
     SmilesStereochemistry,
 )
+from .chem.mutable import MutableMolecule
 from .chem.pretty import PrettyBlock, pretty_text
 
 __all__ = [

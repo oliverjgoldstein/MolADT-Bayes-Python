@@ -6,6 +6,7 @@ from pathlib import Path
 from moladt.chem.dietz import AtomId
 from moladt.examples.morphine import MORPHINE_RING_CLOSURE_SMILES
 from moladt.examples.sample_molecules import methane, water
+from moladt.io.molecule_json import molecule_from_json, molecule_to_json_bytes
 from moladt.io.sdf import molecule_to_sdf, parse_sdf, parse_sdf_record, read_sdf, read_sdf_record
 from moladt.io.smiles import molecule_to_smiles, parse_smiles
 
@@ -221,6 +222,6 @@ def test_smiles_parse_preserves_directional_bond_annotations() -> None:
 
 def test_smiles_stereochemistry_survives_json_round_trip() -> None:
     molecule = parse_smiles("C[C@@H](O)F")
-    restored = molecule.from_json(molecule.to_json_bytes())
+    restored = molecule_from_json(molecule_to_json_bytes(molecule))
 
     assert restored.smiles_stereochemistry == molecule.smiles_stereochemistry

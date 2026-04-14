@@ -88,7 +88,7 @@ This command loads named built-in examples from [`moladt/examples/manuscript.py`
 - `parse` starts from an SDF file and can print record title and properties.
 - `parse-smiles` starts from a SMILES string and only prints the validated MolADT structure.
 - `to-smiles` starts from an SDF file and emits only the rendered SMILES string.
-- `pretty-example` starts from a built-in example object that is itself assembled by parsing the checked-in SDF file first.
+- `pretty-example` starts from a built-in example object written as an explicit typed molecule with orbital shells intact.
 
 ## Related Files
 

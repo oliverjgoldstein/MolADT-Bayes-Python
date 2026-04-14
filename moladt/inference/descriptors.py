@@ -4,7 +4,8 @@ from dataclasses import dataclass
 from math import log, pi, sqrt
 
 from ..chem.dietz import AtomId, Edge
-from ..chem.molecule import Atom, AtomicSymbol, Molecule, effective_order
+from ..chem.molecule import Atom, AtomicSymbol, Molecule
+from ..chem.molecule_ops import effective_order
 
 
 @dataclass(frozen=True, slots=True)

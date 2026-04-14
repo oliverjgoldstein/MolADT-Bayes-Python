@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from moladt.chem.dietz import AtomId
-from moladt.chem.molecule import Molecule, add_sigma
+from moladt.chem.molecule import Molecule
 from moladt.chem.dietz import mk_edge
+from moladt.chem.molecule_ops import add_sigma
 
 
 def test_edge_canonicalization() -> None:
@@ -17,4 +18,3 @@ def test_add_sigma_is_idempotent() -> None:
     twice = add_sigma(AtomId(1), AtomId(2), once)
     assert len(once.local_bonds) == 1
     assert twice.local_bonds == once.local_bonds
-

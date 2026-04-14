@@ -32,7 +32,7 @@ make python-cmdstan-install
 `Molecule` is immutable and destructures as:
 `atoms, local_bonds, systems, smiles_stereochemistry = molecule`
 
-For probabilistic proposals or local graph surgery, use `MutableMolecule` as a writable scratch state and call `freeze()` to return to canonical `Molecule`.
+For probabilistic proposals or local graph surgery, use `MutableMolecule` from `moladt.chem.mutable` as a writable scratch state and call `freeze()` to return to canonical `Molecule`.
 
 ## Parsing
 
@@ -45,7 +45,7 @@ Use the CLI when you want to inspect how a boundary format lands inside MolADT.
 ```
 
 - `parse` reads one SDF record, validates it, prints the MolADT structure, and preserves SDF title and property fields
-- `pretty-example` loads the manuscript-facing built-in objects, each assembled by parsing the checked-in SDF file for that molecule first
+- `pretty-example` loads the manuscript-facing built-in objects, written as explicit typed molecules with orbital shells intact
 - `to-smiles` renders validated classical MolADT structures back into the supported SMILES subset
 
 The SDF reader accepts V2000 and the core V3000 CTAB subset used by common structure exports:

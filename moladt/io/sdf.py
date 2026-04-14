@@ -11,6 +11,7 @@ from ..chem.constants import element_attributes, element_shells
 from ..chem.coordinate import Coordinate, mk_angstrom
 from ..chem.dietz import AtomId, Edge, NonNegative, SystemId, mk_bonding_system, mk_edge
 from ..chem.molecule import Atom, AtomicSymbol, Molecule
+from .molecule_json import molecule_to_dict
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,7 +30,7 @@ class SDFRecord:
         return {
             "title": self.title,
             "properties": dict(self.properties),
-            "molecule": self.molecule.to_dict(),
+            "molecule": molecule_to_dict(self.molecule),
         }
 
 

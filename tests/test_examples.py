@@ -63,6 +63,22 @@ def test_psilocybin_typed_descriptors_keep_indole_and_phosphoryl_systems() -> No
     assert descriptors["system_member_edges_max"] == 10.0
 
 
+def test_all_examples_include_orbital_shells() -> None:
+    examples = (
+        diborane_pretty,
+        ferrocene_pretty,
+        morphine_pretty,
+        psilocybin_pretty,
+        hydrogen,
+        oxygen,
+        water,
+        methane,
+    )
+
+    for molecule in examples:
+        assert all(atom.shells for atom in molecule.atoms.values())
+
+
 def test_manuscript_examples_keep_sdf_reference_geometry_and_sigma_edges() -> None:
     diborane_record = read_sdf_record("molecules/diborane.sdf")
     ferrocene_record = read_sdf_record("molecules/ferrocene.sdf")

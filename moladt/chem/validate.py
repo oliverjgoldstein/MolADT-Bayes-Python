@@ -4,7 +4,8 @@ from dataclasses import dataclass
 
 from .constants import get_max_bonds_symbol
 from .dietz import AtomId, BondingSystem, Edge
-from .molecule import Molecule, neighbors_sigma
+from .molecule import Molecule
+from .molecule_ops import neighbors_sigma
 
 
 class ValidationError(ValueError):
@@ -92,4 +93,3 @@ def _add_directed(bond_map: BondMap, atom_i: AtomId, atom_j: AtomId, value: floa
 
 def _approx_equal(value_a: float, value_b: float) -> bool:
     return abs(value_a - value_b) <= 1e-9
-

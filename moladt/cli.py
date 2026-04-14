@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .chem.molecule import pretty_print_molecule
+from .chem.molecule_ops import pretty_print_molecule
 from .chem.validate import validate_molecule
 from .examples import MANUSCRIPT_EXAMPLES, get_manuscript_example
 from .io.sdf import read_sdf_record

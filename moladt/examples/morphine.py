@@ -8,7 +8,7 @@ from ..chem.molecule import (
     SmilesAtomStereoClass,
     SmilesStereochemistry,
 )
-from ._literal import atom, bond
+from ._literal import atom, atom_map, sigma_bonds
 
 
 MORPHINE_RING_CLOSURE_SMILES = "CN1CC[C@]23C4=C5C=CC(O)=C4O[C@H]2[C@@H](O)C=C[C@H]3[C@H]1C5"
@@ -73,33 +73,30 @@ def _edge_from_index_pair(atom_pair: tuple[int, int]) -> Edge:
     return Edge(AtomId(atom_pair[0]), AtomId(atom_pair[1]))
 
 morphine_pretty = Molecule(
-    atoms={
-        atom.atom_id: atom
-        for atom in (
-            atom(1, AtomicSymbol.O, 0.000, 0.000, 0.100),
-            atom(2, AtomicSymbol.C, 1.000, 0.800, 0.450),
-            atom(3, AtomicSymbol.C, 2.000, 0.800, -0.100),
-            atom(4, AtomicSymbol.O, 2.000, -0.400, -0.550),
-            atom(5, AtomicSymbol.C, 3.000, 0.800, 0.350),
-            atom(6, AtomicSymbol.C, 4.000, 0.800, 0.750),
-            atom(7, AtomicSymbol.C, 5.000, 0.800, 0.200),
-            atom(8, AtomicSymbol.C, 1.800, 2.000, 0.800),
-            atom(9, AtomicSymbol.C, 2.800, 2.800, 1.100),
-            atom(10, AtomicSymbol.C, 3.800, 2.000, 0.600),
-            atom(11, AtomicSymbol.C, 0.800, 2.000, 0.150),
-            atom(12, AtomicSymbol.C, 1.200, 3.200, 0.550),
-            atom(13, AtomicSymbol.O, 0.400, 4.000, 0.300),
-            atom(14, AtomicSymbol.C, 2.400, 3.800, 0.950),
-            atom(15, AtomicSymbol.C, 3.600, 3.800, 0.700),
-            atom(16, AtomicSymbol.C, 4.200, 2.800, 0.200),
-            atom(17, AtomicSymbol.C, 5.400, 2.800, -0.200),
-            atom(18, AtomicSymbol.C, 6.200, 1.800, -0.550),
-            atom(19, AtomicSymbol.N, 7.200, 1.800, -0.850),
-            atom(20, AtomicSymbol.C, 8.200, 2.400, -1.100),
-            atom(21, AtomicSymbol.C, 6.000, 2.800, -0.350),
-        )
-    },
-    local_bonds=frozenset(bond(atom_a, atom_b) for atom_a, atom_b in _SIGMA_EDGES),
+    atoms=atom_map(
+        atom(1, AtomicSymbol.O, 0.000, 0.000, 0.100),
+        atom(2, AtomicSymbol.C, 1.000, 0.800, 0.450),
+        atom(3, AtomicSymbol.C, 2.000, 0.800, -0.100),
+        atom(4, AtomicSymbol.O, 2.000, -0.400, -0.550),
+        atom(5, AtomicSymbol.C, 3.000, 0.800, 0.350),
+        atom(6, AtomicSymbol.C, 4.000, 0.800, 0.750),
+        atom(7, AtomicSymbol.C, 5.000, 0.800, 0.200),
+        atom(8, AtomicSymbol.C, 1.800, 2.000, 0.800),
+        atom(9, AtomicSymbol.C, 2.800, 2.800, 1.100),
+        atom(10, AtomicSymbol.C, 3.800, 2.000, 0.600),
+        atom(11, AtomicSymbol.C, 0.800, 2.000, 0.150),
+        atom(12, AtomicSymbol.C, 1.200, 3.200, 0.550),
+        atom(13, AtomicSymbol.O, 0.400, 4.000, 0.300),
+        atom(14, AtomicSymbol.C, 2.400, 3.800, 0.950),
+        atom(15, AtomicSymbol.C, 3.600, 3.800, 0.700),
+        atom(16, AtomicSymbol.C, 4.200, 2.800, 0.200),
+        atom(17, AtomicSymbol.C, 5.400, 2.800, -0.200),
+        atom(18, AtomicSymbol.C, 6.200, 1.800, -0.550),
+        atom(19, AtomicSymbol.N, 7.200, 1.800, -0.850),
+        atom(20, AtomicSymbol.C, 8.200, 2.400, -1.100),
+        atom(21, AtomicSymbol.C, 6.000, 2.800, -0.350),
+    ),
+    local_bonds=sigma_bonds(*_SIGMA_EDGES),
     systems=(
         (
             SystemId(1),
