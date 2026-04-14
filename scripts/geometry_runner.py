@@ -36,6 +36,7 @@ def run_geometry_ensemble(
     valid_data = _build_data_objects(torch, pyg_data, bundle, bundle.valid_indices)
     test_data = _build_data_objects(torch, pyg_data, bundle, bundle.test_indices)
     train_loader = pyg_loader.DataLoader(train_data, batch_size=dataset_defaults["batch_size"], shuffle=True)
+    train_eval_loader = pyg_loader.DataLoader(train_data, batch_size=dataset_defaults["batch_size"], shuffle=False)
     valid_loader = pyg_loader.DataLoader(valid_data, batch_size=dataset_defaults["batch_size"], shuffle=False)
     test_loader = pyg_loader.DataLoader(test_data, batch_size=dataset_defaults["batch_size"], shuffle=False)
     y_train = bundle.rows.loc[bundle.train_indices, bundle.target_name].to_numpy(dtype=float)
@@ -108,7 +109,7 @@ def run_geometry_ensemble(
             _predict_loader(
                 torch=torch,
                 model=model,
-                loader=train_loader,
+                loader=train_eval_loader,
                 device=device,
                 target_mean=target_mean,
                 target_std=target_std,
@@ -156,7 +157,7 @@ def run_geometry_ensemble(
         )
     )
     split_payloads = {
-        "train": _predict_loader(torch=torch, model=model, loader=train_loader, device=device, target_mean=target_mean, target_std=target_std),
+        "train": _predict_loader(torch=torch, model=model, loader=train_eval_loader, device=device, target_mean=target_mean, target_std=target_std),
         "valid": _predict_loader(torch=torch, model=model, loader=valid_loader, device=device, target_mean=target_mean, target_std=target_std),
         "test": _predict_loader(torch=torch, model=model, loader=test_loader, device=device, target_mean=target_mean, target_std=target_std),
     }

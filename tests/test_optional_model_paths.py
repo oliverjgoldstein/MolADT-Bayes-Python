@@ -10,7 +10,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from scripts.features import FeatureTable, featurize_moladt_featurized_geometry_records, featurize_moladt_geometry_records
-from scripts.geometry_runner import _geometry_defaults, _import_geometry_stack, _train_member
+from scripts.geometry_runner import GeometryRunConfig, _geometry_defaults, _import_geometry_stack, _train_member, run_geometry_ensemble
 from scripts.model_errors import OptionalModelDependencyError
 from scripts.model_registry import RegisteredModel
 from scripts.run_all import _extend_with_property_results, _parse_extra_models, _uses_sdf_only_qm9_predictive_contract, build_parser
@@ -531,3 +531,111 @@ def test_qm9_geometry_defaults_use_25_epochs() -> None:
 
     assert defaults["max_epochs"] == 25
     assert defaults["patience"] == 25
+
+
+def test_run_geometry_ensemble_uses_unshuffled_train_loader_for_metrics(monkeypatch) -> None:
+    import scripts.geometry_runner as geometry_runner
+
+    torch = pytest.importorskip("torch")
+
+    class FakeData:
+        def __init__(self, **kwargs):
+            for key, value in kwargs.items():
+                setattr(self, key, value)
+
+        def to(self, device):
+            del device
+            return self
+
+    class FakeDataLoader:
+        def __init__(self, data, batch_size, shuffle):
+            del batch_size
+            self.data = list(data)
+            self.shuffle = shuffle
+
+    class DummyModel(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.weight = torch.nn.Parameter(torch.tensor(0.0))
+
+        def forward(self, batch):
+            return batch.y.view(-1) * 0.0
+
+    monkeypatch.setattr(
+        geometry_runner,
+        "_import_geometry_stack",
+        lambda *, model_name: (
+            torch,
+            SimpleNamespace(Data=FakeData),
+            SimpleNamespace(DataLoader=FakeDataLoader),
+            SimpleNamespace(),
+        ),
+    )
+    monkeypatch.setattr(geometry_runner, "_build_geometry_model", lambda **kwargs: DummyModel())
+    monkeypatch.setattr(
+        geometry_runner,
+        "_train_member",
+        lambda **kwargs: {"training_curves": [{"epoch": 1, "train_loss": 0.01, "valid_rmse": 0.0, "valid_mae": 0.0}]},
+    )
+    monkeypatch.setattr(geometry_runner, "_write_geometry_artifact_manifest", lambda **kwargs: [])
+
+    train_shuffle_calls = {"count": 0}
+
+    def fake_predict_loader(*, loader, **kwargs):
+        del kwargs
+        actual = np.asarray([float(item.y.view(-1)[0].item()) for item in loader.data], dtype=float)
+        mol_ids = tuple(str(item.mol_id) for item in loader.data)
+        if loader.shuffle and len(actual) == 2:
+            train_shuffle_calls["count"] += 1
+            order = [0, 1] if train_shuffle_calls["count"] % 2 == 1 else [1, 0]
+            actual = actual[order]
+            mol_ids = tuple(np.asarray(mol_ids)[order].tolist())
+        return {
+            "predicted_mean": actual.copy(),
+            "actual": actual,
+            "mol_ids": mol_ids,
+        }
+
+    monkeypatch.setattr(geometry_runner, "_predict_loader", fake_predict_loader)
+
+    bundle = SimpleNamespace(
+        dataset_name="qm9",
+        representation="moladt_featurized_geom",
+        rows=pd.DataFrame(
+            [
+                {"mol_id": "mol_1", "mu": 1.0},
+                {"mol_id": "mol_2", "mu": 2.0},
+                {"mol_id": "mol_3", "mu": 3.0},
+                {"mol_id": "mol_4", "mu": 4.0},
+            ]
+        ),
+        train_indices=np.asarray([0, 1]),
+        valid_indices=np.asarray([2]),
+        test_indices=np.asarray([3]),
+        atomic_numbers=np.asarray([[6], [6], [6], [6]], dtype=np.int64),
+        coordinates=np.asarray(
+            [
+                [[0.0, 0.0, 0.0]],
+                [[1.0, 0.0, 0.0]],
+                [[2.0, 0.0, 0.0]],
+                [[3.0, 0.0, 0.0]],
+            ],
+            dtype=float,
+        ),
+        global_features=None,
+        global_feature_names=(),
+        target_name="mu",
+        split_scheme="long:fractional_0.8/0.1/0.1",
+        source_row_count=4,
+        used_row_count=4,
+    )
+
+    metrics_rows, prediction_rows, training_curve_rows, artifact_rows = run_geometry_ensemble(
+        bundle,
+        config=GeometryRunConfig(model_name="visnet_ensemble", seeds=(102,), verbose=False),
+    )
+
+    del prediction_rows, training_curve_rows, artifact_rows
+    train_metrics = next(row for row in metrics_rows if row["split"] == "train")
+    assert train_metrics["mae"] == pytest.approx(0.0)
+    assert train_metrics["rmse"] == pytest.approx(0.0)
