@@ -37,16 +37,62 @@ That means the object is not stored as alternating double bonds around the indol
 
 ### Psilocybin in Code
 
-The built-in example keeps the parsed SDF atoms and sigma edges, then adds the two explicit bonding systems:
+The built-in example is written out explicitly as atoms, sigma edges, and Dietz bonding systems:
 
 ```python
 from moladt.chem.dietz import AtomId, Edge, NonNegative, SystemId, mk_bonding_system
-from moladt.chem.molecule import Molecule
-from moladt.io.sdf import read_sdf_record
+from moladt.chem.molecule import AtomicSymbol, Molecule
+from moladt.examples._literal import atom, bond
 
 psilocybin_pretty = Molecule(
-    atoms=read_sdf_record("molecules/psilocybin.sdf").molecule.atoms,
-    local_bonds=read_sdf_record("molecules/psilocybin.sdf").molecule.local_bonds,
+    atoms={
+        atom.atom_id: atom
+        for atom in (
+            atom(1, AtomicSymbol.C, -5.400, 1.200, 0.200),
+            atom(2, AtomicSymbol.N, -4.200, 0.500, 0.000),
+            atom(3, AtomicSymbol.C, -4.300, -0.900, -0.200),
+            atom(4, AtomicSymbol.C, -2.900, 1.200, 0.000),
+            atom(5, AtomicSymbol.C, -1.700, 0.500, 0.000),
+            atom(6, AtomicSymbol.C, -0.500, 1.100, 0.100),
+            atom(7, AtomicSymbol.C, 0.700, 0.500, 0.100),
+            atom(8, AtomicSymbol.N, 1.800, 1.200, 0.000),
+            atom(9, AtomicSymbol.C, 3.000, 0.500, 0.000),
+            atom(10, AtomicSymbol.C, 2.900, -0.900, 0.100),
+            atom(11, AtomicSymbol.C, 1.700, -1.500, 0.200),
+            atom(12, AtomicSymbol.C, 0.500, -0.900, 0.200),
+            atom(13, AtomicSymbol.C, -0.700, -1.500, 0.200),
+            atom(14, AtomicSymbol.C, -1.800, -0.900, 0.100),
+            atom(15, AtomicSymbol.O, 1.600, -2.900, 0.300),
+            atom(16, AtomicSymbol.P, 2.400, -4.100, 0.600),
+            atom(17, AtomicSymbol.O, 3.900, -4.000, 0.600),
+            atom(18, AtomicSymbol.O, 1.800, -5.400, 0.700),
+            atom(19, AtomicSymbol.O, 1.900, -3.700, 2.000),
+        )
+    },
+    local_bonds=frozenset(
+        {
+            bond(1, 2),
+            bond(2, 3),
+            bond(2, 4),
+            bond(4, 5),
+            bond(5, 6),
+            bond(6, 7),
+            bond(6, 10),
+            bond(7, 8),
+            bond(8, 9),
+            bond(9, 10),
+            bond(9, 14),
+            bond(10, 11),
+            bond(11, 12),
+            bond(11, 15),
+            bond(12, 13),
+            bond(13, 14),
+            bond(15, 16),
+            bond(16, 17),
+            bond(16, 18),
+            bond(16, 19),
+        }
+    ),
     systems=(
         (
             SystemId(1),
@@ -81,7 +127,7 @@ psilocybin_pretty = Molecule(
 )
 ```
 
-That is the full MolADT example form: the SDF file supplies the atom table, coordinates, and sigma framework, while the Dietz layer only adds the fused indole `pi` pool and the explicit `P=O` pool.
+That is the full MolADT example form: the example stores the atom table, coordinates, and sigma framework directly, while the Dietz layer adds the fused indole `pi` pool and the explicit `P=O` pool.
 
 ### Why This Fits MolADT
 

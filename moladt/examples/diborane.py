@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from ..chem.dietz import AtomId, Edge, NonNegative, SystemId, mk_bonding_system
-from ..chem.molecule import Molecule
-from ..io.sdf import read_sdf_record
+from ..chem.molecule import AtomicSymbol, Molecule
+from ._literal import atom, bond
 
 
 def _edge(atom_a: AtomId, atom_b: AtomId) -> Edge:
@@ -20,12 +18,29 @@ h6 = AtomId(6)
 h7 = AtomId(7)
 h8 = AtomId(8)
 
-
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
 diborane_pretty = Molecule(
-    atoms=read_sdf_record(_PROJECT_ROOT / "molecules" / "diborane.sdf").molecule.atoms,
-    local_bonds=read_sdf_record(_PROJECT_ROOT / "molecules" / "diborane.sdf").molecule.local_bonds,
+    atoms={
+        atom.atom_id: atom
+        for atom in (
+            atom(1, AtomicSymbol.B, -0.885, 0.000, 0.000),
+            atom(2, AtomicSymbol.B, 0.885, 0.000, 0.000),
+            atom(3, AtomicSymbol.H, 0.000, 0.000, 0.993),
+            atom(4, AtomicSymbol.H, 0.000, 0.000, -0.993),
+            atom(5, AtomicSymbol.H, -0.885, 1.190, 0.000),
+            atom(6, AtomicSymbol.H, -0.885, -1.190, 0.000),
+            atom(7, AtomicSymbol.H, 0.885, 1.190, 0.000),
+            atom(8, AtomicSymbol.H, 0.885, -1.190, 0.000),
+        )
+    },
+    local_bonds=frozenset(
+        {
+            bond(1, 2),
+            bond(1, 5),
+            bond(1, 6),
+            bond(2, 7),
+            bond(2, 8),
+        }
+    ),
     systems=(
         (
             SystemId(1),
