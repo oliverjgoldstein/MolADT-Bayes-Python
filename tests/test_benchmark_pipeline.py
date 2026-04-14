@@ -9,11 +9,13 @@ import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
+from moladt.io.sdf import molecule_to_sdf, parse_sdf_record
+from moladt.io.smiles import parse_smiles
+
 from scripts.benchmark_zinc import (
-    _measure_smiles_csv_string_parse,
     _measure_moladt_library_parse,
-    _measure_smiles_library_parse,
-    _moladt_parse_render_from_rdkit_mol,
+    _measure_sdf_record_parse,
+    ParsedSDFEntry,
     _prepare_timing_library,
     _read_timing_library_manifest,
 )
@@ -139,7 +141,7 @@ def test_download_qm9_prefers_vendored_snapshot(tmp_path, monkeypatch) -> None:
     assert downloads.extract_dir == qm9_dir
 
 
-def test_download_qm9_prefers_v3000_file_when_archive_contains_one(tmp_path, monkeypatch) -> None:
+def test_download_qm9_prefers_3d_conformer_sdf_over_other_archive_variants(tmp_path, monkeypatch) -> None:
     import scripts.download_data as download_data
 
     raw_dir = tmp_path / "raw"
@@ -150,6 +152,7 @@ def test_download_qm9_prefers_v3000_file_when_archive_contains_one(tmp_path, mon
     archive_path.write_text("archive", encoding="utf-8")
     (extract_dir / "gdb9.sdf").write_text("v2000\n", encoding="utf-8")
     (extract_dir / "gdb9_v3000.sdf").write_text("v3000\n", encoding="utf-8")
+    (extract_dir / "gdb9_3d_conformer.sdf").write_text("3d\n", encoding="utf-8")
     (extract_dir / "qm9.csv").write_text("mol_id,mu\nmol_1,0.1\n", encoding="utf-8")
     monkeypatch.setattr(download_data, "RAW_DATA_DIR", raw_dir)
     monkeypatch.setattr(download_data, "download_first", lambda *args, **kwargs: archive_path)
@@ -158,7 +161,7 @@ def test_download_qm9_prefers_v3000_file_when_archive_contains_one(tmp_path, mon
 
     downloads = download_qm9()
 
-    assert downloads.sdf_path == extract_dir / "gdb9_v3000.sdf"
+    assert downloads.sdf_path == extract_dir / "gdb9_3d_conformer.sdf"
 
 
 def test_download_qm9_refreshes_truncated_cached_copy_from_extracted_source(tmp_path, monkeypatch) -> None:
@@ -199,8 +202,8 @@ def test_download_zinc_prefers_vendored_snapshot(tmp_path, monkeypatch) -> None:
     raw_dir = tmp_path / "raw"
     zinc_dir = raw_dir / "zinc"
     zinc_dir.mkdir(parents=True)
-    zinc_csv = zinc_dir / "zinc15_250K_2D.csv"
-    zinc_csv.write_text("smiles\nCCO\n", encoding="utf-8")
+    zinc_sdf = zinc_dir / "zinc15_250K_2D.sdf"
+    zinc_sdf.write_text("demo\n$$$$\n", encoding="latin-1")
     monkeypatch.setattr(download_data, "RAW_DATA_DIR", raw_dir)
 
     def fail_download(*args, **kwargs):
@@ -210,9 +213,59 @@ def test_download_zinc_prefers_vendored_snapshot(tmp_path, monkeypatch) -> None:
 
     downloads = download_zinc()
 
-    assert downloads.source_path == zinc_csv
+    assert downloads.source_path == zinc_sdf
     assert downloads.archive_path is None
     assert downloads.extract_dir == zinc_dir
+    assert downloads.dataset_dimension == "2D"
+
+
+def test_download_zinc_prefers_2d_sdf_from_archive(tmp_path, monkeypatch) -> None:
+    import scripts.download_data as download_data
+
+    raw_dir = tmp_path / "raw"
+    zinc_dir = raw_dir / "zinc"
+    extract_dir = zinc_dir / "zinc15_250K_2D"
+    extract_dir.mkdir(parents=True)
+    archive_path = zinc_dir / "zinc15_250K_2D.tar.gz"
+    archive_path.write_text("archive", encoding="utf-8")
+    (extract_dir / "zinc15_250K_2D.csv").write_text("smiles\nCCO\n", encoding="utf-8")
+    (extract_dir / "zinc15_250K_2D.sdf").write_text("demo\n$$$$\n", encoding="latin-1")
+    monkeypatch.setattr(download_data, "RAW_DATA_DIR", raw_dir)
+    monkeypatch.setattr(download_data, "download_file", lambda *args, **kwargs: archive_path)
+    monkeypatch.setattr(download_data, "extract_archive", lambda *args, **kwargs: extract_dir)
+    monkeypatch.setattr(download_data, "copy_if_needed", lambda source, destination, force=False: source)
+
+    downloads = download_data.download_zinc()
+
+    assert downloads.source_path == extract_dir / "zinc15_250K_2D.sdf"
+    assert downloads.dataset_dimension == "2D"
+
+
+def test_download_zinc_gracefully_falls_back_from_3d_to_2d(tmp_path, monkeypatch) -> None:
+    import scripts.download_data as download_data
+
+    raw_dir = tmp_path / "raw"
+    zinc_dir = raw_dir / "zinc"
+    extract_dir = zinc_dir / "zinc15_250K_2D"
+    extract_dir.mkdir(parents=True)
+    archive_path = zinc_dir / "zinc15_250K_2D.tar.gz"
+    archive_path.write_text("archive", encoding="utf-8")
+    (extract_dir / "zinc15_250K_2D.sdf").write_text("demo\n$$$$\n", encoding="latin-1")
+    monkeypatch.setattr(download_data, "RAW_DATA_DIR", raw_dir)
+
+    def fake_download(url: str, destination, *, force: bool = False, timeout_seconds: int = 120):
+        if "3D" in url:
+            raise RuntimeError("404")
+        return archive_path
+
+    monkeypatch.setattr(download_data, "download_file", fake_download)
+    monkeypatch.setattr(download_data, "extract_archive", lambda *args, **kwargs: extract_dir)
+    monkeypatch.setattr(download_data, "copy_if_needed", lambda source, destination, force=False: source)
+
+    downloads = download_data.download_zinc(dataset_dimension="3D")
+
+    assert downloads.source_path == extract_dir / "zinc15_250K_2D.sdf"
+    assert downloads.dataset_dimension == "2D"
 
 
 def test_canonical_smiles_generation_is_stable() -> None:
@@ -500,37 +553,37 @@ def test_featurize_moladt_featurized_records_adds_pair_angle_and_torsion_feature
     assert sum(float(table.rows.iloc[0][name]) for name in torsion_columns) > 0.0
 
 
-def test_moladt_parse_render_supports_silicon_molecules() -> None:
-    molecule = Chem.MolFromSmiles("C[Si](C)(C)C", sanitize=True)
-
-    rendered = _moladt_parse_render_from_rdkit_mol(molecule)
-
-    assert "Si" in rendered
-
-
 def test_prepare_timing_library_creates_matched_local_corpus(tmp_path, monkeypatch) -> None:
     import scripts.benchmark_zinc as benchmark_zinc
 
     processed_dir = tmp_path / "processed"
     monkeypatch.setattr(benchmark_zinc, "PROCESSED_DATA_DIR", processed_dir)
-    molecules = [Chem.MolFromSmiles("CCO"), Chem.MolFromSmiles("c1ccccc1")]
+    entries = [
+        ParsedSDFEntry(
+            source_index=index,
+            block_text=molecule_to_sdf(parse_smiles(smiles)).split("$$$$", maxsplit=1)[0].strip("\n"),
+            record=parse_sdf_record(molecule_to_sdf(parse_smiles(smiles))),
+        )
+        for index, smiles in enumerate(("CCO", "c1ccccc1"), start=1)
+    ]
 
     library, stage = _prepare_timing_library(
-        molecules=molecules,
+        entries=entries,
         dataset_size="demo",
-        dataset_dimension="2D",
+        dataset_dimension="3D",
         limit=2,
-        source_path=tmp_path / "zinc_demo.smi",
+        source_path=tmp_path / "zinc_demo.sdf",
         force=True,
     )
 
     manifest = _read_timing_library_manifest(library)
 
-    assert library.smiles_path.exists()
+    assert library.sdf_dir.exists()
     assert library.manifest_path.exists()
     assert len(manifest) == 2
     assert stage.stage == "timing_library_prepare"
     assert stage.success_count == 2
+    assert (library.library_root / manifest.iloc[0]["sdf_relative_path"]).exists()
     assert (library.library_root / manifest.iloc[0]["moladt_relative_path"]).exists()
 
 
@@ -539,45 +592,38 @@ def test_timing_library_parse_stages_succeed_on_matched_entries(tmp_path, monkey
 
     processed_dir = tmp_path / "processed"
     monkeypatch.setattr(benchmark_zinc, "PROCESSED_DATA_DIR", processed_dir)
-    molecules = [Chem.MolFromSmiles("CCO"), Chem.MolFromSmiles("CCN")]
+    blocks = [
+        molecule_to_sdf(parse_smiles(smiles)).split("$$$$", maxsplit=1)[0].strip("\n")
+        for smiles in ("CCO", "CCN")
+    ]
+    entries, sdf_stage = _measure_sdf_record_parse(
+        blocks,
+        dataset_size="demo",
+        dataset_dimension="3D",
+        source_path=tmp_path / "zinc_demo.sdf",
+    )
 
     library, _ = _prepare_timing_library(
-        molecules=molecules,
+        entries=entries,
         dataset_size="demo",
-        dataset_dimension="2D",
+        dataset_dimension="3D",
         limit=2,
-        source_path=tmp_path / "zinc_demo.smi",
+        source_path=tmp_path / "zinc_demo.sdf",
         force=True,
     )
     manifest = _read_timing_library_manifest(library)
 
-    csv_string_items, csv_string_stage = _measure_smiles_csv_string_parse(
-        library,
-        manifest=manifest,
-        dataset_size="demo",
-        dataset_dimension="2D",
-    )
-    smiles_items, smiles_stage = _measure_smiles_library_parse(
-        library,
-        manifest=manifest,
-        dataset_size="demo",
-        dataset_dimension="2D",
-    )
     moladt_items, moladt_stage = _measure_moladt_library_parse(
         library,
         manifest=manifest,
         dataset_size="demo",
-        dataset_dimension="2D",
+        dataset_dimension="3D",
     )
 
-    assert csv_string_stage.failure_count == 0
-    assert smiles_stage.failure_count == 0
+    assert sdf_stage.failure_count == 0
     assert moladt_stage.failure_count == 0
-    assert len(csv_string_items) == len(manifest)
-    assert len(smiles_items) == len(manifest)
+    assert len(entries) == len(manifest)
     assert len(moladt_items) == len(manifest)
-    assert all(item.success for item in csv_string_items)
-    assert all(item.success for item in smiles_items)
     assert all(item.success for item in moladt_items)
 
 
@@ -724,6 +770,37 @@ def test_process_freesolv_exports_sdf_backed_moladt_featurized_bundle(tmp_path, 
     assert artifacts.moladt_featurized_export is not None
     assert artifacts.moladt_featurized_export.source_row_count == 12
     assert artifacts.moladt_featurized_export.used_row_count == 12
+
+
+def test_process_freesolv_prefers_3d_conformer_sdf_when_multiple_variants_exist(tmp_path) -> None:
+    from scripts.download_data import FreeSolvDownloads
+    from scripts.process_freesolv import _load_freesolv_sdf_dataset
+
+    repo_root = tmp_path / "FreeSolv-master"
+    preferred_dir = repo_root / "sdffiles_3d"
+    fallback_dir = repo_root / "sdffiles_v3000"
+    preferred_dir.mkdir(parents=True)
+    fallback_dir.mkdir(parents=True)
+    sdf_payload = molecule_to_sdf(parse_smiles("O"))
+    (preferred_dir / "mobley_demo.sdf").write_text(sdf_payload, encoding="latin-1")
+    (fallback_dir / "mobley_demo.sdf").write_text("broken\n", encoding="latin-1")
+    (repo_root / "database.json").write_text(
+        json.dumps({"mobley_demo": {"smiles": "O", "expt": -1.0, "iupac": "water"}}),
+        encoding="utf-8",
+    )
+
+    frame, failures, source_count = _load_freesolv_sdf_dataset(
+        FreeSolvDownloads(
+            csv_path=tmp_path / "SAMPL.csv",
+            repo_archive_path=None,
+            repo_extract_dir=repo_root,
+        )
+    )
+
+    assert source_count == 1
+    assert not failures
+    assert len(frame) == 1
+    assert frame.iloc[0]["sdf_relpath"] == "sdffiles_3d/mobley_demo.sdf"
 
 
 def test_process_qm9_creates_processed_directory_before_writing(tmp_path, monkeypatch) -> None:
@@ -1070,15 +1147,17 @@ def test_load_freesolv_sdf_dataset_requires_database_json(tmp_path, monkeypatch)
 
     sdf_dir = tmp_path / "sdffiles"
     sdf_dir.mkdir(parents=True)
-    (sdf_dir / "mobley_1.sdf").write_text("", encoding="utf-8")
-    (sdf_dir / "mobley_2.sdf").write_text("", encoding="utf-8")
+    sdf_one = sdf_dir / "mobley_1.sdf"
+    sdf_two = sdf_dir / "mobley_2.sdf"
+    sdf_one.write_text("", encoding="utf-8")
+    sdf_two.write_text("", encoding="utf-8")
 
     class FakeDownloads:
         repo_extract_dir = tmp_path
         csv_path = tmp_path / "SAMPL.csv"
 
     monkeypatch.setattr(process_freesolv, "_find_freesolv_database_json", lambda downloads: None)
-    monkeypatch.setattr(process_freesolv, "_find_freesolv_sdf_dir", lambda downloads: sdf_dir)
+    monkeypatch.setattr(process_freesolv, "_find_freesolv_sdf_paths", lambda downloads: (sdf_one, sdf_two))
 
     with pytest.raises(FileNotFoundError, match="database.json is missing"):
         process_freesolv._load_freesolv_sdf_dataset(FakeDownloads())
@@ -1098,17 +1177,18 @@ def test_find_freesolv_database_json_recurses_into_nested_snapshot(tmp_path) -> 
     assert _find_freesolv_database_json(downloads) == database_path
 
 
-def test_find_freesolv_sdf_dir_recurses_into_nested_snapshot(tmp_path) -> None:
+def test_find_freesolv_sdf_paths_recurses_into_nested_snapshot(tmp_path) -> None:
     from scripts.download_data import FreeSolvDownloads
-    from scripts.process_freesolv import _find_freesolv_sdf_dir
+    from scripts.process_freesolv import _find_freesolv_sdf_paths
 
     sdf_dir = tmp_path / "FreeSolv-master" / "FreeSolv-master" / "sdffiles" / "sdffiles"
     sdf_dir.mkdir(parents=True)
-    (sdf_dir / "mobley_1.sdf").write_text("", encoding="utf-8")
+    sdf_path = sdf_dir / "mobley_1.sdf"
+    sdf_path.write_text("", encoding="utf-8")
 
     downloads = FreeSolvDownloads(csv_path=tmp_path / "SAMPL.csv", repo_archive_path=None, repo_extract_dir=tmp_path)
 
-    assert _find_freesolv_sdf_dir(downloads) == sdf_dir
+    assert _find_freesolv_sdf_paths(downloads) == (sdf_path,)
 
 
 def test_freesolv_split_partition_matches_baseline_counts_for_full_dataset() -> None:

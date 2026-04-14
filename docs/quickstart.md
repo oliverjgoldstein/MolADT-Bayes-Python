@@ -54,7 +54,7 @@ make timing
 
 - `make freesolv` runs the long FreeSolv comparison and writes `freesolv_rmse_vs_moleculenet.svg`.
 - `make qm9long` runs the full-data QM9 path over all aligned local QM9 molecules, using `visnet_ensemble` only on the SDF-backed `moladt_featurized_geom` export. The geometry path caps at `25` epochs and logs every epoch with validation RMSE and MAE.
-- `make timing` builds the matched ADT/SMILES timing corpus and reports the CSV-string baseline alongside SMILES and MolADT parse stages.
+- `make timing` builds the matched ZINC SDF timing corpus and reports raw SDF reads, local SDF parsing, and MolADT file loading stages.
 
 If a required raw dataset file is too large for GitHub, the repo fetches it on demand. Large downloads and archive extractions show live byte counts, entry counts, throughput, and elapsed time.
 

@@ -65,16 +65,22 @@ def zinc_normalized_source_name(dataset_size: str, dataset_dimension: str, suffi
     return f"zinc15_{dataset_size}_{dataset_dimension}{suffix}"
 
 
-def _prefer_v3000_path(candidates: tuple[Path, ...]) -> Path:
+def _sdf_preference_key(path: Path) -> tuple[int, int, int, str]:
+    text = "/".join(part.lower() for part in path.parts[-3:])
+    has_3d_conformer = any(token in text for token in ("3d", "conformer"))
+    has_v3000 = "v3000" in text
+    return (
+        0 if has_3d_conformer else 1,
+        0 if has_v3000 else 1,
+        len(path.parts),
+        text,
+    )
+
+
+def _prefer_sdf_path(candidates: tuple[Path, ...]) -> Path:
     if not candidates:
         raise FileNotFoundError("No candidate paths were provided")
-    ordered = sorted(
-        candidates,
-        key=lambda path: (
-            0 if "v3000" in path.name.lower() or "v3000" in path.as_posix().lower() else 1,
-            path.as_posix(),
-        ),
-    )
+    ordered = sorted(candidates, key=_sdf_preference_key)
     return ordered[0]
 
 
@@ -86,13 +92,9 @@ def _freesolv_snapshot_has_metadata(target_dir: Path) -> bool:
 
 
 def _resolve_qm9_sources(extract_dir: Path) -> tuple[Path, Path]:
-    sdf_candidates = tuple(
-        sorted((extract_dir / candidate) for candidate in ("qm9_v3000.sdf", "gdb9_v3000.sdf") if (extract_dir / candidate).exists())
-    )
-    if not sdf_candidates:
-        sdf_candidates = tuple(sorted(extract_dir.rglob("*V3000*.sdf"))) + tuple(sorted(extract_dir.rglob("*v3000*.sdf")))
+    sdf_candidates = tuple(sorted(extract_dir.rglob("*.sdf")))
     if sdf_candidates:
-        sdf_source = _prefer_v3000_path(sdf_candidates)
+        sdf_source = _prefer_sdf_path(sdf_candidates)
     else:
         sdf_source = require_single_file(extract_dir, ("qm9.sdf", "gdb9.sdf", "*.sdf"), "QM9 SDF")
     csv_candidates = ("qm9.sdf.csv", "gdb9.sdf.csv", "qm9.csv", "*.csv")
@@ -101,6 +103,20 @@ def _resolve_qm9_sources(extract_dir: Path) -> tuple[Path, Path]:
     except FileNotFoundError:
         csv_source = download_file(QM9_CSV_URL, qm9_raw_dir() / "qm9.csv", force=False)
     return sdf_source, csv_source
+
+
+def _resolve_zinc_sdf_source(extract_dir: Path) -> Path:
+    sdf_candidates = tuple(sorted(extract_dir.rglob("*.sdf")))
+    if not sdf_candidates:
+        raise FileNotFoundError("Could not find a ZINC SDF file in the extracted archive")
+    return _prefer_sdf_path(sdf_candidates)
+
+
+def _zinc_dimension_candidates(dataset_dimension: str) -> tuple[str, ...]:
+    requested = dataset_dimension.upper()
+    if requested == "2D":
+        return (requested,)
+    return (requested, "2D")
 
 
 def _qm9_cached_copy_matches_sources(target_dir: Path, sdf_path: Path, csv_path: Path) -> tuple[bool, Path | None, Path | None]:
@@ -158,32 +174,71 @@ def download_qm9(*, force: bool = False) -> QM9Downloads:
 
 def download_zinc(*, dataset_size: str = "250K", dataset_dimension: str = "2D", force: bool = False) -> ZincDownloads:
     target_dir = ensure_directory(zinc_raw_dir())
-    normalized = target_dir / zinc_normalized_source_name(dataset_size, dataset_dimension, ".csv")
-    if not force and normalized.exists():
-        log(f"Using vendored ZINC source under {normalized}")
-        return ZincDownloads(
-            source_path=normalized,
-            archive_path=None,
-            extract_dir=target_dir,
-            dataset_size=dataset_size,
-            dataset_dimension=dataset_dimension,
-        )
-    archive_name = zinc_archive_filename(dataset_size, dataset_dimension)
-    archive_path = download_file(
-        ZINC_URL_TEMPLATE.format(dataset_size=dataset_size, dataset_dimension=dataset_dimension),
-        target_dir / archive_name,
-        force=force,
-    )
-    extract_dir = extract_archive(archive_path, target_dir / f"zinc15_{dataset_size}_{dataset_dimension}", force=force)
-    source = require_single_file(extract_dir, ("*.csv", "*.smi", "*.txt"), "ZINC source file")
-    normalized = copy_if_needed(source, target_dir / zinc_normalized_source_name(dataset_size, dataset_dimension, source.suffix), force=force)
-    return ZincDownloads(
-        source_path=normalized,
-        archive_path=archive_path,
-        extract_dir=extract_dir,
-        dataset_size=dataset_size,
-        dataset_dimension=dataset_dimension,
-    )
+    dimension_candidates = _zinc_dimension_candidates(dataset_dimension)
+    if not force:
+        for candidate_dimension in dimension_candidates:
+            normalized = target_dir / zinc_normalized_source_name(dataset_size, candidate_dimension, ".sdf")
+            if normalized.exists():
+                if candidate_dimension != dataset_dimension.upper():
+                    log(
+                        f"Requested ZINC {dataset_dimension.upper()} source is unavailable locally; "
+                        f"using cached {candidate_dimension} SDF under {display_path(normalized)}"
+                    )
+                else:
+                    log(f"Using vendored ZINC source under {normalized}")
+                return ZincDownloads(
+                    source_path=normalized,
+                    archive_path=None,
+                    extract_dir=target_dir,
+                    dataset_size=dataset_size,
+                    dataset_dimension=candidate_dimension,
+                )
+
+    last_error: Exception | None = None
+    for candidate_dimension in dimension_candidates:
+        archive_name = zinc_archive_filename(dataset_size, candidate_dimension)
+        archive_path_target = target_dir / archive_name
+        extract_dir_target = target_dir / f"zinc15_{dataset_size}_{candidate_dimension}"
+        try:
+            archive_path = download_file(
+                ZINC_URL_TEMPLATE.format(dataset_size=dataset_size, dataset_dimension=candidate_dimension),
+                archive_path_target,
+                force=force,
+            )
+            extract_dir = extract_archive(archive_path, extract_dir_target, force=force)
+            source = _resolve_zinc_sdf_source(extract_dir)
+            normalized = copy_if_needed(
+                source,
+                target_dir / zinc_normalized_source_name(dataset_size, candidate_dimension, source.suffix),
+                force=force,
+            )
+            if candidate_dimension != dataset_dimension.upper():
+                log(
+                    f"Requested ZINC {dataset_dimension.upper()} archive is unavailable; "
+                    f"using {candidate_dimension} SDF fallback"
+                )
+            return ZincDownloads(
+                source_path=normalized,
+                archive_path=archive_path,
+                extract_dir=extract_dir,
+                dataset_size=dataset_size,
+                dataset_dimension=candidate_dimension,
+            )
+        except Exception as exc:
+            last_error = exc
+            if candidate_dimension != dimension_candidates[-1]:
+                log(
+                    f"ZINC {candidate_dimension} archive could not be used "
+                    f"({exc}); trying the next SDF fallback"
+                )
+            else:
+                log(f"ZINC {candidate_dimension} archive could not be used ({exc})")
+
+    if last_error is None:
+        raise RuntimeError("No ZINC download candidates were provided")
+    raise RuntimeError(
+        f"Unable to download a usable ZINC SDF archive for zinc15_{dataset_size}_{dataset_dimension.upper()}"
+    ) from last_error
 
 
 def build_parser() -> argparse.ArgumentParser:

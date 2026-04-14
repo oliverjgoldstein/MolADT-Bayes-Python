@@ -75,12 +75,10 @@ def _edge_from_index_pair(atom_pair: tuple[int, int]) -> Edge:
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_SDF_RECORD = read_sdf_record(_PROJECT_ROOT / "molecules" / "morphine.sdf")
-
 
 morphine_pretty = Molecule(
-    atoms=_SDF_RECORD.molecule.atoms,
-    local_bonds=_SDF_RECORD.molecule.local_bonds,
+    atoms=read_sdf_record(_PROJECT_ROOT / "molecules" / "morphine.sdf").molecule.atoms,
+    local_bonds=read_sdf_record(_PROJECT_ROOT / "molecules" / "morphine.sdf").molecule.local_bonds,
     systems=(
         (
             SystemId(1),

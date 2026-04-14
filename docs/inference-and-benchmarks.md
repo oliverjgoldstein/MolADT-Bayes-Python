@@ -16,7 +16,7 @@ make timing
 
 - `make freesolv` runs the long FreeSolv benchmark path, imports all `642` vendored SDF structures as the molecule source, and compares the fixed local Stan run against MoleculeNet Table 3 on RMSE
 - `make qm9long` runs the full-data QM9 `mu` predictive path with `visnet_ensemble` on the SDF-backed `moladt_featurized_geom` export
-- `make timing` runs the separate ZINC timing/interoperability pass
+- `make timing` runs the separate ZINC SDF timing/interoperability pass
 - `make python-cmdstan-install` is the one-time local CmdStan install step required before the Stan benchmark targets
 
 ## Benchmark Contract
@@ -55,17 +55,37 @@ The benchmark graph uses the fixed FreeSolv Stan run and the fixed `qm9long` ViS
 
 `make qm9long` does not use the old subset split. It runs on the full local QM9 alignment with seed `102` and a single ViSNet member.
 
+## FreeSolv Context
+
+The fixed local FreeSolv run is a single deterministic `513 / 64 / 65` split over the `642` SDF-backed rows, so it should be read as a repo-local reference point rather than a universal leaderboard claim. Recent local runs land around `0.74` test RMSE on that split. Published FreeSolv numbers worth keeping in view are:
+
+| Source | FreeSolv RMSE | Uncertainty | Split note |
+| --- | --- | --- | --- |
+| This repo, fixed local MolADT path | `~0.74` | point estimate only | one deterministic `513 / 64 / 65` split |
+| MoleculeNet MPNN baseline | `1.15` | not reported in the benchmark row | MoleculeNet random-split benchmark row |
+| MolFCL | `1.045` | `± 0.160` | scaffold-split regression table |
+| KANO as quoted in MolFCL | `1.142` | `± 0.258` | scaffold-split regression table |
+| SCAGE | `0.802` | `± 0.033` | scaffold-split comparison table |
+| MolProphecy | `0.796` | `± 0.09` | explicit `8:1:1` random split |
+
+Those rows are useful for scale, but they are not all the same protocol. The local MolADT number is strongest when read as: better than the original MoleculeNet MPNN bar, in the same numerical range as stronger recent FreeSolv models, but still not a strict apples-to-apples SOTA claim.
+
+Source links:
+
+- MoleculeNet benchmark paper: https://pmc.ncbi.nlm.nih.gov/articles/PMC5868307/
+- MolFCL: https://academic.oup.com/bioinformatics/article/41/2/btaf061/8005854
+- SCAGE: https://pmc.ncbi.nlm.nih.gov/articles/PMC12069555/
+- MolProphecy: https://www.sciencedirect.com/science/article/pii/S2090123225008306?dgcid=rss_sd_all
+
 ## Timing
 
 `make timing` is not the same question as the predictive benchmark.
 
-With the default `paper` preset, it writes a ZINC timing bundle under `results/timing/paper/run_<timestamp>/`. If you override the preset away from `paper`, the path becomes `results/timing/run_<timestamp>/`. The timing bundle reports a pipeline:
+With the default `paper` preset, it writes a ZINC timing bundle under `results/timing/paper/run_<timestamp>/`. If you override the preset away from `paper`, the path becomes `results/timing/run_<timestamp>/`. The timing bundle reports a short SDF-backed pipeline:
 
-- raw file I/O baseline
-- optional external-toolkit SMILES normalization
+- raw SDF block I/O
+- local SDF-to-MolADT parsing
 - one-time matched-corpus setup
-- plain-string CSV baseline
-- local MolADT SMILES parsing
 - local MolADT JSON file loading
 
 Treat it as an interoperability and runtime benchmark, not as the main model comparison. The timing SVG uses a log throughput axis so large stage gaps remain readable without overlapping labels.

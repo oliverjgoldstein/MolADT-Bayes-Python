@@ -51,6 +51,7 @@ data/raw/zinc/*
 !data/raw/zinc/zinc15_250K_2D.csv
 data/processed/
 results/
+results2/
 *.part
 
 # Local editor settings

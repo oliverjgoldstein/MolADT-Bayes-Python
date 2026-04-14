@@ -72,6 +72,8 @@ Use:
 
 Psilocybin is a good classical example of where MolADT still helps without needing non-classical bonding. The built-in object starts from the parsed SDF atoms and sigma edges, then makes the fused indole aromaticity explicit as `indole_pi_system` and the `P=O` contribution explicit as `phosphoryl`.
 
+The explicit `Molecule(...)` form is written out in [`magic_mushrooms.md`](../magic_mushrooms.md).
+
 ## Ferrocene
 
 - File-backed source: [`molecules/ferrocene.sdf`](../molecules/ferrocene.sdf)

@@ -82,13 +82,13 @@ make timing
 
 - `make freesolv`: FreeSolv RMSE comparison. Fixed path `moladt_featurized + bayes_gp_rbf_screened + laplace`. Writes `results/freesolv/run_.../freesolv_rmse_vs_moleculenet.svg`.
 - `make qm9long`: full QM9 `mu` MAE comparison over all aligned local QM9 molecules, using `visnet_ensemble` on `moladt_featurized_geom`. That export keeps the atomic numbers and coordinates from the SDF record and adds the full MolADT feature bundle from the same molecule. The current local bundle yields `107,108 / 13,388 / 13,389` train / validation / test rows under the deterministic `80/10/10` long split. ViSNet runs one member for at most `25` epochs with seed `102`, and the verbose run prints every epoch with validation RMSE and MAE. Writes `results/qm9/long/run_.../qm9_mae_vs_moleculenet.svg`.
-- `make timing`: ZINC ingest and runtime comparison. It separates raw I/O, optional external-toolkit stages, a plain string baseline, our SMILES parser, and our MolADT file reader. Writes `results/timing/paper/run_.../timing_overview.svg`.
+- `make timing`: ZINC SDF ingest and runtime comparison. It measures raw SDF block reads, local SDF parsing into MolADT, the one-time matched corpus build, and MolADT file loading. Writes `results/timing/paper/run_.../timing_overview.svg`.
 
 Results are written under timestamped directories in `results/`, mainly `results/freesolv/run_.../`, `results/qm9/long/run_.../`, and `results/timing/paper/run_.../`.
 
 The FreeSolv figure shows `Training`, `Validation`, `Test`, and `Paper`. The QM9 figure shows `Training`, `Test`, and `Paper`.
 
-For split sizes, the exact benchmark contract, and the detailed timing-stage definitions, see [Inference and benchmarks](docs/inference-and-benchmarks.md) and [Outputs](docs/outputs.md).
+For split sizes, the exact benchmark contract, the published FreeSolv RMSE context table, and the detailed timing-stage definitions, see [Inference and benchmarks](docs/inference-and-benchmarks.md) and [Outputs](docs/outputs.md).
 
 ## Read More
 

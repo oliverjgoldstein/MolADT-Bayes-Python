@@ -39,34 +39,19 @@ TIMING_OWNER_COLORS = {
 }
 TIMING_STAGE_META = {
     "raw_file_read": {
-        "label": "Source file read",
+        "label": "Source SDF read",
         "owner": "I/O baseline",
-        "description": "Reads raw SMILES lines from the normalized source file. No chemistry, parsing, or validation happens here.",
+        "description": "Reads raw single-record SDF blocks from the normalized source file. No chemistry parsing happens here.",
     },
-    "smiles_parse_sanitize": {
-        "label": "Toolkit parse + sanitize",
-        "owner": "External toolkit",
-        "description": "An external chemistry toolkit parses each SMILES string into a molecular graph and applies its sanitization rules.",
-    },
-    "smiles_canonicalization": {
-        "label": "Toolkit canonical SMILES",
-        "owner": "External toolkit",
-        "description": "The same external toolkit rewrites each parsed molecule into one canonical SMILES form.",
+    "sdf_record_parse": {
+        "label": "SDF to MolADT",
+        "owner": "Our parser",
+        "description": "Parses each source SDF record directly into the local MolADT object with the project SDF reader.",
     },
     "timing_library_prepare": {
         "label": "Matched corpus build",
         "owner": "One-time setup",
-        "description": "Builds the aligned timing corpus so every later stage runs on the same molecules and file count.",
-    },
-    "smiles_csv_string_parse": {
-        "label": "CSV field to string",
-        "owner": "String baseline",
-        "description": "Materializes the canonical SMILES field from the manifest CSV as a plain Python string. This is the floor cost before any chemistry work.",
-    },
-    "smiles_library_parse": {
-        "label": "SMILES to MolADT",
-        "owner": "Our parser",
-        "description": "Runs the local MolADT SMILES parser on those same canonical strings to build the typed molecule object.",
+        "description": "Builds the aligned timing corpus: one single-record SDF file plus one MolADT JSON file for the same molecules.",
     },
     "moladt_file_parse": {
         "label": "MolADT JSON to object",
@@ -315,11 +300,8 @@ def write_timing_stage_overview(timing: pd.DataFrame, destination: Path) -> None
         return
     stage_order = [
         "raw_file_read",
-        "smiles_parse_sanitize",
-        "smiles_canonicalization",
+        "sdf_record_parse",
         "timing_library_prepare",
-        "smiles_csv_string_parse",
-        "smiles_library_parse",
         "moladt_file_parse",
         "moladt_parse_render",
     ]
@@ -362,7 +344,7 @@ def write_timing_stage_overview(timing: pd.DataFrame, destination: Path) -> None
         x=x0 + 24,
         y=y0 + 62,
         lines=_wrap_text(
-            "This chart separates raw I/O, optional external-toolkit normalization, plain string baselines, and the local MolADT parser and file-reader stages.",
+            "This chart separates raw SDF I/O, the local SDF parser, the one-time matched corpus build, and the MolADT file reader.",
             108,
         ),
         font_size=13,

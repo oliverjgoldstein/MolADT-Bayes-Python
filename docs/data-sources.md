@@ -17,7 +17,7 @@ Upstream sources:
 - Upstream data repo: https://github.com/MobleyLab/FreeSolv
 - CSV URL used by the downloader: https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/SAMPL.csv
 
-The benchmark keys FreeSolv rows from the `642` vendored SDF files and joins targets and names from the bundled FreeSolv metadata, rather than trying to recover identity by re-rendering SDF files back into CSV SMILES text.
+The benchmark keys FreeSolv rows from the `642` vendored SDF files and joins targets and names from the bundled FreeSolv metadata, rather than trying to recover identity by re-rendering SDF files back into CSV SMILES text. If several SDF variants exist for one compound id, the loader prefers a `3D` conformer file first, then a `V3000` file, then the remaining SDF paths.
 
 The repo does not need the rest of the upstream simulation archives for the benchmark itself, even though the vendored FreeSolv snapshot still includes several of them.
 
@@ -41,11 +41,13 @@ If those files are missing, the downloader falls back to the upstream QM9 archiv
 - `https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/gdb9.tar.gz`
 - `https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/qm9.csv`
 
+When the extracted archive offers several QM9 SDF variants, the downloader prefers a `3D` conformer SDF first, then a `V3000` file, then the remaining SDF paths.
+
 ## ZINC
 
-The repo vendors the normalized ZINC source file used by the timing benchmark:
+The timing benchmark now expects a normalized ZINC SDF source file in the raw cache, typically:
 
-- `data/raw/zinc/zinc15_250K_2D.csv`
+- `data/raw/zinc/zinc15_250K_2D.sdf`
 
 Upstream references:
 
@@ -53,6 +55,6 @@ Upstream references:
 - PubMed entry: https://pubmed.ncbi.nlm.nih.gov/26479676/
 - ZINC15 home page cited by the paper: http://zinc15.docking.org
 
-If that file is missing, the downloader falls back to the DeepChem-hosted ZINC15 archive, for example:
+If that file is missing, the downloader falls back to the DeepChem-hosted ZINC15 archive, using the `2D` archive by default and gracefully falling back to the best available SDF variant if a requested higher-dimensional archive is missing. For example:
 
 - `https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/zinc15_250K_2D.tar.gz`

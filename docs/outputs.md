@@ -52,10 +52,9 @@ Use the files in this order:
 
 For timing runs specifically, `details/zinc_timing.csv` separates:
 
-- the raw source-file read
-- the optional external-toolkit stages
-- the plain CSV field-to-string baseline (`smiles_csv_string_parse`)
-- the local MolADT SMILES parser (`smiles_library_parse`)
+- the raw source-file read (`raw_file_read`)
+- the local SDF parser (`sdf_record_parse`)
+- the matched timing-corpus build (`timing_library_prepare`)
 - the local MolADT JSON file reader (`moladt_file_parse`)
 
-The top-level `timing_overview.svg` plots throughput on a log axis and labels each stage as I/O baseline, external toolkit, setup, string baseline, our parser, or our file reader.
+The top-level `timing_overview.svg` plots throughput on a log axis and labels each stage as I/O baseline, setup, our parser, or our file reader.

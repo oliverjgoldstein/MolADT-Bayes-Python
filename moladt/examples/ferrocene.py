@@ -30,12 +30,10 @@ fe_to_ring1 = tuple((fe, atom_id) for atom_id in ring1_c)
 fe_to_ring2 = tuple((fe, atom_id) for atom_id in ring2_c)
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_SDF_RECORD = read_sdf_record(_PROJECT_ROOT / "molecules" / "ferrocene.sdf")
-
 
 ferrocene_pretty = Molecule(
-    atoms=_SDF_RECORD.molecule.atoms,
-    local_bonds=_SDF_RECORD.molecule.local_bonds,
+    atoms=read_sdf_record(_PROJECT_ROOT / "molecules" / "ferrocene.sdf").molecule.atoms,
+    local_bonds=read_sdf_record(_PROJECT_ROOT / "molecules" / "ferrocene.sdf").molecule.local_bonds,
     systems=(
         (
             SystemId(1),

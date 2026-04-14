@@ -35,6 +35,54 @@ That means the object is not stored as alternating double bonds around the indol
 - one fused aromatic indole pool
 - one phosphoryl pool
 
+### Psilocybin in Code
+
+The built-in example keeps the parsed SDF atoms and sigma edges, then adds the two explicit bonding systems:
+
+```python
+from moladt.chem.dietz import AtomId, Edge, NonNegative, SystemId, mk_bonding_system
+from moladt.chem.molecule import Molecule
+from moladt.io.sdf import read_sdf_record
+
+psilocybin_pretty = Molecule(
+    atoms=read_sdf_record("molecules/psilocybin.sdf").molecule.atoms,
+    local_bonds=read_sdf_record("molecules/psilocybin.sdf").molecule.local_bonds,
+    systems=(
+        (
+            SystemId(1),
+            mk_bonding_system(
+                NonNegative(10),
+                frozenset(
+                    {
+                        Edge(AtomId(6), AtomId(7)),
+                        Edge(AtomId(7), AtomId(8)),
+                        Edge(AtomId(8), AtomId(9)),
+                        Edge(AtomId(9), AtomId(10)),
+                        Edge(AtomId(10), AtomId(6)),
+                        Edge(AtomId(10), AtomId(11)),
+                        Edge(AtomId(11), AtomId(12)),
+                        Edge(AtomId(12), AtomId(13)),
+                        Edge(AtomId(13), AtomId(14)),
+                        Edge(AtomId(14), AtomId(9)),
+                    }
+                ),
+                "indole_pi_system",
+            ),
+        ),
+        (
+            SystemId(2),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset({Edge(AtomId(16), AtomId(17))}),
+                "phosphoryl",
+            ),
+        ),
+    ),
+)
+```
+
+That is the full MolADT example form: the SDF file supplies the atom table, coordinates, and sigma framework, while the Dietz layer only adds the fused indole `pi` pool and the explicit `P=O` pool.
+
 ### Why This Fits MolADT
 
 Psilocybin is not non-classical in the diborane or ferrocene sense, but it still benefits from the ADT:

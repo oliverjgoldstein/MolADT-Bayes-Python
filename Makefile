@@ -136,7 +136,7 @@ help:
 		"  make qm9long               Run the full-data QM9 ViSNet benchmark on rich SDF-backed MolADT geometry" \
 		"  make benchmark              Run the combined FreeSolv + QM9 comparison bundle" \
 		"  make benchmark-bg           Run the benchmark in the foreground and mirror output to the active results directory" \
-		"  make timing                 Build the local ZINC timing corpus and compare SMILES vs MolADT parse times" \
+		"  make timing                 Build the local ZINC SDF timing corpus and compare SDF vs MolADT parse times" \
 		"  default full QM9 run: make qm9long" \
 		"  full benchmark bundle: make benchmark" \
 		"  quieter run: BENCHMARK_VERBOSE=0 make benchmark" \

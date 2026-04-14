@@ -7,11 +7,7 @@ from ..io.sdf import read_sdf
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-def _read_example(name: str):
-    return read_sdf(_PROJECT_ROOT / "molecules" / f"{name}.sdf")
-
-
-hydrogen = _read_example("hydrogen")
-oxygen = _read_example("oxygen")
-water = _read_example("water")
-methane = _read_example("methane")
+hydrogen = read_sdf(_PROJECT_ROOT / "molecules" / "hydrogen.sdf")
+oxygen = read_sdf(_PROJECT_ROOT / "molecules" / "oxygen.sdf")
+water = read_sdf(_PROJECT_ROOT / "molecules" / "water.sdf")
+methane = read_sdf(_PROJECT_ROOT / "molecules" / "methane.sdf")

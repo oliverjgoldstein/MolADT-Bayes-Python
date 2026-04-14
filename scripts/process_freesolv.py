@@ -391,23 +391,40 @@ def _find_freesolv_database_json(downloads: FreeSolvDownloads) -> Path | None:
     return None
 
 
-def _find_freesolv_sdf_dir(downloads: FreeSolvDownloads) -> Path:
+def _freesolv_sdf_preference_key(path: Path) -> tuple[int, int, int, str]:
+    text = "/".join(part.lower() for part in path.parts[-3:])
+    has_3d_conformer = any(token in text for token in ("3d", "conformer"))
+    has_v3000 = "v3000" in text
+    return (
+        0 if has_3d_conformer else 1,
+        0 if has_v3000 else 1,
+        len(path.parts),
+        text,
+    )
+
+
+def _find_freesolv_sdf_paths(downloads: FreeSolvDownloads) -> tuple[Path, ...]:
     candidates: list[Path] = []
     for root in _candidate_freesolv_roots(downloads.repo_extract_dir):
-        for candidate in sorted(root.rglob("sdffiles*")):
-            if candidate.is_dir() and any(candidate.glob("*.sdf")):
-                candidates.append(candidate)
-    if candidates:
-        candidates = sorted(dict.fromkeys(candidates), key=lambda path: path.as_posix())
-        candidates.sort(
-            key=lambda path: (
-                0 if "v3000" in path.name.lower() or "v3000" in path.as_posix().lower() else 1,
-                len(path.parts),
-                path.as_posix(),
-            )
-        )
-        return candidates[0]
-    raise FileNotFoundError("Could not find FreeSolv sdffiles/ with SDF records")
+        candidates.extend(sorted(root.rglob("*.sdf")))
+    if not candidates:
+        raise FileNotFoundError("Could not find FreeSolv SDF records")
+    selected_by_compound_id: dict[str, Path] = {}
+    for path in sorted(dict.fromkeys(candidates), key=lambda candidate: candidate.as_posix()):
+        compound_id = path.stem
+        current = selected_by_compound_id.get(compound_id)
+        if current is None or _freesolv_sdf_preference_key(path) < _freesolv_sdf_preference_key(current):
+            selected_by_compound_id[compound_id] = path
+    return tuple(sorted(selected_by_compound_id.values(), key=lambda path: path.stem))
+
+
+def _freesolv_sdf_relpath(downloads: FreeSolvDownloads, sdf_path: Path) -> str:
+    for root in _candidate_freesolv_roots(downloads.repo_extract_dir):
+        try:
+            return str(sdf_path.relative_to(root))
+        except ValueError:
+            continue
+    return sdf_path.name
 
 
 def _scaled_split_sizes_from_baseline(row_count: int) -> tuple[int, int, int]:
@@ -475,8 +492,7 @@ def _load_freesolv_metadata(downloads: FreeSolvDownloads) -> dict[str, dict[str,
 def _load_freesolv_sdf_dataset(
     downloads: FreeSolvDownloads,
 ) -> tuple[pd.DataFrame, list[FailureRecord], int]:
-    sdf_dir = _find_freesolv_sdf_dir(downloads)
-    sdf_paths = sorted(sdf_dir.glob("*.sdf"))
+    sdf_paths = list(_find_freesolv_sdf_paths(downloads))
     database_path = _find_freesolv_database_json(downloads)
     if database_path is None:
         raise FileNotFoundError(
@@ -551,7 +567,7 @@ def _load_freesolv_sdf_dataset(
                 "source_smiles": source_smiles,
                 "iupac": iupac,
                 "expt": expt_value,
-                "sdf_relpath": str(Path("sdffiles") / sdf_path.name),
+                "sdf_relpath": _freesolv_sdf_relpath(downloads, sdf_path),
                 "sdf_record_index": 0,
                 "moladt_molecule": record.molecule,
             }
