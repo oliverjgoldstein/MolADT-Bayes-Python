@@ -28,7 +28,7 @@ Use `parse` when the source of truth is a structure file.
 Use `parse-smiles`.
 
 ```bash
-./.venv/bin/python -m moladt.cli parse-smiles "c1ccccc1"
+./.venv/bin/python -m moladt.cli parse-smiles '<smiles>'
 ```
 
 This parses the conservative SMILES subset, validates it, and prints the MolADT structure.
@@ -39,7 +39,7 @@ Inside that boundary, `parse-smiles` does three useful lifts after reading the g
 - it promotes recoverable six-membered delocalized cycles into explicit Dietz `pi_ring` systems when the SMILES uses aromatic lowercase syntax, including ring-closure edges
 - it preserves atom-centered `@`/`@@` and bond-directed `/` `\` annotations in `smiles_stereochemistry`
 
-Use `parse-smiles` when you want to see what a SMILES string becomes inside MolADT.
+Use `parse-smiles` when you want to inspect a boundary string. The example molecules shipped with this repo are all SDF-backed instead.
 
 ## If You Want SMILES Back Out
 
@@ -62,6 +62,7 @@ Use `pretty-example`.
 ./.venv/bin/python -m moladt.cli pretty-example ferrocene
 ./.venv/bin/python -m moladt.cli pretty-example diborane
 ./.venv/bin/python -m moladt.cli pretty-example morphine
+./.venv/bin/python -m moladt.cli pretty-example psilocybin
 ```
 
 These examples show the point of the representation more clearly than benzene does.

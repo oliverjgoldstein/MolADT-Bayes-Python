@@ -1,23 +1,10 @@
 from __future__ import annotations
 
-from ..chem.constants import element_attributes, element_shells
-from ..chem.coordinate import Coordinate, mk_angstrom
+from pathlib import Path
+
 from ..chem.dietz import AtomId, Edge, NonNegative, SystemId, mk_bonding_system
-from ..chem.molecule import Atom, AtomicSymbol, Molecule
-
-
-def _coord(x: float, y: float, z: float) -> Coordinate:
-    return Coordinate(mk_angstrom(x), mk_angstrom(y), mk_angstrom(z))
-
-
-def _atom(atom_id: AtomId, symbol: AtomicSymbol, x: float, y: float, z: float) -> Atom:
-    return Atom(
-        atom_id=atom_id,
-        attributes=element_attributes(symbol),
-        coordinate=_coord(x, y, z),
-        shells=element_shells(symbol),
-        formal_charge=0,
-    )
+from ..chem.molecule import Molecule
+from ..io.sdf import read_sdf_record
 
 
 def _edge(atom_a: AtomId, atom_b: AtomId) -> Edge:
@@ -34,26 +21,13 @@ h7 = AtomId(7)
 h8 = AtomId(8)
 
 
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_SDF_RECORD = read_sdf_record(_PROJECT_ROOT / "molecules" / "diborane.sdf")
+
+
 diborane_pretty = Molecule(
-    atoms={
-        b1: _atom(b1, AtomicSymbol.B, -0.8850, 0.0000, 0.0000),
-        b2: _atom(b2, AtomicSymbol.B, 0.8850, 0.0000, 0.0000),
-        h3: _atom(h3, AtomicSymbol.H, 0.0000, 0.0000, 0.9928),
-        h4: _atom(h4, AtomicSymbol.H, 0.0000, 0.0000, -0.9928),
-        h5: _atom(h5, AtomicSymbol.H, -0.8850, 1.1900, 0.0000),
-        h6: _atom(h6, AtomicSymbol.H, -0.8850, -1.1900, 0.0000),
-        h7: _atom(h7, AtomicSymbol.H, 0.8850, 1.1900, 0.0000),
-        h8: _atom(h8, AtomicSymbol.H, 0.8850, -1.1900, 0.0000),
-    },
-    local_bonds=frozenset(
-        {
-            _edge(b1, b2),
-            _edge(b1, h5),
-            _edge(b1, h6),
-            _edge(b2, h7),
-            _edge(b2, h8),
-        }
-    ),
+    atoms=_SDF_RECORD.molecule.atoms,
+    local_bonds=_SDF_RECORD.molecule.local_bonds,
     systems=(
         (
             SystemId(1),

@@ -2,7 +2,7 @@
 
 MolADT is a typed molecular data format for Bayesian work over molecules. It keeps chemically meaningful structure in the object itself instead of hiding it inside string syntax.
 
-[Quickstart](docs/quickstart.md) · [Representation](docs/representation.md) · [Models](docs/models.md) · [Examples](docs/examples.md)
+[Quickstart](docs/quickstart.md) · [Representation](docs/representation.md) · [Models](docs/models.md) · [Examples](docs/examples.md) · [Magic Mushrooms](magic_mushrooms.md)
 
 ## Why MolADT
 
@@ -24,7 +24,7 @@ MolADT keeps that chemistry as typed atoms, local bonds, bonding systems, and st
 
 ```bash
 make python-setup
-./.venv/bin/python -m moladt.cli parse-smiles "c1ccccc1"
+./.venv/bin/python -m moladt.cli parse molecules/benzene.sdf
 # once, before Stan-backed targets such as FreeSolv
 make python-cmdstan-install
 ```
@@ -40,12 +40,12 @@ Use the CLI when you want to inspect how a boundary format lands inside MolADT.
 
 ```bash
 ./.venv/bin/python -m moladt.cli parse molecules/benzene.sdf
-./.venv/bin/python -m moladt.cli parse-smiles "c1ccccc1"
+./.venv/bin/python -m moladt.cli pretty-example morphine
 ./.venv/bin/python -m moladt.cli to-smiles molecules/benzene.sdf
 ```
 
 - `parse` reads one SDF record, validates it, prints the MolADT structure, and preserves SDF title and property fields
-- `parse-smiles` reads the conservative SMILES subset and lifts it into the typed MolADT object
+- `pretty-example` loads the manuscript-facing built-in objects, each assembled by parsing the checked-in SDF file for that molecule first
 - `to-smiles` renders validated classical MolADT structures back into the supported SMILES subset
 
 The SDF reader accepts V2000 and the core V3000 CTAB subset used by common structure exports:
@@ -100,6 +100,7 @@ For split sizes, the exact benchmark contract, and the detailed timing-stage def
 - [Models and features](docs/models.md)
 - [Outputs](docs/outputs.md)
 - [Data sources](docs/data-sources.md)
+- [Magic mushrooms](magic_mushrooms.md)
 
 ## Related Repo
 

@@ -7,6 +7,7 @@ from ..chem.pretty import pretty_text
 from .diborane import diborane_pretty
 from .ferrocene import ferrocene_pretty
 from .morphine import morphine_pretty
+from .psilocybin import psilocybin_pretty
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,10 +45,18 @@ MORPHINE_MANUSCRIPT = ManuscriptExample(
     molecule=morphine_pretty,
 )
 
+PSILOCYBIN_MANUSCRIPT = ManuscriptExample(
+    slug="psilocybin",
+    title="Psilocybin (indole phosphate)",
+    note="Dietz-style ADT with one fused indole pi system and one explicit phosphoryl pool over the 4-phosphoryloxy substituent.",
+    molecule=psilocybin_pretty,
+)
+
 MANUSCRIPT_EXAMPLES: dict[str, ManuscriptExample] = {
     FERROCENE_MANUSCRIPT.slug: FERROCENE_MANUSCRIPT,
     DIBORANE_MANUSCRIPT.slug: DIBORANE_MANUSCRIPT,
     MORPHINE_MANUSCRIPT.slug: MORPHINE_MANUSCRIPT,
+    PSILOCYBIN_MANUSCRIPT.slug: PSILOCYBIN_MANUSCRIPT,
 }
 
 

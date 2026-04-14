@@ -25,11 +25,11 @@ make python-activate
 
 ```bash
 ./.venv/bin/python -m moladt.cli parse molecules/benzene.sdf
-./.venv/bin/python -m moladt.cli parse-smiles "c1ccccc1"
+./.venv/bin/python -m moladt.cli pretty-example morphine
 ./.venv/bin/python -m moladt.cli to-smiles molecules/benzene.sdf
 ```
 
-If those three commands work, the local install is in good shape.
+If those three commands work, the local install is in good shape and the example path is reading the checked-in SDF files correctly.
 
 ## 3. First Benchmark Run
 

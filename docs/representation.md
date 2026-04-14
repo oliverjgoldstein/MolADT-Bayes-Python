@@ -362,7 +362,7 @@ Use:
 
 ```bash
 ./.venv/bin/python -m moladt.cli pretty-example morphine
-./.venv/bin/python -m moladt.cli parse-smiles "CN1CC[C@]23C4=C5C=CC(O)=C4O[C@H]2[C@@H](O)C=C[C@H]3[C@H]1C5"
+./.venv/bin/python -m moladt.cli parse molecules/morphine.sdf
 ```
 
 The first command shows the explicit Dietz object. The second shows the boundary-format parse path based on the same figure.

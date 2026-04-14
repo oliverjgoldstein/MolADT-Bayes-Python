@@ -30,7 +30,7 @@ The current V3000 support is intentionally narrow: atom coordinates, bond tables
 ## `parse-smiles`
 
 ```bash
-./.venv/bin/python -m moladt.cli parse-smiles "c1ccccc1"
+./.venv/bin/python -m moladt.cli parse-smiles '<smiles>'
 ```
 
 What it validates:
@@ -78,16 +78,17 @@ Current rejection messages come directly from the SMILES renderer, for example:
 ./.venv/bin/python -m moladt.cli pretty-example ferrocene
 ./.venv/bin/python -m moladt.cli pretty-example diborane
 ./.venv/bin/python -m moladt.cli pretty-example morphine
+./.venv/bin/python -m moladt.cli pretty-example psilocybin
 ```
 
-This command loads named built-in examples from [`moladt/examples/manuscript.py`](../moladt/examples/manuscript.py), validates them, and prints the manuscript-facing pretty rendering. It currently supports `ferrocene`, `diborane`, and `morphine`.
+This command loads named built-in examples from [`moladt/examples/manuscript.py`](../moladt/examples/manuscript.py), validates them, and prints the manuscript-facing pretty rendering. It currently supports `ferrocene`, `diborane`, `morphine`, and `psilocybin`.
 
 ## How the Commands Differ
 
 - `parse` starts from an SDF file and can print record title and properties.
 - `parse-smiles` starts from a SMILES string and only prints the validated MolADT structure.
 - `to-smiles` starts from an SDF file and emits only the rendered SMILES string.
-- `pretty-example` starts from a built-in example object rather than a file.
+- `pretty-example` starts from a built-in example object that is itself assembled by parsing the checked-in SDF file first.
 
 ## Related Files
 

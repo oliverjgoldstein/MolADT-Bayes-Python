@@ -1,23 +1,10 @@
 from __future__ import annotations
 
-from ..chem.constants import element_attributes, element_shells
-from ..chem.coordinate import Coordinate, mk_angstrom
+from pathlib import Path
+
 from ..chem.dietz import AtomId, Edge, NonNegative, SystemId, mk_bonding_system
-from ..chem.molecule import Atom, AtomicSymbol, Molecule
-
-
-def _coord(x: float, y: float, z: float) -> Coordinate:
-    return Coordinate(mk_angstrom(x), mk_angstrom(y), mk_angstrom(z))
-
-
-def _atom(atom_id: AtomId, symbol: AtomicSymbol, x: float, y: float, z: float) -> Atom:
-    return Atom(
-        atom_id=atom_id,
-        attributes=element_attributes(symbol),
-        coordinate=_coord(x, y, z),
-        shells=element_shells(symbol),
-        formal_charge=0,
-    )
+from ..chem.molecule import Molecule
+from ..io.sdf import read_sdf_record
 
 
 def _edge_set(atom_pairs: tuple[tuple[AtomId, AtomId], ...]) -> frozenset[Edge]:
@@ -29,35 +16,6 @@ ring1_c = tuple(AtomId(index) for index in range(2, 7))
 ring2_c = tuple(AtomId(index) for index in range(7, 12))
 ring1_h = tuple(AtomId(index) for index in range(12, 17))
 ring2_h = tuple(AtomId(index) for index in range(17, 22))
-
-_RING1_CARBON_COORDS = (
-    (1.1800, 0.0000, 1.6600),
-    (0.3647, 1.1220, 1.6600),
-    (-0.9547, 0.6935, 1.6600),
-    (-0.9547, -0.6935, 1.6600),
-    (0.3647, -1.1220, 1.6600),
-)
-_RING2_CARBON_COORDS = (
-    (0.9547, 0.6935, -1.6600),
-    (-0.3647, 1.1220, -1.6600),
-    (-1.1800, 0.0000, -1.6600),
-    (-0.3647, -1.1220, -1.6600),
-    (0.9547, -0.6935, -1.6600),
-)
-_RING1_HYDROGEN_COORDS = (
-    (2.2700, 0.0000, 1.6600),
-    (0.7016, 2.1582, 1.6600),
-    (-1.8364, 1.3338, 1.6600),
-    (-1.8364, -1.3338, 1.6600),
-    (0.7016, -2.1582, 1.6600),
-)
-_RING2_HYDROGEN_COORDS = (
-    (1.8364, 1.3338, -1.6600),
-    (-0.7016, 2.1582, -1.6600),
-    (-2.2700, 0.0000, -1.6600),
-    (-0.7016, -2.1582, -1.6600),
-    (1.8364, -1.3338, -1.6600),
-)
 
 
 def _ring_pairs(atom_ids: tuple[AtomId, ...]) -> tuple[tuple[AtomId, AtomId], ...]:
@@ -71,16 +29,13 @@ ring2_ch = tuple(zip(ring2_c, ring2_h))
 fe_to_ring1 = tuple((fe, atom_id) for atom_id in ring1_c)
 fe_to_ring2 = tuple((fe, atom_id) for atom_id in ring2_c)
 
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_SDF_RECORD = read_sdf_record(_PROJECT_ROOT / "molecules" / "ferrocene.sdf")
+
 
 ferrocene_pretty = Molecule(
-    atoms={
-        fe: _atom(fe, AtomicSymbol.Fe, 0.0000, 0.0000, 0.0000),
-        **{atom_id: _atom(atom_id, AtomicSymbol.C, *xyz) for atom_id, xyz in zip(ring1_c, _RING1_CARBON_COORDS)},
-        **{atom_id: _atom(atom_id, AtomicSymbol.C, *xyz) for atom_id, xyz in zip(ring2_c, _RING2_CARBON_COORDS)},
-        **{atom_id: _atom(atom_id, AtomicSymbol.H, *xyz) for atom_id, xyz in zip(ring1_h, _RING1_HYDROGEN_COORDS)},
-        **{atom_id: _atom(atom_id, AtomicSymbol.H, *xyz) for atom_id, xyz in zip(ring2_h, _RING2_HYDROGEN_COORDS)},
-    },
-    local_bonds=_edge_set(ring1_cc + ring2_cc + ring1_ch + ring2_ch),
+    atoms=_SDF_RECORD.molecule.atoms,
+    local_bonds=_SDF_RECORD.molecule.local_bonds,
     systems=(
         (
             SystemId(1),
