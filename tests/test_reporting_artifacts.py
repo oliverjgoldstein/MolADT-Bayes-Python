@@ -304,8 +304,8 @@ def test_timing_stage_overview_writes_svg(tmp_path) -> None:
     timing = pd.DataFrame(
         [
             {
-                "stage": "raw_file_read",
-                "description": "Read timing-library inputs.",
+                "stage": "smiles_csv_read",
+                "description": "Read source SMILES rows.",
                 "molecule_count": 100,
                 "success_count": 100,
                 "failure_count": 0,
@@ -316,8 +316,8 @@ def test_timing_stage_overview_writes_svg(tmp_path) -> None:
                 "peak_rss_mb": 12.0,
             },
             {
-                "stage": "sdf_record_parse",
-                "description": "Parse source SDF records into MolADT objects.",
+                "stage": "smiles_parse",
+                "description": "Parse source SMILES rows into MolADT objects.",
                 "molecule_count": 100,
                 "success_count": 100,
                 "failure_count": 0,
@@ -326,6 +326,18 @@ def test_timing_stage_overview_writes_svg(tmp_path) -> None:
                 "median_latency_us": 5.0,
                 "p95_latency_us": 9.0,
                 "peak_rss_mb": 10.0,
+            },
+            {
+                "stage": "moladt_json_read",
+                "description": "Read MolADT JSON payloads.",
+                "molecule_count": 100,
+                "success_count": 100,
+                "failure_count": 0,
+                "total_runtime_seconds": 0.8,
+                "molecules_per_second": 125.0,
+                "median_latency_us": 12.0,
+                "p95_latency_us": 18.0,
+                "peak_rss_mb": 16.0,
             },
             {
                 "stage": "moladt_file_parse",
@@ -346,8 +358,9 @@ def test_timing_stage_overview_writes_svg(tmp_path) -> None:
     write_timing_stage_overview(timing, output)
     svg = output.read_text(encoding="utf-8")
     assert "Local timing overview" in svg
-    assert "raw_file_read" in svg
-    assert "sdf_record_parse" in svg
+    assert "smiles_csv_read" in svg
+    assert "smiles_parse" in svg
+    assert "moladt_json_read" in svg
     assert "moladt_file_parse" in svg
 
 
@@ -415,8 +428,8 @@ def test_results_csv_combines_summary_metric_and_timing_rows(tmp_path, monkeypat
     timing = pd.DataFrame(
         [
             {
-                "stage": "raw_file_read",
-                "description": "Read timing-library inputs.",
+                "stage": "smiles_csv_read",
+                "description": "Read source SMILES rows.",
                 "molecule_count": 100,
                 "success_count": 100,
                 "failure_count": 0,
@@ -440,7 +453,7 @@ def test_results_csv_combines_summary_metric_and_timing_rows(tmp_path, monkeypat
     assert summary_row["literature_context"] == "MPNN RMSE 1.150"
     assert metric_row["representation"] == "moladt"
     assert metric_row["rmse"] == pytest.approx(1.10)
-    assert timing_row["stage"] == "raw_file_read"
+    assert timing_row["stage"] == "smiles_csv_read"
 
 
 def test_remove_legacy_report_artifacts_cleans_old_files(tmp_path, monkeypatch) -> None:

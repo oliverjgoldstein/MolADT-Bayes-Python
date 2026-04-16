@@ -38,30 +38,25 @@ TIMING_OWNER_COLORS = {
     "Our file reader": "#be123c",
 }
 TIMING_STAGE_META = {
-    "raw_file_read": {
-        "label": "Source SDF read",
+    "smiles_csv_read": {
+        "label": "Source SMILES read",
         "owner": "I/O baseline",
-        "description": "Reads raw single-record SDF blocks from the normalized source file. No chemistry parsing happens here.",
+        "description": "Reads SMILES rows from the normalized source CSV. No chemistry parsing happens here.",
     },
-    "sdf_record_parse": {
-        "label": "SDF to MolADT",
-        "owner": "Our parser",
-        "description": "Parses each source SDF record directly into the local MolADT object with the project SDF reader.",
+    "smiles_parse": {
+        "label": "SMILES to MolADT",
+        "owner": "String baseline",
+        "description": "Parses each source SMILES string into the local MolADT object with the project SMILES reader.",
     },
-    "timing_library_prepare": {
-        "label": "Matched corpus build",
-        "owner": "One-time setup",
-        "description": "Builds the aligned timing corpus: one single-record SDF file plus one MolADT JSON file for the same molecules.",
+    "moladt_json_read": {
+        "label": "MolADT JSON read",
+        "owner": "I/O baseline",
+        "description": "Reads cached MolADT JSON payloads from disk without decoding them into typed objects.",
     },
     "moladt_file_parse": {
         "label": "MolADT JSON to object",
         "owner": "Our file reader",
-        "description": "Reads the already-structured MolADT JSON file and reconstructs the local typed molecule object from disk.",
-    },
-    "moladt_parse_render": {
-        "label": "MolADT parse + render",
-        "owner": "Our parser",
-        "description": "Parses a MolADT structure and renders it again through the local boundary path. This is an end-to-end local MolADT stage.",
+        "description": "Decodes the cached MolADT JSON payload into the local typed molecule object.",
     },
 }
 
@@ -299,11 +294,10 @@ def write_timing_stage_overview(timing: pd.DataFrame, destination: Path) -> None
     if timing.empty:
         return
     stage_order = [
-        "raw_file_read",
-        "sdf_record_parse",
-        "timing_library_prepare",
+        "smiles_csv_read",
+        "smiles_parse",
+        "moladt_json_read",
         "moladt_file_parse",
-        "moladt_parse_render",
     ]
     order_index = {stage: index for index, stage in enumerate(stage_order)}
     rows = timing.copy()

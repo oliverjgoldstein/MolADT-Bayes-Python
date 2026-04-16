@@ -2,7 +2,17 @@ from __future__ import annotations
 
 from .coordinate import Angstrom, Coordinate
 from .dietz import AtomId, BondingSystem, Edge, NonNegative, SystemId, mk_bonding_system, mk_edge
-from .molecule import Atom, AtomicSymbol, ElementAttributes, Molecule
+from .molecule import (
+    Atom,
+    AtomicSymbol,
+    ElementAttributes,
+    Molecule,
+    molecule_atoms,
+    molecule_fields,
+    molecule_local_bonds,
+    molecule_smiles_stereochemistry,
+    molecule_systems,
+)
 from .molecule_ops import add_sigma, distance_angstrom, edge_systems, effective_order, neighbors_sigma, pretty_print_molecule
 from .mutable import MutableMolecule
 from .pretty import PrettyBlock, pretty_shells, pretty_text
@@ -33,6 +43,11 @@ __all__ = [
     "ValidationError",
     "mk_bonding_system",
     "mk_edge",
+    "molecule_atoms",
+    "molecule_fields",
+    "molecule_local_bonds",
+    "molecule_smiles_stereochemistry",
+    "molecule_systems",
     "used_electrons_at",
     "validate_molecule",
 ]

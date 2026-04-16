@@ -47,4 +47,6 @@ def effective_order(molecule: Molecule, edge: Edge) -> float:
 
 
 def pretty_print_molecule(molecule: Molecule) -> str:
-    return molecule.pretty()
+    from .pretty import pretty_text
+
+    return pretty_text(molecule)

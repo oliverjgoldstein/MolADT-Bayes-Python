@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from types import MappingProxyType
-from typing import Iterator, Mapping, TypeAlias
+from typing import Mapping, TypeAlias
 
 from .coordinate import Coordinate
 from .dietz import AtomId, BondingSystem, Edge, SystemId
@@ -159,19 +159,27 @@ class Molecule:
         object.__setattr__(self, "local_bonds", frozenset(self.local_bonds))
         object.__setattr__(self, "systems", _normalize_systems(self.systems))
 
-    def __iter__(self) -> Iterator[Mapping[AtomId, Atom] | frozenset[Edge] | MoleculeSystems | SmilesStereochemistry]:
-        fields: MoleculeFields = (
-            self.atoms,
-            self.local_bonds,
-            self.systems,
-            self.smiles_stereochemistry,
-        )
-        return iter(fields)
 
-    def pretty(self) -> str:
-        from .pretty import pretty_text
+def molecule_atoms(molecule: Molecule) -> Mapping[AtomId, Atom]:
+    return molecule.atoms
 
-        return pretty_text(self)
 
-    def __str__(self) -> str:
-        return self.pretty()
+def molecule_local_bonds(molecule: Molecule) -> frozenset[Edge]:
+    return molecule.local_bonds
+
+
+def molecule_systems(molecule: Molecule) -> MoleculeSystems:
+    return molecule.systems
+
+
+def molecule_smiles_stereochemistry(molecule: Molecule) -> SmilesStereochemistry:
+    return molecule.smiles_stereochemistry
+
+
+def molecule_fields(molecule: Molecule) -> MoleculeFields:
+    return (
+        molecule.atoms,
+        molecule.local_bonds,
+        molecule.systems,
+        molecule.smiles_stereochemistry,
+    )

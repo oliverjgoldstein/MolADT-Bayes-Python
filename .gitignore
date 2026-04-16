@@ -50,7 +50,10 @@ data/raw/qm9/extracted/
 data/raw/zinc/*
 !data/raw/zinc/zinc15_250K_2D.csv
 data/processed/
-results/
+results/**
+!results/**/
+!results/README.md
+!results/**/*.svg
 results2/
 *.part
 

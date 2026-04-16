@@ -5,6 +5,7 @@ from typing import Iterator, TypeAlias
 
 from .dietz import AtomId, BondingSystem, Edge, SystemId
 from .molecule import Atom, Molecule, SmilesStereochemistry
+from .pretty import pretty_text
 
 
 MutableMoleculeSystems: TypeAlias = list[tuple[SystemId, BondingSystem]]
@@ -67,7 +68,7 @@ class MutableMolecule:
         )
 
     def pretty(self) -> str:
-        return self.freeze().pretty()
+        return pretty_text(self.freeze())
 
     def __str__(self) -> str:
         return self.pretty()

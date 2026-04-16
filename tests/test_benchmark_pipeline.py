@@ -10,12 +10,15 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from moladt.io.sdf import molecule_to_sdf, parse_sdf_record
+from moladt.io.molecule_json import molecule_to_json_bytes
 from moladt.io.smiles import parse_smiles
 
 from scripts.benchmark_zinc import (
+    _load_smiles_rows_with_timing,
+    _measure_moladt_library_read,
     _measure_moladt_library_parse,
-    _measure_sdf_record_parse,
-    ParsedSDFEntry,
+    _measure_smiles_parse,
+    ParsedSmilesEntry,
     _prepare_timing_library,
     _read_timing_library_manifest,
 )
@@ -202,8 +205,8 @@ def test_download_zinc_prefers_vendored_snapshot(tmp_path, monkeypatch) -> None:
     raw_dir = tmp_path / "raw"
     zinc_dir = raw_dir / "zinc"
     zinc_dir.mkdir(parents=True)
-    zinc_sdf = zinc_dir / "zinc15_250K_2D.sdf"
-    zinc_sdf.write_text("demo\n$$$$\n", encoding="latin-1")
+    zinc_csv = zinc_dir / "zinc15_250K_2D.csv"
+    zinc_csv.write_text("smiles,zinc_id\nCCO,ZINC0001\n", encoding="utf-8")
     monkeypatch.setattr(download_data, "RAW_DATA_DIR", raw_dir)
 
     def fail_download(*args, **kwargs):
@@ -213,13 +216,13 @@ def test_download_zinc_prefers_vendored_snapshot(tmp_path, monkeypatch) -> None:
 
     downloads = download_zinc()
 
-    assert downloads.source_path == zinc_sdf
+    assert downloads.source_path == zinc_csv
     assert downloads.archive_path is None
     assert downloads.extract_dir == zinc_dir
     assert downloads.dataset_dimension == "2D"
 
 
-def test_download_zinc_prefers_2d_sdf_from_archive(tmp_path, monkeypatch) -> None:
+def test_download_zinc_prefers_2d_csv_from_archive(tmp_path, monkeypatch) -> None:
     import scripts.download_data as download_data
 
     raw_dir = tmp_path / "raw"
@@ -237,7 +240,7 @@ def test_download_zinc_prefers_2d_sdf_from_archive(tmp_path, monkeypatch) -> Non
 
     downloads = download_data.download_zinc()
 
-    assert downloads.source_path == extract_dir / "zinc15_250K_2D.sdf"
+    assert downloads.source_path == extract_dir / "zinc15_250K_2D.csv"
     assert downloads.dataset_dimension == "2D"
 
 
@@ -250,7 +253,7 @@ def test_download_zinc_gracefully_falls_back_from_3d_to_2d(tmp_path, monkeypatch
     extract_dir.mkdir(parents=True)
     archive_path = zinc_dir / "zinc15_250K_2D.tar.gz"
     archive_path.write_text("archive", encoding="utf-8")
-    (extract_dir / "zinc15_250K_2D.sdf").write_text("demo\n$$$$\n", encoding="latin-1")
+    (extract_dir / "zinc15_250K_2D.csv").write_text("smiles,zinc_id\nCCO,ZINC0001\n", encoding="utf-8")
     monkeypatch.setattr(download_data, "RAW_DATA_DIR", raw_dir)
 
     def fake_download(url: str, destination, *, force: bool = False, timeout_seconds: int = 120):
@@ -264,7 +267,7 @@ def test_download_zinc_gracefully_falls_back_from_3d_to_2d(tmp_path, monkeypatch
 
     downloads = download_data.download_zinc(dataset_dimension="3D")
 
-    assert downloads.source_path == extract_dir / "zinc15_250K_2D.sdf"
+    assert downloads.source_path == extract_dir / "zinc15_250K_2D.csv"
     assert downloads.dataset_dimension == "2D"
 
 
@@ -559,10 +562,12 @@ def test_prepare_timing_library_creates_matched_local_corpus(tmp_path, monkeypat
     processed_dir = tmp_path / "processed"
     monkeypatch.setattr(benchmark_zinc, "PROCESSED_DATA_DIR", processed_dir)
     entries = [
-        ParsedSDFEntry(
+        ParsedSmilesEntry(
             source_index=index,
-            block_text=molecule_to_sdf(parse_smiles(smiles)).split("$$$$", maxsplit=1)[0].strip("\n"),
-            record=parse_sdf_record(molecule_to_sdf(parse_smiles(smiles))),
+            mol_id=f"zinc_{index:07d}",
+            smiles=smiles,
+            item_size_bytes=len(smiles.encode("utf-8")),
+            payload=molecule_to_json_bytes(parse_smiles(smiles)),
         )
         for index, smiles in enumerate(("CCO", "c1ccccc1"), start=1)
     ]
@@ -572,18 +577,17 @@ def test_prepare_timing_library_creates_matched_local_corpus(tmp_path, monkeypat
         dataset_size="demo",
         dataset_dimension="3D",
         limit=2,
-        source_path=tmp_path / "zinc_demo.sdf",
+        source_path=tmp_path / "zinc_demo.csv",
         force=True,
     )
 
     manifest = _read_timing_library_manifest(library)
 
-    assert library.sdf_dir.exists()
     assert library.manifest_path.exists()
     assert len(manifest) == 2
     assert stage.stage == "timing_library_prepare"
     assert stage.success_count == 2
-    assert (library.library_root / manifest.iloc[0]["sdf_relative_path"]).exists()
+    assert manifest.iloc[0]["smiles"] in {"CCO", "c1ccccc1"}
     assert (library.library_root / manifest.iloc[0]["moladt_relative_path"]).exists()
 
 
@@ -592,15 +596,20 @@ def test_timing_library_parse_stages_succeed_on_matched_entries(tmp_path, monkey
 
     processed_dir = tmp_path / "processed"
     monkeypatch.setattr(benchmark_zinc, "PROCESSED_DATA_DIR", processed_dir)
-    blocks = [
-        molecule_to_sdf(parse_smiles(smiles)).split("$$$$", maxsplit=1)[0].strip("\n")
-        for smiles in ("CCO", "CCN")
-    ]
-    entries, sdf_stage = _measure_sdf_record_parse(
-        blocks,
+    source_path = tmp_path / "zinc_demo.csv"
+    source_path.write_text("smiles,zinc_id\nCCO,ZINC0001\nCCN,ZINC0002\n", encoding="utf-8")
+
+    rows, read_stage = _load_smiles_rows_with_timing(
+        source_path,
         dataset_size="demo",
         dataset_dimension="3D",
-        source_path=tmp_path / "zinc_demo.sdf",
+        limit=None,
+    )
+    entries, smiles_items, smiles_stage = _measure_smiles_parse(
+        rows,
+        dataset_size="demo",
+        dataset_dimension="3D",
+        source_path=source_path,
     )
 
     library, _ = _prepare_timing_library(
@@ -608,22 +617,33 @@ def test_timing_library_parse_stages_succeed_on_matched_entries(tmp_path, monkey
         dataset_size="demo",
         dataset_dimension="3D",
         limit=2,
-        source_path=tmp_path / "zinc_demo.sdf",
+        source_path=source_path,
         force=True,
     )
     manifest = _read_timing_library_manifest(library)
-
-    moladt_items, moladt_stage = _measure_moladt_library_parse(
+    payloads, moladt_read_stage = _measure_moladt_library_read(
         library,
         manifest=manifest,
         dataset_size="demo",
         dataset_dimension="3D",
     )
 
-    assert sdf_stage.failure_count == 0
+    moladt_items, moladt_stage = _measure_moladt_library_parse(
+        payloads,
+        dataset_size="demo",
+        dataset_dimension="3D",
+        source_dir=library.moladt_dir,
+    )
+
+    assert read_stage.failure_count == 0
+    assert smiles_stage.failure_count == 0
+    assert moladt_read_stage.failure_count == 0
     assert moladt_stage.failure_count == 0
     assert len(entries) == len(manifest)
+    assert len(smiles_items) == len(rows)
+    assert len(payloads) == len(manifest)
     assert len(moladt_items) == len(manifest)
+    assert all(item.success for item in smiles_items)
     assert all(item.success for item in moladt_items)
 
 

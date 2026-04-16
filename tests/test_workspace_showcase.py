@@ -61,7 +61,7 @@ def test_build_results_snapshot_formats_predictive_and_timing_rows(tmp_path) -> 
     results_csv.write_text(
         "row_type,task,model,method,train_rmse,test_rmse,test_minus_train_rmse,stage,molecule_count,success_count,failure_count,molecules_per_second\n"
         "predictive_summary,freesolv / smiles,m1,optimize,1.2,1.4,0.2,,,,,\n"
-        "timing_stage,,,,,,,raw_file_read,100,100,0,200.0\n",
+        "timing_stage,,,,,,,smiles_csv_read,100,100,0,200.0\n",
         encoding="utf-8",
     )
 
@@ -70,4 +70,4 @@ def test_build_results_snapshot_formats_predictive_and_timing_rows(tmp_path) -> 
     assert "### Predictive Summary" in snapshot
     assert "| freesolv / smiles | m1 | optimize | 1.2 | 1.4 | 0.2 |" in snapshot
     assert "### Timing Summary" in snapshot
-    assert "| raw_file_read | 100 | 100 | 0 | 200.0 |" in snapshot
+    assert "| smiles_csv_read | 100 | 100 | 0 | 200.0 |" in snapshot
