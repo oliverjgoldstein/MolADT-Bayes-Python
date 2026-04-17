@@ -63,6 +63,7 @@ class TimingItemResult:
 class TimingLibraryPaths:
     library_root: Path
     smiles_csv_path: Path
+    moladt_csv_path: Path
     sdf_dir: Path
     json_dir: Path
     manifest_path: Path
@@ -100,7 +101,7 @@ def run_zinc_benchmark(
     force: bool = False,
     verbose: bool = False,
 ) -> list[TimingStageResult]:
-    total_stages = 6
+    total_stages = 8
     downloads = download_zinc(dataset_size=dataset_size, dataset_dimension=dataset_dimension, force=force)
     actual_dimension = downloads.dataset_dimension
     library, _ = _prepare_timing_library(
@@ -118,7 +119,7 @@ def run_zinc_benchmark(
             f"(dataset_size={dataset_size}, dataset_dimension={actual_dimension}, limit={limit})"
         )
         if not include_moladt:
-            log("Timing benchmark now runs the fixed six-stage paper path; --include-moladt is retained only for CLI compatibility.")
+            log("Timing benchmark now runs the fixed eight-stage paper path; --include-moladt is retained only for CLI compatibility.")
         log(f"Results directory: {display_path(RESULTS_DIR)}")
         log(f"[zinc] timing library root: {display_path(library.library_root)}")
         log_stage("zinc", 1, total_stages, f"Reading matched SMILES CSV rows into strings (rows={len(manifest)})")
@@ -132,7 +133,17 @@ def run_zinc_benchmark(
     stages = [smiles_stage]
     if verbose:
         _log_stage_result(smiles_stage, stage_index=1, total_stages=total_stages)
-        log_stage("zinc", 2, total_stages, f"Parsing matched SMILES rows and serializing JSON payloads (rows={len(source_rows)})")
+        log_stage("zinc", 2, total_stages, f"Reading cached MolADT CSV rows into MolADT (rows={len(manifest)})")
+    moladt_csv_item_rows, moladt_csv_to_moladt_stage = _measure_moladt_csv_to_moladt(
+        library.moladt_csv_path,
+        dataset_size=dataset_size,
+        dataset_dimension=actual_dimension,
+        verbose=verbose,
+    )
+    stages.append(moladt_csv_to_moladt_stage)
+    if verbose:
+        _log_stage_result(moladt_csv_to_moladt_stage, stage_index=2, total_stages=total_stages)
+        log_stage("zinc", 3, total_stages, f"Parsing matched SMILES rows and serializing JSON payloads (rows={len(source_rows)})")
     smiles_json_item_rows, smiles_to_json_stage = _measure_smiles_to_json(
         source_rows,
         dataset_size=dataset_size,
@@ -142,8 +153,8 @@ def run_zinc_benchmark(
     )
     stages.append(smiles_to_json_stage)
     if verbose:
-        _log_stage_result(smiles_to_json_stage, stage_index=2, total_stages=total_stages)
-        log_stage("zinc", 3, total_stages, f"Parsing matched SDF files into MolADT (records={len(manifest)})")
+        _log_stage_result(smiles_to_json_stage, stage_index=3, total_stages=total_stages)
+        log_stage("zinc", 4, total_stages, f"Parsing matched SDF files into MolADT (records={len(manifest)})")
     sdf_molecules, sdf_item_rows, sdf_stage = _measure_sdf_to_moladt(
         library,
         manifest=manifest,
@@ -153,8 +164,8 @@ def run_zinc_benchmark(
     )
     stages.append(sdf_stage)
     if verbose:
-        _log_stage_result(sdf_stage, stage_index=3, total_stages=total_stages)
-        log_stage("zinc", 4, total_stages, f"Reading cached SDF files and rendering SMILES (records={len(manifest)})")
+        _log_stage_result(sdf_stage, stage_index=4, total_stages=total_stages)
+        log_stage("zinc", 5, total_stages, f"Reading cached SDF files and rendering SMILES (records={len(manifest)})")
     sdf_smiles_item_rows, sdf_to_smiles_stage = _measure_sdf_to_smiles(
         library,
         manifest=manifest,
@@ -164,8 +175,8 @@ def run_zinc_benchmark(
     )
     stages.append(sdf_to_smiles_stage)
     if verbose:
-        _log_stage_result(sdf_to_smiles_stage, stage_index=4, total_stages=total_stages)
-        log_stage("zinc", 5, total_stages, f"Serializing MolADT objects to JSON (records={len(sdf_molecules)})")
+        _log_stage_result(sdf_to_smiles_stage, stage_index=5, total_stages=total_stages)
+        log_stage("zinc", 6, total_stages, f"Serializing MolADT objects to JSON (records={len(sdf_molecules)})")
     json_payloads, json_item_rows, json_stage = _measure_moladt_to_json(
         sdf_molecules,
         dataset_size=dataset_size,
@@ -175,8 +186,8 @@ def run_zinc_benchmark(
     )
     stages.append(json_stage)
     if verbose:
-        _log_stage_result(json_stage, stage_index=5, total_stages=total_stages)
-        log_stage("zinc", 6, total_stages, f"Decoding JSON files back into MolADT (records={len(json_payloads)})")
+        _log_stage_result(json_stage, stage_index=6, total_stages=total_stages)
+        log_stage("zinc", 7, total_stages, f"Decoding JSON files back into MolADT (records={len(json_payloads)})")
     json_roundtrip_rows, json_to_moladt_stage = _measure_json_to_moladt(
         json_payloads,
         dataset_size=dataset_size,
@@ -185,7 +196,17 @@ def run_zinc_benchmark(
     )
     stages.append(json_to_moladt_stage)
     if verbose:
-        _log_stage_result(json_to_moladt_stage, stage_index=6, total_stages=total_stages)
+        _log_stage_result(json_to_moladt_stage, stage_index=7, total_stages=total_stages)
+        log_stage("zinc", 8, total_stages, f"Decoding JSON files and rendering SMILES (records={len(json_payloads)})")
+    json_smiles_rows, json_to_smiles_stage = _measure_json_to_smiles(
+        json_payloads,
+        dataset_size=dataset_size,
+        dataset_dimension=actual_dimension,
+        verbose=verbose,
+    )
+    stages.append(json_to_smiles_stage)
+    if verbose:
+        _log_stage_result(json_to_smiles_stage, stage_index=8, total_stages=total_stages)
 
     details_dir = ensure_directory(RESULTS_DIR / "details")
     results_frame = pd.DataFrame([stage.to_dict() for stage in stages])
@@ -194,7 +215,7 @@ def run_zinc_benchmark(
     item_frame = pd.DataFrame(
         [
             row.to_dict()
-            for row in smiles_json_item_rows + sdf_item_rows + sdf_smiles_item_rows + json_item_rows + json_roundtrip_rows
+            for row in moladt_csv_item_rows + smiles_json_item_rows + sdf_item_rows + sdf_smiles_item_rows + json_item_rows + json_roundtrip_rows + json_smiles_rows
         ]
     )
     items_csv = details_dir / "zinc_timing_items.csv"
@@ -231,18 +252,24 @@ def _prepare_timing_library(
 ) -> tuple[TimingLibraryPaths, TimingStageResult]:
     library_root = _timing_library_root(dataset_size, dataset_dimension, limit)
     smiles_csv_path = library_root / "smiles_library.csv"
+    moladt_csv_path = library_root / "moladt_csv_library.csv"
     sdf_dir = library_root / "sdf_library"
     json_dir = library_root / "json_library"
     manifest_path = library_root / "manifest.csv"
     ensure_directory(sdf_dir)
     ensure_directory(json_dir)
-    if not force and _timing_library_is_ready(smiles_csv_path=smiles_csv_path, sdf_dir=sdf_dir, manifest_path=manifest_path):
+    if not force and _timing_library_is_ready(
+        smiles_csv_path=smiles_csv_path,
+        moladt_csv_path=moladt_csv_path,
+        sdf_dir=sdf_dir,
+        manifest_path=manifest_path,
+    ):
         manifest = pd.read_csv(manifest_path)
         stage = TimingStageResult(
             dataset_size=dataset_size,
             dataset_dimension=dataset_dimension,
             stage="timing_corpus_prepare",
-            description="Reused the cached matched timing corpus: one SMILES CSV row and one SDF file for each timed molecule.",
+            description="Reused the cached matched timing corpus: one SMILES CSV row, one MolADT CSV row, and one SDF file for each timed molecule.",
             source_path=str(library_root),
             molecule_count=int(len(manifest)),
             success_count=int(len(manifest)),
@@ -257,6 +284,7 @@ def _prepare_timing_library(
             TimingLibraryPaths(
                 library_root=library_root,
                 smiles_csv_path=smiles_csv_path,
+                moladt_csv_path=moladt_csv_path,
                 sdf_dir=sdf_dir,
                 json_dir=json_dir,
                 manifest_path=manifest_path,
@@ -277,34 +305,49 @@ def _prepare_timing_library(
     success_count = 0
     failure_count = 0
     start_total = time.perf_counter()
-    for row_index, entry in enumerate(source_rows, start=1):
-        start_item = time.perf_counter_ns()
-        try:
-            molecule = parse_smiles(entry.smiles)
-            sdf_relative_path = Path("sdf_library") / f"{entry.mol_id}.sdf"
-            sdf_path = library_root / sdf_relative_path
-            sdf_text = molecule_to_sdf(molecule, title=entry.mol_id, properties={"smiles": entry.smiles})
-            sdf_path.write_text(sdf_text, encoding="latin-1")
-            records.append(
-                {
-                    "source_index": entry.source_index,
-                    "mol_id": entry.mol_id,
-                    "smiles": entry.smiles,
-                    "smiles_size_bytes": entry.item_size_bytes,
-                    "sdf_relative_path": str(sdf_relative_path),
-                    "sdf_size_bytes": sdf_path.stat().st_size,
-                }
-            )
-            success_count += 1
-        except Exception:
-            failure_count += 1
-        latencies.append((time.perf_counter_ns() - start_item) / 1_000.0)
-        if verbose and row_index % 500 == 0:
-            peak_rss = max(peak_rss, process.memory_info().rss)
-            log(
-                f"[zinc {log_label}] built timing corpus rows={format_progress(row_index, len(source_rows))} "
-                f"success={success_count} failure={failure_count}"
-            )
+    with moladt_csv_path.open("w", encoding="utf-8", newline="") as moladt_handle:
+        moladt_writer = csv.DictWriter(
+            moladt_handle,
+            fieldnames=["source_index", "mol_id", "moladt_size_bytes", "moladt_json"],
+        )
+        moladt_writer.writeheader()
+        for row_index, entry in enumerate(source_rows, start=1):
+            start_item = time.perf_counter_ns()
+            try:
+                molecule = parse_smiles(entry.smiles)
+                payload = molecule_to_json_bytes(molecule)
+                moladt_writer.writerow(
+                    {
+                        "source_index": entry.source_index,
+                        "mol_id": entry.mol_id,
+                        "moladt_size_bytes": len(payload),
+                        "moladt_json": payload.decode("utf-8"),
+                    }
+                )
+                sdf_relative_path = Path("sdf_library") / f"{entry.mol_id}.sdf"
+                sdf_path = library_root / sdf_relative_path
+                sdf_text = molecule_to_sdf(molecule, title=entry.mol_id, properties={"smiles": entry.smiles})
+                sdf_path.write_text(sdf_text, encoding="latin-1")
+                records.append(
+                    {
+                        "source_index": entry.source_index,
+                        "mol_id": entry.mol_id,
+                        "smiles": entry.smiles,
+                        "smiles_size_bytes": entry.item_size_bytes,
+                        "sdf_relative_path": str(sdf_relative_path),
+                        "sdf_size_bytes": sdf_path.stat().st_size,
+                    }
+                )
+                success_count += 1
+            except Exception:
+                failure_count += 1
+            latencies.append((time.perf_counter_ns() - start_item) / 1_000.0)
+            if verbose and row_index % 500 == 0:
+                peak_rss = max(peak_rss, process.memory_info().rss)
+                log(
+                    f"[zinc {log_label}] built timing corpus rows={format_progress(row_index, len(source_rows))} "
+                    f"success={success_count} failure={failure_count}"
+                )
     manifest = pd.DataFrame(records)
     manifest.to_csv(manifest_path, index=False)
     _write_smiles_library_csv(smiles_csv_path, manifest)
@@ -313,7 +356,7 @@ def _prepare_timing_library(
         dataset_size=dataset_size,
         dataset_dimension=dataset_dimension,
         stage="timing_corpus_prepare",
-        description="Built the matched timing corpus used by the six-stage paper benchmark: a SMILES CSV plus cached SDF files.",
+        description="Built the matched timing corpus used by the eight-stage paper benchmark: a SMILES CSV, a MolADT CSV, and cached SDF files.",
         source_path=str(source_path),
         molecule_count=len(source_rows),
         success_count=success_count,
@@ -328,6 +371,7 @@ def _prepare_timing_library(
         TimingLibraryPaths(
             library_root=library_root,
             smiles_csv_path=smiles_csv_path,
+            moladt_csv_path=moladt_csv_path,
             sdf_dir=sdf_dir,
             json_dir=json_dir,
             manifest_path=manifest_path,
@@ -336,8 +380,8 @@ def _prepare_timing_library(
     )
 
 
-def _timing_library_is_ready(*, smiles_csv_path: Path, sdf_dir: Path, manifest_path: Path) -> bool:
-    if not smiles_csv_path.exists() or not manifest_path.exists() or not sdf_dir.exists():
+def _timing_library_is_ready(*, smiles_csv_path: Path, moladt_csv_path: Path, sdf_dir: Path, manifest_path: Path) -> bool:
+    if not smiles_csv_path.exists() or not moladt_csv_path.exists() or not manifest_path.exists() or not sdf_dir.exists():
         return False
     try:
         manifest = pd.read_csv(manifest_path)
@@ -507,6 +551,83 @@ def _measure_smiles_to_json(
         failure_count=failure_count,
         total_runtime_seconds=elapsed,
         molecules_per_second=(len(source_rows) / elapsed) if elapsed > 0 else 0.0,
+        median_latency_us=_median(latencies),
+        p95_latency_us=_percentile(latencies, 95.0),
+        peak_rss_mb=peak_rss / (1024.0 * 1024.0),
+    )
+    return item_rows, stage
+
+
+def _measure_moladt_csv_to_moladt(
+    source_path: Path,
+    *,
+    dataset_size: str,
+    dataset_dimension: str,
+    verbose: bool = False,
+) -> tuple[list[TimingItemResult], TimingStageResult]:
+    latencies: list[float] = []
+    item_rows: list[TimingItemResult] = []
+    success_count = 0
+    failure_count = 0
+    process = psutil.Process()
+    peak_rss = process.memory_info().rss
+    start_total = time.perf_counter()
+    row_count = 0
+    with source_path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        while True:
+            start_item = time.perf_counter_ns()
+            try:
+                row = next(reader)
+            except StopIteration:
+                break
+            row_count += 1
+            mol_id = str(row.get("mol_id", "")).strip() or f"zinc_{row_count:07d}"
+            source_index = int(row.get("source_index") or row_count)
+            payload_text = str(row.get("moladt_json", ""))
+            item_size_bytes = int(row.get("moladt_size_bytes") or len(payload_text.encode("utf-8")))
+            error = ""
+            success = True
+            try:
+                molecule_from_json(payload_text.encode("utf-8"))
+            except Exception as exc:
+                success = False
+                error = str(exc)
+            if success:
+                success_count += 1
+            else:
+                failure_count += 1
+            latency_us = (time.perf_counter_ns() - start_item) / 1_000.0
+            latencies.append(latency_us)
+            item_rows.append(
+                TimingItemResult(
+                    dataset_size=dataset_size,
+                    dataset_dimension=dataset_dimension,
+                    stage="moladt_csv_to_moladt",
+                    mol_id=mol_id,
+                    item_kind="moladt_csv_row",
+                    item_path=f"{source_path}:{source_index}",
+                    item_size_bytes=item_size_bytes,
+                    success=success,
+                    latency_us=latency_us,
+                    error=error,
+                )
+            )
+            if verbose and row_count % 500 == 0:
+                peak_rss = max(peak_rss, process.memory_info().rss)
+                log(f"[zinc] moladt_csv_to_moladt rows={row_count} success={success_count} failure={failure_count}")
+    elapsed = time.perf_counter() - start_total
+    stage = TimingStageResult(
+        dataset_size=dataset_size,
+        dataset_dimension=dataset_dimension,
+        stage="moladt_csv_to_moladt",
+        description="Read cached MolADT CSV rows and decode the embedded MolADT payload into the local typed Molecule object.",
+        source_path=str(source_path),
+        molecule_count=row_count,
+        success_count=success_count,
+        failure_count=failure_count,
+        total_runtime_seconds=elapsed,
+        molecules_per_second=(row_count / elapsed) if elapsed > 0 else 0.0,
         median_latency_us=_median(latencies),
         p95_latency_us=_percentile(latencies, 95.0),
         peak_rss_mb=peak_rss / (1024.0 * 1024.0),
@@ -818,6 +939,77 @@ def _measure_json_to_moladt(
     return item_rows, stage
 
 
+def _measure_json_to_smiles(
+    payloads: list[TimedJsonPayload],
+    *,
+    dataset_size: str,
+    dataset_dimension: str,
+    verbose: bool = False,
+) -> tuple[list[TimingItemResult], TimingStageResult]:
+    latencies: list[float] = []
+    item_rows: list[TimingItemResult] = []
+    success_count = 0
+    failure_count = 0
+    process = psutil.Process()
+    peak_rss = process.memory_info().rss
+    start_total = time.perf_counter()
+    for row_index, payload in enumerate(payloads, start=1):
+        start_item = time.perf_counter_ns()
+        error = ""
+        success = True
+        try:
+            molecule = molecule_from_json(payload.item_path.read_bytes())
+            validate_molecule(molecule)
+            molecule_to_smiles(molecule)
+        except Exception as exc:
+            success = False
+            error = str(exc)
+        if success:
+            success_count += 1
+        else:
+            failure_count += 1
+        latency_us = (time.perf_counter_ns() - start_item) / 1_000.0
+        latencies.append(latency_us)
+        item_rows.append(
+            TimingItemResult(
+                dataset_size=dataset_size,
+                dataset_dimension=dataset_dimension,
+                stage="json_to_smiles",
+                mol_id=payload.mol_id,
+                item_kind="json_file",
+                item_path=str(payload.item_path),
+                item_size_bytes=payload.item_size_bytes,
+                success=success,
+                latency_us=latency_us,
+                error=error,
+            )
+        )
+        if verbose and row_index % 500 == 0:
+            peak_rss = max(peak_rss, process.memory_info().rss)
+            log(
+                f"[zinc] json_to_smiles rows={format_progress(row_index, len(payloads))} "
+                f"success={success_count} failure={failure_count}"
+            )
+    elapsed = time.perf_counter() - start_total
+    source_dir = payloads[0].item_path.parent if payloads else RESULTS_DIR
+    stage = TimingStageResult(
+        dataset_size=dataset_size,
+        dataset_dimension=dataset_dimension,
+        stage="json_to_smiles",
+        description="Read JSON files, decode them into Molecule values, validate them, and render the supported SMILES subset.",
+        source_path=str(source_dir),
+        molecule_count=len(payloads),
+        success_count=success_count,
+        failure_count=failure_count,
+        total_runtime_seconds=elapsed,
+        molecules_per_second=(len(payloads) / elapsed) if elapsed > 0 else 0.0,
+        median_latency_us=_median(latencies),
+        p95_latency_us=_percentile(latencies, 95.0),
+        peak_rss_mb=peak_rss / (1024.0 * 1024.0),
+    )
+    return item_rows, stage
+
+
 def _attach_json_payload_paths(
     manifest: pd.DataFrame,
     *,
@@ -855,6 +1047,7 @@ def _write_timing_result_files_report(
         "Timing result files",
         "",
         f"matched_smiles_csv: {display_path(library.smiles_csv_path)}",
+        f"matched_moladt_csv: {display_path(library.moladt_csv_path)}",
         f"matched_sdf_dir: {display_path(library.sdf_dir)}",
         f"serialized_json_dir: {display_path(library.json_dir)}",
         f"timing_library_manifest: {display_path(library.manifest_path)}",

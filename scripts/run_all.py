@@ -1300,6 +1300,23 @@ def _extra_model_seeds(base_seed: int, count: int) -> tuple[int, ...]:
     return tuple(base_seed + 101 * index for index in range(max(1, count)))
 
 
+def _read_timing_items_csv(items_path: Any) -> pd.DataFrame:
+    return pd.read_csv(
+        items_path,
+        dtype={
+            "dataset_size": "string",
+            "dataset_dimension": "string",
+            "stage": "string",
+            "mol_id": "string",
+            "item_kind": "string",
+            "item_path": "string",
+            "error": "string",
+        },
+        keep_default_na=False,
+        low_memory=False,
+    )
+
+
 def _write_timing_report(timing: pd.DataFrame) -> None:
     lines = ["# ZINC Timing", ""]
     for _, row in timing.iterrows():
@@ -1311,12 +1328,12 @@ def _write_timing_report(timing: pd.DataFrame) -> None:
     if items_path.exists():
         lines.append("")
         lines.append(f"Detailed per-item timings: `{display_path(items_path)}`")
-        items = pd.read_csv(items_path)
+        items = _read_timing_items_csv(items_path)
         if not items.empty:
             lines.append("")
             lines.append("## Slowest Timed Items")
             lines.append("")
-            for stage_name in ("smiles_to_json", "sdf_to_moladt", "sdf_to_smiles", "moladt_to_json", "json_to_moladt"):
+            for stage_name in ("moladt_csv_to_moladt", "smiles_to_json", "sdf_to_moladt", "sdf_to_smiles", "moladt_to_json", "json_to_moladt", "json_to_smiles"):
                 stage_items = items.loc[items["stage"] == stage_name].sort_values("latency_us", ascending=False).head(5)
                 if stage_items.empty:
                     continue

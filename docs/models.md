@@ -138,6 +138,6 @@ make timing
 
 - `make freesolv` writes the `Training` / `Validation` / `Test` / `Paper` FreeSolv figure
 - `make qm9long` writes the `Training` / `Test` / `Paper` QM9 figure for the full-data ViSNet path
-- `make timing` is the separate six-stage SMILES-vs-MolADT timing path
+- `make timing` is the separate eight-stage SMILES-vs-MolADT timing path
 
 For the broader protocol and result bundle, see [Inference and benchmarks](inference-and-benchmarks.md).

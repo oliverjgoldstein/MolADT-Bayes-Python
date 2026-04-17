@@ -58,10 +58,12 @@ Use the files in this order:
 For timing runs specifically, `details/zinc_timing.csv` separates:
 
 - the matched SMILES CSV read (`smiles_csv_to_string`)
+- the cached MolADT CSV decode (`moladt_csv_to_moladt`)
 - SMILES parsing plus JSON serialization (`smiles_to_json`)
 - cached SDF parsing into MolADT (`sdf_to_moladt`)
 - cached SDF rendering back to SMILES (`sdf_to_smiles`)
 - MolADT JSON serialization (`moladt_to_json`)
 - JSON decoding back into MolADT (`json_to_moladt`)
+- JSON decoding plus SMILES rendering (`json_to_smiles`)
 
 The top-level `timing_overview.svg` is the clean paper figure. The explanatory prose lives in `caption.txt`.

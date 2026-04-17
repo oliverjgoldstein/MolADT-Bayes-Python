@@ -2,7 +2,7 @@
 
 MolADT is a typed molecular data format for Bayesian work over molecules. It keeps chemically meaningful structure in the object itself instead of hiding it inside string syntax.
 
-[Quickstart](docs/quickstart.md) · [Representation](docs/representation.md) · [Models](docs/models.md) · [Examples](docs/examples.md)
+[Quickstart](docs/quickstart.md) · [Representation](docs/representation.md) · [Data Model](docs/data-model.md) · [Models](docs/models.md) · [Examples](docs/examples.md)
 
 ## Why MolADT
 
@@ -102,7 +102,7 @@ make timing
 
 - `make freesolv`: FreeSolv RMSE comparison. Fixed path `moladt_featurized + bayes_gp_rbf_screened + laplace`. The paper SVG is a clean bar comparison, and the prose caption is written separately to `caption.txt`. It writes `results/freesolv/run_.../freesolv_rmse_vs_moleculenet.svg`, `results/freesolv/run_.../caption.txt`, `results/freesolv/run_.../freesolv_bayesian_model.txt`, and `results/freesolv/run_.../details/freesolv_train_test_uncertainty.csv`.
 - `make qm9long`: full QM9 `mu` MAE comparison over all aligned local QM9 molecules, using `visnet_ensemble` on `moladt_featurized_geom`. That export keeps the atomic numbers and coordinates from the SDF record and adds the full MolADT feature bundle from the same molecule. The current local bundle yields `107,108 / 13,388 / 13,389` train / validation / test rows under the deterministic `80/10/10` long split. ViSNet runs one member for at most `25` epochs with seed `102`, and the verbose run prints every epoch with validation RMSE and MAE. It writes the clean paper SVG plus `caption.txt`.
-- `make timing`: ZINC timing comparison on the fixed six-stage paper path: `SMILES CSV -> string`, `SMILES -> JSON`, `SDF -> MolADT`, `SDF -> SMILES`, `MolADT -> JSON`, and `JSON -> MolADT`. It writes `results/timing/paper/run_.../timing_overview.svg`, `results/timing/paper/run_.../caption.txt`, and `results/timing/paper/run_.../timing_result_files.txt`.
+- `make timing`: ZINC timing comparison on the fixed eight-stage paper path: `SMILES CSV -> string`, `MolADT CSV -> MolADT`, `SMILES -> JSON`, `SDF -> MolADT`, `SDF -> SMILES`, `MolADT -> JSON`, `JSON -> MolADT`, and `JSON -> SMILES`. It writes `results/timing/paper/run_.../timing_overview.svg`, `results/timing/paper/run_.../caption.txt`, and `results/timing/paper/run_.../timing_result_files.txt`.
 
 Results are written under timestamped directories in `results/`, mainly `results/freesolv/run_.../`, `results/qm9/long/run_.../`, and `results/timing/paper/run_.../`.
 
@@ -113,6 +113,7 @@ For split sizes, the exact benchmark contract, the published FreeSolv RMSE conte
 ## Read More
 
 - [Quickstart](docs/quickstart.md)
+- [Data model](docs/data-model.md)
 - [Inference and benchmarks](docs/inference-and-benchmarks.md)
 - [Parsing and rendering](docs/parsing.md)
 - [CLI reference](docs/cli.md)

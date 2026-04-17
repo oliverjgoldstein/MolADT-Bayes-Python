@@ -12,6 +12,7 @@ from scripts.run_all import (
     _build_generalization_frame,
     _build_moleculenet_comparison_frame,
     _build_simple_review_frame,
+    _read_timing_items_csv,
     _remove_legacy_report_artifacts,
     _selected_prediction_rows,
     _write_results_csv,
@@ -250,20 +251,24 @@ def test_moleculenet_comparison_graphs_write_expected_svg_files(tmp_path) -> Non
     qm9_svg = (tmp_path / "qm9_mae_vs_moleculenet.svg").read_text(encoding="utf-8")
     freesolv_caption = (tmp_path / "freesolv_rmse_vs_moleculenet.caption.txt").read_text(encoding="utf-8")
     qm9_caption = (tmp_path / "qm9_mae_vs_moleculenet.caption.txt").read_text(encoding="utf-8")
-    assert "FreeSolv: RMSE" in freesolv_svg
+    assert "FreeSolv on MolADT: RMSE" in freesolv_svg
     assert "Training" in freesolv_svg
     assert ">Validation</text>" in freesolv_svg
     assert "Test" in freesolv_svg
     assert "Paper" in freesolv_svg
+    assert '>RMSE</text>' in freesolv_svg
+    assert 'font-size="18" font-family="Helvetica, Arial, sans-serif" fill="#111827" font-weight="600">Training</text>' in freesolv_svg
     assert "moladt_featurized" not in freesolv_svg
     assert "MPNN" not in freesolv_svg
     assert "moladt_featurized" in freesolv_caption
     assert "MPNN" in freesolv_caption
-    assert "QM9: MAE" in qm9_svg
+    assert "QM9 on MolADT: MAE" in qm9_svg
     assert "Training" in qm9_svg
     assert ">Validation</text>" not in qm9_svg
     assert "Test" in qm9_svg
     assert "Paper" in qm9_svg
+    assert '>MAE</text>' in qm9_svg
+    assert 'font-size="18" font-family="Helvetica, Arial, sans-serif" fill="#111827" font-weight="600">Training</text>' in qm9_svg
     assert "moladt_featurized" not in qm9_svg
     assert "DTNN" not in qm9_svg
     assert "moladt_featurized" in qm9_caption
@@ -536,6 +541,18 @@ def test_timing_stage_overview_writes_svg(tmp_path) -> None:
                 "peak_rss_mb": 12.0,
             },
             {
+                "stage": "moladt_csv_to_moladt",
+                "description": "Read MolADT CSV rows back into MolADT objects.",
+                "molecule_count": 100,
+                "success_count": 100,
+                "failure_count": 0,
+                "total_runtime_seconds": 0.55,
+                "molecules_per_second": 181.8,
+                "median_latency_us": 11.0,
+                "p95_latency_us": 19.0,
+                "peak_rss_mb": 12.5,
+            },
+            {
                 "stage": "smiles_to_json",
                 "description": "Parse SMILES strings and serialize JSON payloads.",
                 "molecule_count": 100,
@@ -595,6 +612,18 @@ def test_timing_stage_overview_writes_svg(tmp_path) -> None:
                 "p95_latency_us": 35.0,
                 "peak_rss_mb": 24.0,
             },
+            {
+                "stage": "json_to_smiles",
+                "description": "Decode JSON files and render SMILES strings.",
+                "molecule_count": 100,
+                "success_count": 100,
+                "failure_count": 0,
+                "total_runtime_seconds": 1.3,
+                "molecules_per_second": 76.9,
+                "median_latency_us": 24.0,
+                "p95_latency_us": 40.0,
+                "peak_rss_mb": 26.0,
+            },
         ]
     )
 
@@ -604,14 +633,22 @@ def test_timing_stage_overview_writes_svg(tmp_path) -> None:
     caption = (tmp_path / "caption.txt").read_text(encoding="utf-8")
     assert "Timing Throughput" in svg
     assert "SMILES CSV -&gt; string" in svg
+    assert "MolADT CSV -&gt; MolADT" in svg
     assert "SMILES -&gt; JSON" in svg
     assert "SDF -&gt; MolADT" in svg
     assert "SDF -&gt; SMILES" in svg
     assert "MolADT -&gt; JSON" in svg
     assert "JSON -&gt; MolADT" in svg
+    assert "JSON -&gt; SMILES" in svg
+    assert svg.index("SMILES -&gt; JSON") < svg.index("MolADT -&gt; JSON") < svg.index("SDF -&gt; MolADT")
+    assert 'font-size="20" font-family="Helvetica, Arial, sans-serif" fill="#111827" font-weight="600">SMILES CSV -&gt; string</text>' in svg
+    assert 'font-size="15" font-family="Helvetica, Arial, sans-serif" fill="#1d4ed8" font-weight="600">CSV baseline</text>' in svg
+    assert 'text-anchor="end" font-size="14" font-family="Menlo, Consolas, monospace" fill="#111827">200.0 mol/s</text>' in svg
     assert "matched local timing corpus" in caption
+    assert "MolADT CSV to MolADT" in caption
     assert "SMILES to JSON" in caption
     assert "SDF to SMILES" in caption
+    assert "JSON to SMILES" in caption
 
 
 def test_results_csv_combines_summary_metric_and_timing_rows(tmp_path, monkeypatch) -> None:
@@ -739,6 +776,44 @@ def test_remove_legacy_report_artifacts_cleans_old_files(tmp_path, monkeypatch) 
     assert not (tmp_path / "summary.md").exists()
     assert not (tmp_path / "freesolv_rmse_vs_moleculenet.svg").exists()
     assert not (tmp_path / "stan_output").exists()
+
+
+def test_read_timing_items_csv_uses_stable_text_dtypes(monkeypatch, tmp_path) -> None:
+    import scripts.run_all as run_all
+
+    captured: dict[str, object] = {}
+
+    def fake_read_csv(path, **kwargs):
+        captured["path"] = path
+        captured["kwargs"] = kwargs
+        return pd.DataFrame(
+            [
+                {
+                    "dataset_size": "250K",
+                    "dataset_dimension": "2D",
+                    "stage": "json_to_moladt",
+                    "mol_id": "zinc_1",
+                    "item_kind": "json_file",
+                    "item_path": "details/zinc_1.moladt.json",
+                    "item_size_bytes": 123,
+                    "success": True,
+                    "latency_us": 100.0,
+                    "error": "",
+                }
+            ]
+        )
+
+    monkeypatch.setattr(run_all.pd, "read_csv", fake_read_csv)
+
+    frame = _read_timing_items_csv(tmp_path / "zinc_timing_items.csv")
+
+    assert not frame.empty
+    assert captured["path"] == tmp_path / "zinc_timing_items.csv"
+    kwargs = captured["kwargs"]
+    assert kwargs["low_memory"] is False
+    assert kwargs["keep_default_na"] is False
+    assert kwargs["dtype"]["error"] == "string"
+    assert kwargs["dtype"]["item_path"] == "string"
 
 
 def test_selected_prediction_rows_matches_generalization_keys() -> None:

@@ -48,6 +48,11 @@ TIMING_STAGE_META = {
         "owner": "CSV baseline",
         "description": "Reads matched SMILES CSV rows into Python strings.",
     },
+    "moladt_csv_to_moladt": {
+        "label": "MolADT CSV -> MolADT",
+        "owner": "File round-trip",
+        "description": "Reads cached MolADT CSV rows and decodes the embedded MolADT payload into the local typed molecule object.",
+    },
     "smiles_to_json": {
         "label": "SMILES -> JSON",
         "owner": "Text boundary",
@@ -72,6 +77,11 @@ TIMING_STAGE_META = {
         "label": "JSON -> MolADT",
         "owner": "File round-trip",
         "description": "Reads JSON files and decodes them back into the typed molecule object.",
+    },
+    "json_to_smiles": {
+        "label": "JSON -> SMILES",
+        "owner": "Boundary render",
+        "description": "Reads JSON files, decodes them into MolADT, and renders the supported SMILES subset.",
     },
 }
 
@@ -134,8 +144,15 @@ def write_moleculenet_comparison_overviews(comparison_frame: pd.DataFrame, desti
         )
         parts.append(
             f'<text x="{x0 + 28}" y="{title_y}" font-size="34" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="700">'
-            f"{escape(str(row['dataset_label']))}: {escape(metric_name)}"
+            f"{escape(str(row['dataset_label']))} on MolADT: {escape(metric_name)}"
             "</text>"
+        )
+        axis_label_x = x0 + 24
+        axis_label_y = plot_y + plot_height / 2
+        parts.append(
+            f'<text x="{axis_label_x}" y="{axis_label_y:.1f}" text-anchor="middle" font-size="18" '
+            f'font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="600" '
+            f'transform="rotate(-90 {axis_label_x} {axis_label_y:.1f})">{escape(metric_name)}</text>'
         )
         for step in range(tick_count):
             fraction = step / (tick_count - 1)
@@ -159,7 +176,7 @@ def write_moleculenet_comparison_overviews(comparison_frame: pd.DataFrame, desti
                 f'<text x="{x + bar_width / 2:.1f}" y="{y - 14:.1f}" text-anchor="middle" font-size="14" font-family="Menlo, Consolas, monospace" fill="{TEXT}" font-weight="600">{value:.3f}</text>'
             )
             parts.append(
-                f'<text x="{x + bar_width / 2:.1f}" y="{plot_y + plot_height + 32}" text-anchor="middle" font-size="13" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}">{escape(label)}</text>'
+                f'<text x="{x + bar_width / 2:.1f}" y="{plot_y + plot_height + 42}" text-anchor="middle" font-size="18" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="600">{escape(label)}</text>'
             )
         parts.append("</svg>\n")
         destination.write_text("".join(parts), encoding="utf-8")
@@ -274,25 +291,27 @@ def write_timing_stage_overview(timing: pd.DataFrame, destination: Path) -> None
         return
     stage_order = [
         "smiles_csv_to_string",
+        "moladt_csv_to_moladt",
         "smiles_to_json",
+        "moladt_to_json",
         "sdf_to_moladt",
         "sdf_to_smiles",
-        "moladt_to_json",
         "json_to_moladt",
+        "json_to_smiles",
     ]
     order_index = {stage: index for index, stage in enumerate(stage_order)}
     rows = timing.copy()
     rows["_order"] = rows["stage"].map(order_index).fillna(len(stage_order)).astype(int)
     rows = rows.sort_values(["_order", "stage"]).reset_index(drop=True)
-    row_height = 74
-    card_width = 980
+    row_height = 86
+    card_width = 1120
     card_height = 110 + len(rows) * row_height
     x0 = 24
     y0 = 24
     total_width = card_width + 48
     total_height = card_height + 48
-    chart_x = x0 + 374
-    chart_width = 510
+    chart_x = x0 + 420
+    chart_width = 560
     max_rate = max(float(rows["molecules_per_second"].max()), 1e-6) * 1.1
     positive_rates = [float(value) for value in rows["molecules_per_second"] if float(value) > 0.0]
     min_rate = min(positive_rates) if positive_rates else 1.0
@@ -317,7 +336,7 @@ def write_timing_stage_overview(timing: pd.DataFrame, destination: Path) -> None
     )
     parts.append(f'<text x="{x0 + 24}" y="{y0 + 36}" font-size="24" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="700">Timing Throughput</text>')
     parts.append(
-        f'<text x="{chart_x}" y="{y0 + 62}" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="600">'
+        f'<text x="{chart_x}" y="{y0 + 62}" font-size="13" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="600">'
         "Throughput (molecules / second, log scale; farther right is faster)"
         "</text>"
     )
@@ -336,8 +355,8 @@ def write_timing_stage_overview(timing: pd.DataFrame, destination: Path) -> None
         display_label = str(meta.get("label", stage))
         owner = str(meta.get("owner", "Local stage"))
         owner_color = TIMING_OWNER_COLORS.get(owner, TIMING)
-        parts.append(f'<text x="{x0 + 24}" y="{y + 20}" font-size="16" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="600">{escape(display_label)}</text>')
-        parts.append(f'<text x="{x0 + 24}" y="{y + 38}" font-size="11" font-family="Helvetica, Arial, sans-serif" fill="{owner_color}">{escape(owner)}</text>')
+        parts.append(f'<text x="{x0 + 24}" y="{y + 22}" font-size="20" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="600">{escape(display_label)}</text>')
+        parts.append(f'<text x="{x0 + 24}" y="{y + 45}" font-size="15" font-family="Helvetica, Arial, sans-serif" fill="{owner_color}" font-weight="600">{escape(owner)}</text>')
         rate = float(row["molecules_per_second"])
         bar_end_x = rate_to_x(rate) if rate > 0.0 else chart_x
         bar_width = max(3.0, bar_end_x - chart_x) if float(row["molecules_per_second"]) > 0.0 else 0.0
@@ -347,7 +366,7 @@ def write_timing_stage_overview(timing: pd.DataFrame, destination: Path) -> None
                 f'<rect x="{chart_x}" y="{y + 6}" width="{bar_width:.1f}" height="18" rx="{BAR_RADIUS}" fill="{owner_color}" opacity="0.92" />'
             )
         parts.append(
-            f'<text x="{chart_x + chart_width + 14}" y="{y + 20}" font-size="12" font-family="Menlo, Consolas, monospace" fill="{TEXT}">{rate:.1f} mol/s</text>'
+            f'<text x="{x0 + card_width - 20}" y="{y + 20}" text-anchor="end" font-size="14" font-family="Menlo, Consolas, monospace" fill="{TEXT}">{rate:.1f} mol/s</text>'
         )
     parts.append("</svg>\n")
     ensure_directory(destination.parent)
@@ -356,7 +375,7 @@ def write_timing_stage_overview(timing: pd.DataFrame, destination: Path) -> None
         destination.with_name("caption.txt"),
         (
             "ZINC timing benchmark on the matched local timing corpus. "
-            "Stages are SMILES CSV to string, SMILES to JSON, SDF to MolADT, SDF to SMILES, MolADT to JSON, and JSON to MolADT. "
+            "Stages are SMILES CSV to string, MolADT CSV to MolADT, SMILES to JSON, MolADT to JSON, SDF to MolADT, SDF to SMILES, JSON to MolADT, and JSON to SMILES. "
             "Bars show throughput in molecules per second on a log scale, so farther right is faster. "
             "The matched corpus is prepared once from the normalized ZINC source CSV and reused across all timed stages."
         ),

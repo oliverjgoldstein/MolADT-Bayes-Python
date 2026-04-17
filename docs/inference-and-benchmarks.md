@@ -81,14 +81,16 @@ Source links:
 
 `make timing` is not the same question as the predictive benchmark.
 
-With the default `paper` preset, it writes a ZINC timing bundle under `results/timing/paper/run_<timestamp>/`. If you override the preset away from `paper`, the path becomes `results/timing/run_<timestamp>/`. The timing bundle reports the fixed six-stage SMILES-vs-MolADT comparison:
+With the default `paper` preset, it writes a ZINC timing bundle under `results/timing/paper/run_<timestamp>/`. If you override the preset away from `paper`, the path becomes `results/timing/run_<timestamp>/`. The timing bundle reports the fixed eight-stage SMILES-vs-MolADT comparison:
 
 - raw SMILES CSV row reads
+- cached `MolADT CSV -> MolADT`
 - `SMILES -> JSON`
 - cached `SDF -> MolADT`
 - cached `SDF -> SMILES`
 - local MolADT JSON serialization
 - local MolADT JSON decoding
+- local JSON-to-SMILES rendering
 
 Treat it as an interoperability and runtime benchmark, not as the main model comparison. The timing SVG uses a log throughput axis so large stage gaps remain readable without overlapping labels.
 

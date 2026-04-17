@@ -14,6 +14,8 @@ from moladt.io.smiles import parse_smiles
 
 from scripts.benchmark_zinc import (
     _load_smiles_rows_with_timing,
+    _measure_json_to_smiles,
+    _measure_moladt_csv_to_moladt,
     _measure_smiles_to_json,
     _measure_json_to_moladt,
     _measure_moladt_to_json,
@@ -576,6 +578,7 @@ def test_prepare_timing_library_creates_matched_local_corpus(tmp_path, monkeypat
 
     assert library.manifest_path.exists()
     assert library.smiles_csv_path.exists()
+    assert library.moladt_csv_path.exists()
     assert len(manifest) == 2
     assert stage.stage == "timing_corpus_prepare"
     assert stage.success_count == 2
@@ -603,6 +606,11 @@ def test_timing_library_parse_stages_succeed_on_matched_entries(tmp_path, monkey
         dataset_size="demo",
         dataset_dimension="3D",
         limit=None,
+    )
+    moladt_csv_items, moladt_csv_stage = _measure_moladt_csv_to_moladt(
+        library.moladt_csv_path,
+        dataset_size="demo",
+        dataset_dimension="3D",
     )
     smiles_json_items, smiles_json_stage = _measure_smiles_to_json(
         rows,
@@ -634,26 +642,37 @@ def test_timing_library_parse_stages_succeed_on_matched_entries(tmp_path, monkey
         dataset_size="demo",
         dataset_dimension="3D",
     )
+    json_smiles_items, json_smiles_stage = _measure_json_to_smiles(
+        json_payloads,
+        dataset_size="demo",
+        dataset_dimension="3D",
+    )
 
     assert read_stage.failure_count == 0
+    assert moladt_csv_stage.failure_count == 0
     assert smiles_json_stage.failure_count == 0
     assert sdf_stage.failure_count == 0
     assert sdf_smiles_stage.failure_count == 0
     assert json_stage.failure_count == 0
     assert json_roundtrip_stage.failure_count == 0
+    assert json_smiles_stage.failure_count == 0
     assert len(rows) == len(manifest)
+    assert len(moladt_csv_items) == len(manifest)
     assert len(smiles_json_items) == len(manifest)
     assert len(molecules) == len(manifest)
     assert len(json_payloads) == len(manifest)
+    assert all(item.success for item in moladt_csv_items)
     assert all(item.success for item in smiles_json_items)
     assert len(sdf_items) == len(manifest)
     assert len(sdf_smiles_items) == len(manifest)
     assert len(json_items) == len(manifest)
     assert len(json_roundtrip_items) == len(manifest)
+    assert len(json_smiles_items) == len(manifest)
     assert all(item.success for item in sdf_items)
     assert all(item.success for item in sdf_smiles_items)
     assert all(item.success for item in json_items)
     assert all(item.success for item in json_roundtrip_items)
+    assert all(item.success for item in json_smiles_items)
 
 
 def test_process_freesolv_creates_processed_directory_before_writing(tmp_path, monkeypatch) -> None:
