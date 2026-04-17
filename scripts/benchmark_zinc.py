@@ -100,7 +100,7 @@ def run_zinc_benchmark(
     force: bool = False,
     verbose: bool = False,
 ) -> list[TimingStageResult]:
-    total_stages = 5
+    total_stages = 6
     downloads = download_zinc(dataset_size=dataset_size, dataset_dimension=dataset_dimension, force=force)
     actual_dimension = downloads.dataset_dimension
     library, _ = _prepare_timing_library(
@@ -118,7 +118,7 @@ def run_zinc_benchmark(
             f"(dataset_size={dataset_size}, dataset_dimension={actual_dimension}, limit={limit})"
         )
         if not include_moladt:
-            log("Timing benchmark now runs the fixed five-stage paper path; --include-moladt is retained only for CLI compatibility.")
+            log("Timing benchmark now runs the fixed six-stage paper path; --include-moladt is retained only for CLI compatibility.")
         log(f"Results directory: {display_path(RESULTS_DIR)}")
         log(f"[zinc] timing library root: {display_path(library.library_root)}")
         log_stage("zinc", 1, total_stages, f"Reading matched SMILES CSV rows into strings (rows={len(manifest)})")
@@ -132,7 +132,18 @@ def run_zinc_benchmark(
     stages = [smiles_stage]
     if verbose:
         _log_stage_result(smiles_stage, stage_index=1, total_stages=total_stages)
-        log_stage("zinc", 2, total_stages, f"Parsing matched SDF files into MolADT (records={len(manifest)})")
+        log_stage("zinc", 2, total_stages, f"Parsing matched SMILES rows and serializing JSON payloads (rows={len(source_rows)})")
+    smiles_json_item_rows, smiles_to_json_stage = _measure_smiles_to_json(
+        source_rows,
+        dataset_size=dataset_size,
+        dataset_dimension=actual_dimension,
+        source_path=library.smiles_csv_path,
+        verbose=verbose,
+    )
+    stages.append(smiles_to_json_stage)
+    if verbose:
+        _log_stage_result(smiles_to_json_stage, stage_index=2, total_stages=total_stages)
+        log_stage("zinc", 3, total_stages, f"Parsing matched SDF files into MolADT (records={len(manifest)})")
     sdf_molecules, sdf_item_rows, sdf_stage = _measure_sdf_to_moladt(
         library,
         manifest=manifest,
@@ -142,8 +153,8 @@ def run_zinc_benchmark(
     )
     stages.append(sdf_stage)
     if verbose:
-        _log_stage_result(sdf_stage, stage_index=2, total_stages=total_stages)
-        log_stage("zinc", 3, total_stages, f"Reading cached SDF files and rendering SMILES (records={len(manifest)})")
+        _log_stage_result(sdf_stage, stage_index=3, total_stages=total_stages)
+        log_stage("zinc", 4, total_stages, f"Reading cached SDF files and rendering SMILES (records={len(manifest)})")
     sdf_smiles_item_rows, sdf_to_smiles_stage = _measure_sdf_to_smiles(
         library,
         manifest=manifest,
@@ -153,8 +164,8 @@ def run_zinc_benchmark(
     )
     stages.append(sdf_to_smiles_stage)
     if verbose:
-        _log_stage_result(sdf_to_smiles_stage, stage_index=3, total_stages=total_stages)
-        log_stage("zinc", 4, total_stages, f"Serializing MolADT objects to JSON (records={len(sdf_molecules)})")
+        _log_stage_result(sdf_to_smiles_stage, stage_index=4, total_stages=total_stages)
+        log_stage("zinc", 5, total_stages, f"Serializing MolADT objects to JSON (records={len(sdf_molecules)})")
     json_payloads, json_item_rows, json_stage = _measure_moladt_to_json(
         sdf_molecules,
         dataset_size=dataset_size,
@@ -164,8 +175,8 @@ def run_zinc_benchmark(
     )
     stages.append(json_stage)
     if verbose:
-        _log_stage_result(json_stage, stage_index=4, total_stages=total_stages)
-        log_stage("zinc", 5, total_stages, f"Decoding JSON files back into MolADT (records={len(json_payloads)})")
+        _log_stage_result(json_stage, stage_index=5, total_stages=total_stages)
+        log_stage("zinc", 6, total_stages, f"Decoding JSON files back into MolADT (records={len(json_payloads)})")
     json_roundtrip_rows, json_to_moladt_stage = _measure_json_to_moladt(
         json_payloads,
         dataset_size=dataset_size,
@@ -174,7 +185,7 @@ def run_zinc_benchmark(
     )
     stages.append(json_to_moladt_stage)
     if verbose:
-        _log_stage_result(json_to_moladt_stage, stage_index=5, total_stages=total_stages)
+        _log_stage_result(json_to_moladt_stage, stage_index=6, total_stages=total_stages)
 
     details_dir = ensure_directory(RESULTS_DIR / "details")
     results_frame = pd.DataFrame([stage.to_dict() for stage in stages])
@@ -183,7 +194,7 @@ def run_zinc_benchmark(
     item_frame = pd.DataFrame(
         [
             row.to_dict()
-            for row in sdf_item_rows + sdf_smiles_item_rows + json_item_rows + json_roundtrip_rows
+            for row in smiles_json_item_rows + sdf_item_rows + sdf_smiles_item_rows + json_item_rows + json_roundtrip_rows
         ]
     )
     items_csv = details_dir / "zinc_timing_items.csv"
@@ -302,7 +313,7 @@ def _prepare_timing_library(
         dataset_size=dataset_size,
         dataset_dimension=dataset_dimension,
         stage="timing_corpus_prepare",
-        description="Built the matched timing corpus used by the five-stage paper benchmark: a SMILES CSV plus cached SDF files.",
+        description="Built the matched timing corpus used by the six-stage paper benchmark: a SMILES CSV plus cached SDF files.",
         source_path=str(source_path),
         molecule_count=len(source_rows),
         success_count=success_count,
@@ -430,6 +441,77 @@ def _load_smiles_rows_with_timing(
 
 def _read_timing_library_manifest(library: TimingLibraryPaths) -> pd.DataFrame:
     return pd.read_csv(library.manifest_path)
+
+
+def _measure_smiles_to_json(
+    source_rows: list[TimingSourceEntry],
+    *,
+    dataset_size: str,
+    dataset_dimension: str,
+    source_path: Path,
+    verbose: bool = False,
+) -> tuple[list[TimingItemResult], TimingStageResult]:
+    latencies: list[float] = []
+    item_rows: list[TimingItemResult] = []
+    success_count = 0
+    failure_count = 0
+    process = psutil.Process()
+    peak_rss = process.memory_info().rss
+    start_total = time.perf_counter()
+    for row_index, entry in enumerate(source_rows, start=1):
+        start_item = time.perf_counter_ns()
+        error = ""
+        success = True
+        try:
+            payload = molecule_to_json_bytes(parse_smiles(entry.smiles))
+            payload_size_bytes = len(payload)
+        except Exception as exc:
+            success = False
+            error = str(exc)
+            payload_size_bytes = entry.item_size_bytes
+        if success:
+            success_count += 1
+        else:
+            failure_count += 1
+        latency_us = (time.perf_counter_ns() - start_item) / 1_000.0
+        latencies.append(latency_us)
+        item_rows.append(
+            TimingItemResult(
+                dataset_size=dataset_size,
+                dataset_dimension=dataset_dimension,
+                stage="smiles_to_json",
+                mol_id=entry.mol_id,
+                item_kind="smiles_row",
+                item_path=f"{source_path}:{entry.source_index}",
+                item_size_bytes=payload_size_bytes,
+                success=success,
+                latency_us=latency_us,
+                error=error,
+            )
+        )
+        if verbose and row_index % 500 == 0:
+            peak_rss = max(peak_rss, process.memory_info().rss)
+            log(
+                f"[zinc] smiles_to_json rows={format_progress(row_index, len(source_rows))} "
+                f"success={success_count} failure={failure_count}"
+            )
+    elapsed = time.perf_counter() - start_total
+    stage = TimingStageResult(
+        dataset_size=dataset_size,
+        dataset_dimension=dataset_dimension,
+        stage="smiles_to_json",
+        description="Parse matched SMILES strings into MolADT and serialize the result to JSON payloads.",
+        source_path=str(source_path),
+        molecule_count=len(source_rows),
+        success_count=success_count,
+        failure_count=failure_count,
+        total_runtime_seconds=elapsed,
+        molecules_per_second=(len(source_rows) / elapsed) if elapsed > 0 else 0.0,
+        median_latency_us=_median(latencies),
+        p95_latency_us=_percentile(latencies, 95.0),
+        peak_rss_mb=peak_rss / (1024.0 * 1024.0),
+    )
+    return item_rows, stage
 
 
 def _measure_sdf_to_moladt(

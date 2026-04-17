@@ -14,6 +14,7 @@ from moladt.io.smiles import parse_smiles
 
 from scripts.benchmark_zinc import (
     _load_smiles_rows_with_timing,
+    _measure_smiles_to_json,
     _measure_json_to_moladt,
     _measure_moladt_to_json,
     _measure_sdf_to_moladt,
@@ -603,6 +604,12 @@ def test_timing_library_parse_stages_succeed_on_matched_entries(tmp_path, monkey
         dataset_dimension="3D",
         limit=None,
     )
+    smiles_json_items, smiles_json_stage = _measure_smiles_to_json(
+        rows,
+        dataset_size="demo",
+        dataset_dimension="3D",
+        source_path=library.smiles_csv_path,
+    )
     manifest = _read_timing_library_manifest(library)
     molecules, sdf_items, sdf_stage = _measure_sdf_to_moladt(
         library,
@@ -629,13 +636,16 @@ def test_timing_library_parse_stages_succeed_on_matched_entries(tmp_path, monkey
     )
 
     assert read_stage.failure_count == 0
+    assert smiles_json_stage.failure_count == 0
     assert sdf_stage.failure_count == 0
     assert sdf_smiles_stage.failure_count == 0
     assert json_stage.failure_count == 0
     assert json_roundtrip_stage.failure_count == 0
     assert len(rows) == len(manifest)
+    assert len(smiles_json_items) == len(manifest)
     assert len(molecules) == len(manifest)
     assert len(json_payloads) == len(manifest)
+    assert all(item.success for item in smiles_json_items)
     assert len(sdf_items) == len(manifest)
     assert len(sdf_smiles_items) == len(manifest)
     assert len(json_items) == len(manifest)

@@ -36,6 +36,7 @@ SERIES_COLORS = {
 }
 TIMING_OWNER_COLORS = {
     "CSV baseline": "#1d4ed8",
+    "Text boundary": "#7c3aed",
     "Boundary parse": "#0f766e",
     "Boundary render": "#92400e",
     "Serialization": "#b45309",
@@ -46,6 +47,11 @@ TIMING_STAGE_META = {
         "label": "SMILES CSV -> string",
         "owner": "CSV baseline",
         "description": "Reads matched SMILES CSV rows into Python strings.",
+    },
+    "smiles_to_json": {
+        "label": "SMILES -> JSON",
+        "owner": "Text boundary",
+        "description": "Parses matched SMILES strings into MolADT and serializes them to JSON payloads.",
     },
     "sdf_to_moladt": {
         "label": "SDF -> MolADT",
@@ -268,6 +274,7 @@ def write_timing_stage_overview(timing: pd.DataFrame, destination: Path) -> None
         return
     stage_order = [
         "smiles_csv_to_string",
+        "smiles_to_json",
         "sdf_to_moladt",
         "sdf_to_smiles",
         "moladt_to_json",
@@ -349,7 +356,7 @@ def write_timing_stage_overview(timing: pd.DataFrame, destination: Path) -> None
         destination.with_name("caption.txt"),
         (
             "ZINC timing benchmark on the matched local timing corpus. "
-            "Stages are SMILES CSV to string, SDF to MolADT, SDF to SMILES, MolADT to JSON, and JSON to MolADT. "
+            "Stages are SMILES CSV to string, SMILES to JSON, SDF to MolADT, SDF to SMILES, MolADT to JSON, and JSON to MolADT. "
             "Bars show throughput in molecules per second on a log scale, so farther right is faster. "
             "The matched corpus is prepared once from the normalized ZINC source CSV and reused across all timed stages."
         ),

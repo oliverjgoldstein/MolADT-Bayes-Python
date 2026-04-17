@@ -1316,7 +1316,7 @@ def _write_timing_report(timing: pd.DataFrame) -> None:
             lines.append("")
             lines.append("## Slowest Timed Items")
             lines.append("")
-            for stage_name in ("sdf_to_moladt", "sdf_to_smiles", "moladt_to_json", "json_to_moladt"):
+            for stage_name in ("smiles_to_json", "sdf_to_moladt", "sdf_to_smiles", "moladt_to_json", "json_to_moladt"):
                 stage_items = items.loc[items["stage"] == stage_name].sort_values("latency_us", ascending=False).head(5)
                 if stage_items.empty:
                     continue

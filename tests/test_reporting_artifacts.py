@@ -536,6 +536,18 @@ def test_timing_stage_overview_writes_svg(tmp_path) -> None:
                 "peak_rss_mb": 12.0,
             },
             {
+                "stage": "smiles_to_json",
+                "description": "Parse SMILES strings and serialize JSON payloads.",
+                "molecule_count": 100,
+                "success_count": 100,
+                "failure_count": 0,
+                "total_runtime_seconds": 0.7,
+                "molecules_per_second": 142.9,
+                "median_latency_us": 9.0,
+                "p95_latency_us": 16.0,
+                "peak_rss_mb": 13.0,
+            },
+            {
                 "stage": "sdf_to_moladt",
                 "description": "Parse SDF files into MolADT objects.",
                 "molecule_count": 100,
@@ -592,11 +604,13 @@ def test_timing_stage_overview_writes_svg(tmp_path) -> None:
     caption = (tmp_path / "caption.txt").read_text(encoding="utf-8")
     assert "Timing Throughput" in svg
     assert "SMILES CSV -&gt; string" in svg
+    assert "SMILES -&gt; JSON" in svg
     assert "SDF -&gt; MolADT" in svg
     assert "SDF -&gt; SMILES" in svg
     assert "MolADT -&gt; JSON" in svg
     assert "JSON -&gt; MolADT" in svg
     assert "matched local timing corpus" in caption
+    assert "SMILES to JSON" in caption
     assert "SDF to SMILES" in caption
 
 
