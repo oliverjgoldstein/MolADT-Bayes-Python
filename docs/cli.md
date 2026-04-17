@@ -78,10 +78,9 @@ Current rejection messages come directly from the SMILES renderer, for example:
 ./.venv/bin/python -m moladt.cli pretty-example ferrocene
 ./.venv/bin/python -m moladt.cli pretty-example diborane
 ./.venv/bin/python -m moladt.cli pretty-example morphine
-./.venv/bin/python -m moladt.cli pretty-example psilocybin
 ```
 
-This command loads named built-in examples from [`moladt/examples/manuscript.py`](../moladt/examples/manuscript.py), validates them, and prints the manuscript-facing pretty rendering. It currently supports `ferrocene`, `diborane`, `morphine`, and `psilocybin`.
+This command loads named built-in examples from [`moladt/examples/manuscript.py`](../moladt/examples/manuscript.py), validates them, and prints the manuscript-facing pretty rendering. It currently supports `ferrocene`, `diborane`, and `morphine`.
 
 ## How the Commands Differ
 

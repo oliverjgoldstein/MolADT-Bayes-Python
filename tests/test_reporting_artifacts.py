@@ -7,6 +7,8 @@ import pytest
 from scripts.literature_baselines import literature_baselines_frame
 from scripts.report_graphs import write_moleculenet_comparison_overviews, write_timing_stage_overview
 from scripts.run_all import (
+    _attach_moleculenet_uncertainty,
+    _build_freesolv_bayesian_artifact,
     _build_generalization_frame,
     _build_moleculenet_comparison_frame,
     _build_simple_review_frame,
@@ -262,6 +264,85 @@ def test_moleculenet_comparison_graphs_write_expected_svg_files(tmp_path) -> Non
     assert "DTNN" in qm9_svg
 
 
+def test_attach_moleculenet_uncertainty_adds_freesolv_intervals() -> None:
+    comparison = pd.DataFrame(
+        [
+            {
+                "dataset": "freesolv",
+                "dataset_label": "FreeSolv",
+                "representation": "moladt_featurized",
+                "metric_name": "RMSE",
+                "train_value": 0.510,
+                "valid_value": 1.127,
+                "test_value": 0.738,
+                "local_value": 0.738,
+                "paper_value": 1.150,
+                "model": "bayes_gp_rbf_screened",
+                "method": "laplace",
+                "selection_split": "valid",
+                "paper_model_name": "MPNN",
+                "note": "Local split differs from the paper split.",
+            }
+        ]
+    )
+    predictions = pd.DataFrame(
+        [
+            {"dataset": "freesolv", "representation": "moladt_featurized", "model": "bayes_gp_rbf_screened", "method": "laplace", "split": "train", "actual": 0.0, "predicted_mean": 0.0, "predictive_sd": 0.2},
+            {"dataset": "freesolv", "representation": "moladt_featurized", "model": "bayes_gp_rbf_screened", "method": "laplace", "split": "train", "actual": 1.0, "predicted_mean": 1.0, "predictive_sd": 0.2},
+            {"dataset": "freesolv", "representation": "moladt_featurized", "model": "bayes_gp_rbf_screened", "method": "laplace", "split": "valid", "actual": 0.0, "predicted_mean": 0.2, "predictive_sd": 0.3},
+            {"dataset": "freesolv", "representation": "moladt_featurized", "model": "bayes_gp_rbf_screened", "method": "laplace", "split": "valid", "actual": 1.0, "predicted_mean": 0.9, "predictive_sd": 0.3},
+            {"dataset": "freesolv", "representation": "moladt_featurized", "model": "bayes_gp_rbf_screened", "method": "laplace", "split": "test", "actual": 0.0, "predicted_mean": 0.1, "predictive_sd": 0.25},
+            {"dataset": "freesolv", "representation": "moladt_featurized", "model": "bayes_gp_rbf_screened", "method": "laplace", "split": "test", "actual": 1.0, "predicted_mean": 1.1, "predictive_sd": 0.25},
+        ]
+    )
+
+    enriched = _attach_moleculenet_uncertainty(comparison, predictions_frame=predictions)
+
+    row = enriched.iloc[0]
+    assert row["train_interval_high"] > row["train_interval_low"]
+    assert row["valid_interval_high"] > row["valid_interval_low"]
+    assert row["test_interval_high"] > row["test_interval_low"]
+
+
+def test_freesolv_graph_writes_uncertainty_bar_markup(tmp_path) -> None:
+    comparison = pd.DataFrame(
+        [
+            {
+                "dataset": "freesolv",
+                "dataset_label": "FreeSolv",
+                "representation": "moladt_featurized",
+                "metric_name": "RMSE",
+                "train_value": 0.510,
+                "valid_value": 1.127,
+                "test_value": 0.738,
+                "local_value": 0.738,
+                "paper_value": 1.150,
+                "train_interval_low": 0.540,
+                "train_interval_high": 0.810,
+                "valid_interval_low": 1.180,
+                "valid_interval_high": 1.520,
+                "test_interval_low": 0.790,
+                "test_interval_high": 1.060,
+                "model": "bayes_gp_rbf_screened",
+                "method": "laplace",
+                "selection_split": "valid",
+                "paper_model_name": "MPNN",
+                "paper_source_title": "MoleculeNet: a benchmark for molecular machine learning",
+                "note": "Local split differs from the paper split.",
+            }
+        ]
+    )
+
+    write_moleculenet_comparison_overviews(comparison, tmp_path)
+    freesolv_svg = (tmp_path / "freesolv_rmse_vs_moleculenet.svg").read_text(encoding="utf-8")
+
+    assert 'data-uncertainty="Training"' in freesolv_svg
+    assert 'data-uncertainty="Validation"' in freesolv_svg
+    assert 'data-uncertainty="Test"' in freesolv_svg
+    assert "posterior predictive RMSE" in freesolv_svg
+    assert "Stan fit" in freesolv_svg
+
+
 def test_qm9_graph_keeps_training_and_test_values_in_their_own_bars(tmp_path) -> None:
     review = pd.DataFrame(
         [
@@ -298,6 +379,135 @@ def test_qm9_graph_keeps_training_and_test_values_in_their_own_bars(tmp_path) ->
     assert ">0.333</text>" in qm9_svg
     assert ">0.222</text>" not in qm9_svg
     assert qm9_svg.index(">0.111</text>") < qm9_svg.index(">0.333</text>")
+
+
+def test_build_freesolv_bayesian_artifact_formats_uncertainty_and_model_text() -> None:
+    review = pd.DataFrame(
+        [
+            {
+                "dataset": "freesolv",
+                "representation": "moladt_featurized",
+                "model": "bayes_gp_rbf_screened",
+                "method": "laplace",
+                "split_scheme": "fractional:0.800/0.100/0.100",
+                "train_n_eval": 513,
+                "valid_n_eval": 64,
+                "test_n_eval": 65,
+            }
+        ]
+    )
+    metrics = pd.DataFrame(
+        [
+            {
+                "dataset": "freesolv",
+                "representation": "moladt_featurized",
+                "model": "bayes_gp_rbf_screened",
+                "method": "laplace",
+                "split": "train",
+                "n_eval": 513,
+                "rmse": 0.510,
+                "mae": 0.330,
+                "r2": 0.980,
+                "predictive_sd_mean": 0.145,
+                "coverage_90": 0.912,
+                "mean_log_predictive_density": -0.440,
+                "draw_count": 2000,
+                "runtime_seconds": 77.5,
+            },
+            {
+                "dataset": "freesolv",
+                "representation": "moladt_featurized",
+                "model": "bayes_gp_rbf_screened",
+                "method": "laplace",
+                "split": "valid",
+                "n_eval": 64,
+                "rmse": 1.127,
+                "mae": 0.812,
+                "r2": 0.950,
+                "predictive_sd_mean": 0.201,
+                "coverage_90": 0.844,
+                "mean_log_predictive_density": -1.102,
+                "draw_count": 2000,
+                "runtime_seconds": 77.5,
+            },
+            {
+                "dataset": "freesolv",
+                "representation": "moladt_featurized",
+                "model": "bayes_gp_rbf_screened",
+                "method": "laplace",
+                "split": "test",
+                "n_eval": 65,
+                "rmse": 0.738,
+                "mae": 0.530,
+                "r2": 0.941,
+                "predictive_sd_mean": 0.212,
+                "coverage_90": 0.877,
+                "mean_log_predictive_density": -0.691,
+                "draw_count": 2000,
+                "runtime_seconds": 77.5,
+            },
+        ]
+    )
+    coefficients = pd.DataFrame(
+        [
+            {
+                "dataset": "freesolv",
+                "representation": "moladt_featurized",
+                "model": "bayes_gp_rbf_screened",
+                "method": "laplace",
+                "parameter_name": "alpha",
+                "posterior_mean": 0.111111,
+                "posterior_sd": 0.010000,
+                "posterior_p05": 0.095000,
+                "posterior_p95": 0.128000,
+            },
+            {
+                "dataset": "freesolv",
+                "representation": "moladt_featurized",
+                "model": "bayes_gp_rbf_screened",
+                "method": "laplace",
+                "parameter_name": "signal_scale",
+                "posterior_mean": 1.234567,
+                "posterior_sd": 0.050000,
+                "posterior_p05": 1.160000,
+                "posterior_p95": 1.320000,
+            },
+            {
+                "dataset": "freesolv",
+                "representation": "moladt_featurized",
+                "model": "bayes_gp_rbf_screened",
+                "method": "laplace",
+                "parameter_name": "lengthscale",
+                "posterior_mean": 2.345678,
+                "posterior_sd": 0.080000,
+                "posterior_p05": 2.220000,
+                "posterior_p95": 2.480000,
+            },
+            {
+                "dataset": "freesolv",
+                "representation": "moladt_featurized",
+                "model": "bayes_gp_rbf_screened",
+                "method": "laplace",
+                "parameter_name": "sigma",
+                "posterior_mean": 0.222222,
+                "posterior_sd": 0.020000,
+                "posterior_p05": 0.190000,
+                "posterior_p95": 0.255000,
+            },
+        ]
+    )
+
+    artifact = _build_freesolv_bayesian_artifact(review, metrics, coefficients)
+
+    assert artifact is not None
+    uncertainty = artifact["uncertainty_frame"]
+    assert list(uncertainty["split"].astype(str)) == ["train", "test"]
+    assert "Train/test predictive uncertainty" in artifact["model_text"]
+    assert "Posterior hyperparameters" in artifact["model_text"]
+    assert "signal_scale = 1.234567" in artifact["model_text"]
+    assert "lengthscale = 2.345678" in artifact["model_text"]
+    assert "sigma = 0.222222" in artifact["model_text"]
+    assert "coverage_90=0.912" in "\n".join(artifact["summary_lines"])
 
 
 def test_timing_stage_overview_writes_svg(tmp_path) -> None:

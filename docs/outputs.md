@@ -15,6 +15,7 @@ Each predictive run keeps the top level small:
 
 - `results.csv`
 - `freesolv_rmse_vs_moleculenet.svg`
+- `freesolv_bayesian_model.txt`
 - `qm9_mae_vs_moleculenet.svg`
 - `details/`
 
@@ -32,7 +33,7 @@ Each predictive run writes only the two MoleculeNet comparison figures:
 - `freesolv_rmse_vs_moleculenet.svg`
 - `qm9_mae_vs_moleculenet.svg`
 
-The FreeSolv figure shows local `Training`, `Validation`, and `Test` metrics, followed by the cited `Paper` baseline.
+The FreeSolv figure shows local `Training`, `Validation`, and `Test` metrics, followed by the cited `Paper` baseline. The local FreeSolv bars also include posterior predictive RMSE uncertainty bars derived from the selected Stan run.
 The QM9 figure shows local `Training` and `Test` metrics, followed by the cited `Paper` baseline for the `qm9long` ViSNet run on `moladt_featurized_geom`.
 
 ## Other Useful Files
@@ -40,6 +41,7 @@ The QM9 figure shows local `Training` and `Test` metrics, followed by the cited 
 - `details/predictive_metrics.csv`
 - `details/aggregated_predictive_metrics.csv`
 - `details/predictions.csv`
+- `details/freesolv_train_test_uncertainty.csv`
 - `details/moleculenet_comparison.csv`
 
 ## How To Read The Bundle

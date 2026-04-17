@@ -14,14 +14,19 @@ SPLIT_COLORS = {
     "valid": "#059669",
     "test": "#dc2626",
 }
-BACKGROUND = "#fcfbf7"
+BACKGROUND = "#ffffff"
 CARD_FILL = "#ffffff"
-CARD_STROKE = "#d6d3d1"
-TEXT = "#1f2937"
-MUTED = "#6b7280"
+CARD_STROKE = "#cbd5e1"
+TEXT = "#111827"
+MUTED = "#4b5563"
 GRID = "#d1d5db"
 LITERATURE = "#374151"
 TIMING = "#0f766e"
+CARD_RADIUS = 4
+BADGE_RADIUS = 3
+BAR_RADIUS = 0
+PLOT_FILL = "#ffffff"
+TRACK_FILL = "#eef2f7"
 SERIES_COLORS = {
     "smiles": "#b45309",
     "moladt": "#0f766e",
@@ -73,24 +78,41 @@ def write_moleculenet_comparison_overviews(comparison_frame: pd.DataFrame, desti
         valid_value = float(row.get("valid_value", row["local_value"]))
         test_value = float(row.get("test_value", row["local_value"]))
         paper_value = float(row["paper_value"])
+        train_interval = _metric_interval(row, "train")
+        valid_interval = _metric_interval(row, "valid")
+        test_interval = _metric_interval(row, "test")
         selection_split = str(row.get("selection_split", "valid"))
         selection_label = "Validation" if selection_split == "valid" else selection_split.title()
         include_validation_bar = dataset == "freesolv"
-        value_max = max(train_value, valid_value if include_validation_bar else 0.0, test_value, paper_value, 1e-6) * 1.2
+        candidates = [
+            train_value,
+            test_value,
+            paper_value,
+            train_interval[1] if train_interval is not None else train_value,
+            test_interval[1] if test_interval is not None else test_value,
+        ]
+        if include_validation_bar:
+            candidates.extend(
+                [
+                    valid_value,
+                    valid_interval[1] if valid_interval is not None else valid_value,
+                ]
+            )
+        value_max = max(*candidates, 1e-6) * 1.2
         width = 900
         x0 = 28
         y0 = 28
-        bars: list[tuple[str, float, str]] = [("Training", train_value, SPLIT_COLORS["train"])]
+        bars: list[tuple[str, float, str, tuple[float, float] | None]] = [("Training", train_value, SPLIT_COLORS["train"], train_interval)]
         if include_validation_bar:
-            bars.append(("Validation", valid_value, SPLIT_COLORS["valid"]))
+            bars.append(("Validation", valid_value, SPLIT_COLORS["valid"], valid_interval))
         bars.extend(
             [
-                ("Test", test_value, SPLIT_COLORS["test"]),
-                ("Paper", paper_value, SERIES_COLORS["paper"]),
+                ("Test", test_value, SPLIT_COLORS["test"], test_interval),
+                ("Paper", paper_value, SERIES_COLORS["paper"], None),
             ]
         )
         summary_text = (
-            "Local MolADT benchmark run on the FreeSolv split. Bars show training, validation, test, and the cited MoleculeNet Table 3 baseline."
+            "Local MolADT benchmark run on the FreeSolv split. Bars show training, validation, test, and the cited MoleculeNet Table 3 baseline. Error bars show posterior predictive RMSE intervals from the Stan fit."
             if include_validation_bar
             else "Local MolADT benchmark run on the QM9 split. Bars show training, test, and the cited MoleculeNet Table 3 baseline."
         )
@@ -108,17 +130,17 @@ def write_moleculenet_comparison_overviews(comparison_frame: pd.DataFrame, desti
         summary_y = title_y + 28
         header_height = (
             22
-            + max(1, len(summary_lines)) * 18
-            + max(1, len(local_lines)) * 15
-            + max(1, len(selection_lines)) * 15
+            + _text_block_height(summary_lines, 18)
+            + _text_block_height(local_lines, 15)
+            + _text_block_height(selection_lines, 15)
             + 26
         )
         plot_x = x0 + 72
         plot_y = summary_y + header_height
         plot_width = width - 156
         plot_height = 244
-        footer_height = max(1, len(note_lines)) * 14 + 34
-        height = int(plot_y + plot_height + footer_height + y0)
+        note_y = plot_y + plot_height + 56
+        height = int(note_y + _text_block_height(note_lines, 14) + y0)
         card_width = width - 56
         card_height = height - 56
         tick_count = 6
@@ -126,9 +148,11 @@ def write_moleculenet_comparison_overviews(comparison_frame: pd.DataFrame, desti
         bar_width = 118 if len(bars) == 4 else 138
         parts = [_svg_header(width, height)]
         parts.append(f'<rect width="{width}" height="{height}" fill="{BACKGROUND}" />')
-        parts.append(f'<rect x="{x0}" y="{y0}" width="{card_width}" height="{card_height}" rx="22" fill="{CARD_FILL}" stroke="{CARD_STROKE}" stroke-width="1.2" />')
         parts.append(
-            f'<text x="{x0 + 28}" y="{title_y}" font-size="34" font-family="Georgia, serif" fill="{TEXT}" font-weight="700">'
+            f'<rect x="{x0}" y="{y0}" width="{card_width}" height="{card_height}" rx="{CARD_RADIUS}" fill="{CARD_FILL}" stroke="{CARD_STROKE}" stroke-width="1.2" />'
+        )
+        parts.append(
+            f'<text x="{x0 + 28}" y="{title_y}" font-size="34" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="700">'
             f"{escape(str(row['dataset_label']))}: {escape(metric_name)}"
             "</text>"
         )
@@ -167,23 +191,37 @@ def write_moleculenet_comparison_overviews(comparison_frame: pd.DataFrame, desti
             y = plot_y + plot_height - plot_height * fraction
             parts.append(f'<line x1="{plot_x}" y1="{y:.1f}" x2="{plot_x + plot_width}" y2="{y:.1f}" stroke="{GRID}" stroke-width="1" />')
             parts.append(
-                f'<text x="{plot_x - 12}" y="{y + 5:.1f}" text-anchor="end" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">{y_value:.2f}</text>'
+                f'<text x="{plot_x - 12}" y="{y + 5:.1f}" text-anchor="end" font-size="12" font-family="Menlo, Consolas, monospace" fill="{MUTED}">{y_value:.2f}</text>'
             )
         parts.append(f'<line x1="{plot_x}" y1="{plot_y + plot_height}" x2="{plot_x + plot_width}" y2="{plot_y + plot_height}" stroke="{TEXT}" stroke-width="2" />')
         total_bar_width = len(bars) * bar_width + (len(bars) - 1) * bar_gap
         left_pad = plot_x + (plot_width - total_bar_width) / 2
-        for index, (label, value, color) in enumerate(bars):
+        for index, (label, value, color, interval) in enumerate(bars):
             x = left_pad + index * (bar_width + bar_gap)
             bar_height = (value / value_max) * plot_height if value_max > 0 else 0.0
             y = plot_y + plot_height - bar_height
-            parts.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_width}" height="{bar_height:.1f}" rx="18" fill="{color}" opacity="0.94" />')
             parts.append(
-                f'<text x="{x + bar_width / 2:.1f}" y="{y - 14:.1f}" text-anchor="middle" font-size="14" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="600">{value:.3f}</text>'
+                f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_width}" height="{bar_height:.1f}" rx="{BAR_RADIUS}" fill="{color}" opacity="0.94" />'
+            )
+            parts.append(
+                f'<text x="{x + bar_width / 2:.1f}" y="{y - 14:.1f}" text-anchor="middle" font-size="14" font-family="Menlo, Consolas, monospace" fill="{TEXT}" font-weight="600">{value:.3f}</text>'
             )
             parts.append(
                 f'<text x="{x + bar_width / 2:.1f}" y="{plot_y + plot_height + 32}" text-anchor="middle" font-size="13" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}">{escape(label)}</text>'
             )
-        note_y = plot_y + plot_height + 56
+            if interval is not None:
+                interval_low, interval_high = interval
+                top_value = max(value, interval_low)
+                top_y = plot_y + plot_height - (top_value / value_max) * plot_height if value_max > 0 else plot_y + plot_height
+                high_y = plot_y + plot_height - (interval_high / value_max) * plot_height if value_max > 0 else plot_y + plot_height
+                center_x = x + bar_width / 2
+                cap_half_width = 11
+                parts.append(
+                    f'<line x1="{center_x:.1f}" y1="{high_y:.1f}" x2="{center_x:.1f}" y2="{top_y:.1f}" stroke="{TEXT}" stroke-width="1.4" data-uncertainty="{escape(label)}" />'
+                )
+                parts.append(
+                    f'<line x1="{center_x - cap_half_width:.1f}" y1="{high_y:.1f}" x2="{center_x + cap_half_width:.1f}" y2="{high_y:.1f}" stroke="{TEXT}" stroke-width="1.4" data-uncertainty-cap="{escape(label)}" />'
+                )
         _append_wrapped_text(
             parts,
             x=x0 + 28,
@@ -220,7 +258,7 @@ def write_review_rmse_overview(review_frame: pd.DataFrame, destination: Path) ->
 
     parts = [_svg_header(total_width, total_height)]
     parts.append(f'<rect width="{total_width}" height="{total_height}" fill="{BACKGROUND}" />')
-    parts.append(f'<text x="{margin}" y="{margin + 22}" font-size="22" font-family="Georgia, serif" fill="{TEXT}">Best local train/test RMSE against paper context</text>')
+    parts.append(f'<text x="{margin}" y="{margin + 22}" font-size="22" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="700">Best local train/test RMSE against paper context</text>')
     parts.append(
         f'<text x="{margin}" y="{margin + 42}" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">'
         "Each card shows the best descriptor-based Bayesian run for one dataset/representation. "
@@ -262,7 +300,7 @@ def write_inference_sweep_overview(metrics: pd.DataFrame, destination: Path) -> 
 
     parts = [_svg_header(total_width, total_height)]
     parts.append(f'<rect width="{total_width}" height="{total_height}" fill="{BACKGROUND}" />')
-    parts.append(f'<text x="{margin}" y="{margin + 22}" font-size="22" font-family="Georgia, serif" fill="{TEXT}">Inference sweep on local test splits</text>')
+    parts.append(f'<text x="{margin}" y="{margin + 22}" font-size="22" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="700">Inference sweep on local test splits</text>')
     parts.append(
         f'<text x="{margin}" y="{margin + 42}" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">'
         "Each bar is one fitted Stan model and inference-method combination on the test split. Lower RMSE is better."
@@ -331,14 +369,16 @@ def write_timing_stage_overview(timing: pd.DataFrame, destination: Path) -> None
 
     parts = [_svg_header(total_width, total_height)]
     parts.append(f'<rect width="{total_width}" height="{total_height}" fill="{BACKGROUND}" />')
-    parts.append(f'<rect x="{x0}" y="{y0}" width="{card_width}" height="{card_height}" rx="18" fill="{CARD_FILL}" stroke="{CARD_STROKE}" />')
-    parts.append(f'<text x="{x0 + 24}" y="{y0 + 36}" font-size="24" font-family="Georgia, serif" fill="{TEXT}">Local timing overview</text>')
+    parts.append(
+        f'<rect x="{x0}" y="{y0}" width="{card_width}" height="{card_height}" rx="{CARD_RADIUS}" fill="{CARD_FILL}" stroke="{CARD_STROKE}" />'
+    )
+    parts.append(f'<text x="{x0 + 24}" y="{y0 + 36}" font-size="24" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="700">Local timing overview</text>')
     _append_wrapped_text(
         parts,
         x=x0 + 24,
         y=y0 + 62,
         lines=_wrap_text(
-            "This chart separates raw SDF I/O, the local SDF parser, the one-time matched corpus build, and the MolADT file reader.",
+            "This chart separates source SMILES I/O, source SMILES parsing, cached MolADT JSON I/O, and cached MolADT JSON decoding.",
             108,
         ),
         font_size=13,
@@ -367,7 +407,9 @@ def write_timing_stage_overview(timing: pd.DataFrame, destination: Path) -> None
         owner_color = TIMING_OWNER_COLORS.get(owner, TIMING)
         description = str(meta.get("description") or row.get("description", ""))
         badge_width = max(88, min(150, 18 + len(owner) * 6))
-        parts.append(f'<rect x="{x0 + 24}" y="{y - 4}" width="{badge_width}" height="18" rx="9" fill="{owner_color}" opacity="0.12" />')
+        parts.append(
+            f'<rect x="{x0 + 24}" y="{y - 4}" width="{badge_width}" height="18" rx="{BADGE_RADIUS}" fill="{owner_color}" opacity="0.12" />'
+        )
         parts.append(
             f'<text x="{x0 + 24 + badge_width / 2:.1f}" y="{y + 8}" text-anchor="middle" font-size="10" font-family="Helvetica, Arial, sans-serif" fill="{owner_color}" font-weight="600">{escape(owner)}</text>'
         )
@@ -379,11 +421,13 @@ def write_timing_stage_overview(timing: pd.DataFrame, destination: Path) -> None
             )
         bar_end_x = rate_to_x(float(row["molecules_per_second"])) if float(row["molecules_per_second"]) > 0.0 else chart_x
         bar_width = max(3.0, bar_end_x - chart_x) if float(row["molecules_per_second"]) > 0.0 else 0.0
-        parts.append(f'<rect x="{chart_x}" y="{y + 12}" width="{chart_width}" height="16" rx="8" fill="#ece9e1" />')
+        parts.append(f'<rect x="{chart_x}" y="{y + 12}" width="{chart_width}" height="16" rx="{BAR_RADIUS}" fill="{TRACK_FILL}" />')
         if bar_width > 0.0:
-            parts.append(f'<rect x="{chart_x}" y="{y + 12}" width="{bar_width:.1f}" height="16" rx="8" fill="{owner_color}" opacity="0.92" />')
+            parts.append(
+                f'<rect x="{chart_x}" y="{y + 12}" width="{bar_width:.1f}" height="16" rx="{BAR_RADIUS}" fill="{owner_color}" opacity="0.92" />'
+            )
         parts.append(
-            f'<text x="{chart_x + chart_width + 14}" y="{y + 25}" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}">{float(row["molecules_per_second"]):.1f} mol/s</text>'
+            f'<text x="{chart_x + chart_width + 14}" y="{y + 25}" font-size="12" font-family="Menlo, Consolas, monospace" fill="{TEXT}">{float(row["molecules_per_second"]):.1f} mol/s</text>'
         )
         parts.append(
             f'<text x="{chart_x}" y="{y + 50}" font-size="11" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">'
@@ -425,7 +469,7 @@ def write_predicted_vs_actual_overview(predictions: pd.DataFrame, destination: P
 
     parts = [_svg_header(total_width, total_height)]
     parts.append(f'<rect width="{total_width}" height="{total_height}" fill="{BACKGROUND}" />')
-    parts.append(f'<text x="{margin}" y="{margin + 22}" font-size="22" font-family="Georgia, serif" fill="{TEXT}">Predicted vs actual on selected test runs</text>')
+    parts.append(f'<text x="{margin}" y="{margin + 22}" font-size="22" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="700">Predicted vs actual on selected test runs</text>')
     parts.append(
         f'<text x="{margin}" y="{margin + 42}" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">'
         "Each dot is one molecule from the selected test split. The diagonal is perfect prediction."
@@ -479,7 +523,7 @@ def write_residual_vs_uncertainty_overview(predictions: pd.DataFrame, destinatio
 
     parts = [_svg_header(total_width, total_height)]
     parts.append(f'<rect width="{total_width}" height="{total_height}" fill="{BACKGROUND}" />')
-    parts.append(f'<text x="{margin}" y="{margin + 22}" font-size="22" font-family="Georgia, serif" fill="{TEXT}">Residual vs uncertainty on selected test runs</text>')
+    parts.append(f'<text x="{margin}" y="{margin + 22}" font-size="22" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="700">Residual vs uncertainty on selected test runs</text>')
     parts.append(
         f'<text x="{margin}" y="{margin + 42}" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">'
         "X is predictive standard deviation and Y is absolute error. Well-calibrated models should place larger errors on the right."
@@ -532,7 +576,7 @@ def write_calibration_overview(calibration: pd.DataFrame, destination: Path) -> 
 
     parts = [_svg_header(total_width, total_height)]
     parts.append(f'<rect width="{total_width}" height="{total_height}" fill="{BACKGROUND}" />')
-    parts.append(f'<text x="{margin}" y="{margin + 22}" font-size="22" font-family="Georgia, serif" fill="{TEXT}">Coverage calibration on selected test runs</text>')
+    parts.append(f'<text x="{margin}" y="{margin + 22}" font-size="22" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="700">Coverage calibration on selected test runs</text>')
     parts.append(
         f'<text x="{margin}" y="{margin + 42}" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">'
         "The dashed diagonal is perfect calibration. Points below it are overconfident and points above it are conservative."
@@ -591,7 +635,7 @@ def write_metric_comparison_overviews(comparison_frame: pd.DataFrame, destinatio
         parts = [_svg_header(total_width, total_height)]
         parts.append(f'<rect width="{total_width}" height="{total_height}" fill="{BACKGROUND}" />')
         parts.append(
-            f'<text x="{margin}" y="{margin + 22}" font-size="22" font-family="Georgia, serif" fill="{TEXT}">'
+            f'<text x="{margin}" y="{margin + 22}" font-size="22" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="700">'
             f"{escape(_metric_comparison_title(metric_label, str(comparison_key)))}</text>"
         )
         parts.append(
@@ -639,8 +683,8 @@ def _review_rmse_card_svg(row: pd.Series, *, x0: int, y0: int, width: int, heigh
     bar_gap = 22
     left_pad = 16
     parts = [
-        f'<rect x="{x0}" y="{y0}" width="{width}" height="{height}" rx="18" fill="{CARD_FILL}" stroke="{CARD_STROKE}" />',
-        f'<text x="{x0 + 20}" y="{y0 + 28}" font-size="18" font-family="Georgia, serif" fill="{TEXT}">{escape(title)}</text>',
+        f'<rect x="{x0}" y="{y0}" width="{width}" height="{height}" rx="{CARD_RADIUS}" fill="{CARD_FILL}" stroke="{CARD_STROKE}" />',
+        f'<text x="{x0 + 20}" y="{y0 + 28}" font-size="18" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="700">{escape(title)}</text>',
         f'<text x="{x0 + 20}" y="{y0 + 50}" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">{escape(subtitle)}</text>',
         f'<text x="{x0 + 20}" y="{y0 + 66}" font-size="11" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">Blue=train local RMSE, red=test local RMSE, gray=paper context.</text>',
     ]
@@ -656,12 +700,14 @@ def _review_rmse_card_svg(row: pd.Series, *, x0: int, y0: int, width: int, heigh
         bar_height = 0.0 if y_max <= 0 else (value / y_max) * plot_height
         x = plot_x + left_pad + index * (bar_width + bar_gap)
         y = plot_y + plot_height - bar_height
-        parts.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_width}" height="{bar_height:.1f}" fill="{color}" opacity="0.9" />')
+        parts.append(
+            f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_width}" height="{bar_height:.1f}" rx="{BAR_RADIUS}" fill="{color}" opacity="0.9" />'
+        )
         parts.append(
             f'<text x="{x + bar_width / 2:.1f}" y="{plot_y + plot_height + 18}" text-anchor="middle" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}">{escape(label)}</text>'
         )
         parts.append(
-            f'<text x="{x + bar_width / 2:.1f}" y="{y - 8:.1f}" text-anchor="middle" font-size="11" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}">{value:.3f}</text>'
+            f'<text x="{x + bar_width / 2:.1f}" y="{y - 8:.1f}" text-anchor="middle" font-size="11" font-family="Menlo, Consolas, monospace" fill="{TEXT}">{value:.3f}</text>'
         )
     parts.append(
         f'<text x="{x0 + 20}" y="{y0 + 222}" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}">RMSE gap (test - train): {float(row["test_minus_train_rmse"]):+.3f}</text>'
@@ -698,8 +744,8 @@ def _inference_sweep_card_svg(
     train_count = int(frame.iloc[0]["n_train"])
     test_count = int(frame.iloc[0]["n_eval"])
     parts = [
-        f'<rect x="{x0}" y="{y0}" width="{width}" height="{height}" rx="18" fill="{CARD_FILL}" stroke="{CARD_STROKE}" />',
-        f'<text x="{x0 + 20}" y="{y0 + 28}" font-size="18" font-family="Georgia, serif" fill="{TEXT}">{escape(dataset)} / {escape(representation)}</text>',
+        f'<rect x="{x0}" y="{y0}" width="{width}" height="{height}" rx="{CARD_RADIUS}" fill="{CARD_FILL}" stroke="{CARD_STROKE}" />',
+        f'<text x="{x0 + 20}" y="{y0 + 28}" font-size="18" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="700">{escape(dataset)} / {escape(representation)}</text>',
         f'<text x="{x0 + 20}" y="{y0 + 48}" font-size="11" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">test rows sorted by RMSE; train={train_count}, test={test_count}, split={escape(split_scheme)}</text>',
     ]
     for row_index, (_, row) in enumerate(frame.iterrows()):
@@ -707,10 +753,10 @@ def _inference_sweep_card_svg(
         bar_width = 0.0 if rmse_max <= 0 else chart_width * (float(row["rmse"]) / rmse_max)
         label = f"{row['model']} / {row['method']}"
         parts.append(f'<text x="{left_label_x}" y="{y + 12}" font-size="10" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}">{escape(label)}</text>')
-        parts.append(f'<rect x="{chart_x}" y="{y}" width="{chart_width}" height="14" rx="7" fill="#e7e5e4" />')
-        parts.append(f'<rect x="{chart_x}" y="{y}" width="{bar_width:.1f}" height="14" rx="7" fill="#b45309" opacity="0.92" />')
+        parts.append(f'<rect x="{chart_x}" y="{y}" width="{chart_width}" height="14" rx="{BAR_RADIUS}" fill="{TRACK_FILL}" />')
+        parts.append(f'<rect x="{chart_x}" y="{y}" width="{bar_width:.1f}" height="14" rx="{BAR_RADIUS}" fill="#b45309" opacity="0.92" />')
         parts.append(
-            f'<text x="{chart_x + chart_width + 8}" y="{y + 11}" font-size="10" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}">{float(row["rmse"]):.3f}</text>'
+            f'<text x="{chart_x + chart_width + 8}" y="{y + 11}" font-size="10" font-family="Menlo, Consolas, monospace" fill="{TEXT}">{float(row["rmse"]):.3f}</text>'
         )
         parts.append(
             f'<text x="{chart_x}" y="{y + 28}" font-size="10" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">MAE {float(row["mae"]):.3f}; runtime {float(row["runtime_seconds"]):.2f}s; 90% coverage {float(row["coverage_90"]):.2f}</text>'
@@ -723,6 +769,18 @@ def _wrap_text(text: str, max_chars: int) -> list[str]:
     if not stripped:
         return []
     return wrap(stripped, width=max_chars, break_long_words=False, break_on_hyphens=False)
+
+
+def _text_block_height(lines: list[str], line_height: int) -> int:
+    return max(1, len(lines)) * line_height
+
+
+def _metric_interval(row: pd.Series, prefix: str) -> tuple[float, float] | None:
+    low = row.get(f"{prefix}_interval_low", pd.NA)
+    high = row.get(f"{prefix}_interval_high", pd.NA)
+    if pd.isna(low) or pd.isna(high):
+        return None
+    return float(low), float(high)
 
 
 def _format_rate_tick(value: float) -> str:
@@ -779,11 +837,11 @@ def _scatter_card_svg(
     plot_y = y0 + pad_top
     span = max(value_max - value_min, 1e-6)
     parts = [
-        f'<rect x="{x0}" y="{y0}" width="{width}" height="{height}" rx="18" fill="{CARD_FILL}" stroke="{CARD_STROKE}" />',
-        f'<text x="{x0 + 20}" y="{y0 + 28}" font-size="18" font-family="Georgia, serif" fill="{TEXT}">{escape(title)}</text>',
+        f'<rect x="{x0}" y="{y0}" width="{width}" height="{height}" rx="{CARD_RADIUS}" fill="{CARD_FILL}" stroke="{CARD_STROKE}" />',
+        f'<text x="{x0 + 20}" y="{y0 + 28}" font-size="18" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="700">{escape(title)}</text>',
         f'<text x="{x0 + 20}" y="{y0 + 48}" font-size="11" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">{escape(subtitle)}</text>',
     ]
-    parts.append(f'<rect x="{plot_x}" y="{plot_y}" width="{plot_width}" height="{plot_height}" fill="#fafaf9" stroke="{GRID}" />')
+    parts.append(f'<rect x="{plot_x}" y="{plot_y}" width="{plot_width}" height="{plot_height}" fill="{PLOT_FILL}" stroke="{GRID}" />')
     if x_column == "actual" and y_column == "predicted_mean":
         parts.append(
             f'<line x1="{plot_x}" y1="{plot_y + plot_height}" x2="{plot_x + plot_width}" y2="{plot_y}" stroke="{GRID}" stroke-width="1.5" stroke-dasharray="5 5" />'
@@ -811,10 +869,10 @@ def _calibration_card_svg(frame: pd.DataFrame, *, x0: int, y0: int, width: int, 
     plot_x = x0 + pad_left
     plot_y = y0 + pad_top
     parts = [
-        f'<rect x="{x0}" y="{y0}" width="{width}" height="{height}" rx="18" fill="{CARD_FILL}" stroke="{CARD_STROKE}" />',
-        f'<text x="{x0 + 20}" y="{y0 + 28}" font-size="18" font-family="Georgia, serif" fill="{TEXT}">{escape(title)}</text>',
+        f'<rect x="{x0}" y="{y0}" width="{width}" height="{height}" rx="{CARD_RADIUS}" fill="{CARD_FILL}" stroke="{CARD_STROKE}" />',
+        f'<text x="{x0 + 20}" y="{y0 + 28}" font-size="18" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="700">{escape(title)}</text>',
         f'<text x="{x0 + 20}" y="{y0 + 48}" font-size="11" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">Nominal vs empirical interval coverage on the test split.</text>',
-        f'<rect x="{plot_x}" y="{plot_y}" width="{plot_width}" height="{plot_height}" fill="#fafaf9" stroke="{GRID}" />',
+        f'<rect x="{plot_x}" y="{plot_y}" width="{plot_width}" height="{plot_height}" fill="{PLOT_FILL}" stroke="{GRID}" />',
         f'<line x1="{plot_x}" y1="{plot_y + plot_height}" x2="{plot_x + plot_width}" y2="{plot_y}" stroke="{GRID}" stroke-width="1.5" stroke-dasharray="5 5" />',
     ]
     point_coords: list[tuple[float, float]] = []
@@ -874,8 +932,8 @@ def _metric_comparison_card_svg(
     bar_width = max(36, min(54, int(available_width / max(1, len(bars)))))
     left_pad = max(8, int((plot_width - (len(bars) * bar_width + max(0, len(bars) - 1) * bar_gap)) / 2))
     parts = [
-        f'<rect x="{x0}" y="{y0}" width="{width}" height="{height}" rx="18" fill="{CARD_FILL}" stroke="{CARD_STROKE}" />',
-        f'<text x="{x0 + 20}" y="{y0 + 28}" font-size="18" font-family="Georgia, serif" fill="{TEXT}">{escape(dataset)}</text>',
+        f'<rect x="{x0}" y="{y0}" width="{width}" height="{height}" rx="{CARD_RADIUS}" fill="{CARD_FILL}" stroke="{CARD_STROKE}" />',
+        f'<text x="{x0 + 20}" y="{y0 + 28}" font-size="18" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="700">{escape(dataset)}</text>',
     ]
     text_y = y0 + 48
     for line_index, line in enumerate(context_lines or [""]):
@@ -904,13 +962,13 @@ def _metric_comparison_card_svg(
             y = zero_y - bar_height
         else:
             y = zero_y
-        parts.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_width}" height="{bar_height:.1f}" rx="8" fill="{color}" opacity="0.92" />')
+        parts.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_width}" height="{bar_height:.1f}" rx="{BAR_RADIUS}" fill="{color}" opacity="0.92" />')
         parts.append(
             f'<text x="{x + bar_width / 2:.1f}" y="{plot_y + plot_height + 20}" text-anchor="middle" font-size="11" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}">{escape(label)}</text>'
         )
         value_y = y - 8 if value >= 0.0 else y + bar_height + 14
         parts.append(
-            f'<text x="{x + bar_width / 2:.1f}" y="{value_y:.1f}" text-anchor="middle" font-size="10" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}">{value:.3f}</text>'
+            f'<text x="{x + bar_width / 2:.1f}" y="{value_y:.1f}" text-anchor="middle" font-size="10" font-family="Menlo, Consolas, monospace" fill="{TEXT}">{value:.3f}</text>'
         )
     note_lines = _wrap_text(str(paper_row.iloc[0]["paper_note"]) if not paper_row.empty else "No numeric literature value was attached for this metric.", 60)
     for line_index, line in enumerate(note_lines[:3]):

@@ -2,7 +2,7 @@
 
 MolADT is a typed molecular data format for Bayesian work over molecules. It keeps chemically meaningful structure in the object itself instead of hiding it inside string syntax.
 
-[Quickstart](docs/quickstart.md) · [Representation](docs/representation.md) · [Models](docs/models.md) · [Examples](docs/examples.md) · [Magic Mushrooms](magic_mushrooms.md)
+[Quickstart](docs/quickstart.md) · [Representation](docs/representation.md) · [Models](docs/models.md) · [Examples](docs/examples.md)
 
 ## Why MolADT
 
@@ -24,10 +24,14 @@ MolADT keeps that chemistry as typed atoms, local bonds, bonding systems, and st
 
 ```bash
 make python-setup
-./.venv/bin/python -m moladt.cli parse molecules/benzene.sdf
+make python-parse
 # once, before Stan-backed targets such as FreeSolv
 make python-cmdstan-install
 ```
+
+`make python-setup` installs the Python package and its benchmark dependencies only into `./.venv` inside this repo. `make python-cmdstan-install` installs CmdStan only into `./.cmdstan`. Deleting `./.venv` removes the Python-side local install, deleting `./.cmdstan` removes the local CmdStan toolchain, and neither command touches your system Python, global site-packages, or other local environments.
+
+If your shell creates a Windows-style virtual environment, the Make targets will use `.venv/Scripts/python.exe` automatically. On a fresh machine, the first local setup can take a few minutes and up to about 30 minutes if the larger dependencies still need to be downloaded or built.
 
 `Molecule` is immutable and destructures as:
 `atoms, local_bonds, systems, smiles_stereochemistry = molecule`
@@ -39,9 +43,9 @@ For probabilistic proposals or local graph surgery, use `MutableMolecule` from `
 Use the CLI when you want to inspect how a boundary format lands inside MolADT.
 
 ```bash
-./.venv/bin/python -m moladt.cli parse molecules/benzene.sdf
-./.venv/bin/python -m moladt.cli pretty-example morphine
-./.venv/bin/python -m moladt.cli to-smiles molecules/benzene.sdf
+make python-parse
+make python-pretty-example EXAMPLE=morphine
+make python-to-smiles
 ```
 
 - `parse` reads one SDF record, validates it, prints the MolADT structure, and preserves SDF title and property fields
@@ -80,7 +84,7 @@ make qm9long
 make timing
 ```
 
-- `make freesolv`: FreeSolv RMSE comparison. Fixed path `moladt_featurized + bayes_gp_rbf_screened + laplace`. Writes `results/freesolv/run_.../freesolv_rmse_vs_moleculenet.svg`.
+- `make freesolv`: FreeSolv RMSE comparison. Fixed path `moladt_featurized + bayes_gp_rbf_screened + laplace`. The FreeSolv SVG includes posterior predictive RMSE uncertainty bars from the Stan fit. It writes `results/freesolv/run_.../freesolv_rmse_vs_moleculenet.svg`, `results/freesolv/run_.../freesolv_bayesian_model.txt`, and `results/freesolv/run_.../details/freesolv_train_test_uncertainty.csv`.
 - `make qm9long`: full QM9 `mu` MAE comparison over all aligned local QM9 molecules, using `visnet_ensemble` on `moladt_featurized_geom`. That export keeps the atomic numbers and coordinates from the SDF record and adds the full MolADT feature bundle from the same molecule. The current local bundle yields `107,108 / 13,388 / 13,389` train / validation / test rows under the deterministic `80/10/10` long split. ViSNet runs one member for at most `25` epochs with seed `102`, and the verbose run prints every epoch with validation RMSE and MAE. Writes `results/qm9/long/run_.../qm9_mae_vs_moleculenet.svg`.
 - `make timing`: ZINC SDF ingest and runtime comparison. It measures raw SDF block reads, local SDF parsing into MolADT, the one-time matched corpus build, and MolADT file loading. Writes `results/timing/paper/run_.../timing_overview.svg`.
 
@@ -100,7 +104,6 @@ For split sizes, the exact benchmark contract, the published FreeSolv RMSE conte
 - [Models and features](docs/models.md)
 - [Outputs](docs/outputs.md)
 - [Data sources](docs/data-sources.md)
-- [Magic mushrooms](magic_mushrooms.md)
 
 ## Related Repo
 

@@ -359,8 +359,18 @@ def main(argv: list[str] | None = None) -> int:
         generalization = _write_generalization_artifacts(metrics_frame)
         review_frame = _build_simple_review_frame(generalization, baselines_frame=baselines_frame)
         molecule_net_comparison = _build_moleculenet_comparison_frame(review_frame)
+        molecule_net_comparison = _attach_moleculenet_uncertainty(
+            molecule_net_comparison,
+            predictions_frame=predictions_frame,
+        )
         molecule_net_comparison.to_csv(_details_dir() / "moleculenet_comparison.csv", index=False)
         write_moleculenet_comparison_overviews(molecule_net_comparison, RESULTS_DIR)
+        _write_freesolv_bayesian_artifacts(
+            review_frame=review_frame,
+            metrics_frame=metrics_frame,
+            coefficients_frame=coefficients_frame,
+            echo_to_console=args.command == "freesolv",
+        )
     else:
         metrics_frame = pd.DataFrame()
         generalization = pd.DataFrame()
@@ -671,6 +681,161 @@ def _write_generalization_artifacts(metrics: pd.DataFrame) -> pd.DataFrame:
     return generalization
 
 
+def _write_freesolv_bayesian_artifacts(
+    *,
+    review_frame: pd.DataFrame,
+    metrics_frame: pd.DataFrame,
+    coefficients_frame: pd.DataFrame,
+    echo_to_console: bool,
+) -> None:
+    artifact = _build_freesolv_bayesian_artifact(review_frame, metrics_frame, coefficients_frame)
+    if artifact is None:
+        return
+    model_path = RESULTS_DIR / "freesolv_bayesian_model.txt"
+    uncertainty_path = _details_dir() / "freesolv_train_test_uncertainty.csv"
+    model_path.write_text(artifact["model_text"], encoding="utf-8")
+    artifact["uncertainty_frame"].to_csv(uncertainty_path, index=False)
+    if echo_to_console:
+        for line in artifact["summary_lines"]:
+            log(line)
+    else:
+        log(
+            "Wrote FreeSolv Bayesian summary artifacts: "
+            f"{display_path(model_path)}, {display_path(uncertainty_path)}"
+        )
+
+
+def _build_freesolv_bayesian_artifact(
+    review_frame: pd.DataFrame,
+    metrics_frame: pd.DataFrame,
+    coefficients_frame: pd.DataFrame,
+) -> dict[str, Any] | None:
+    if review_frame.empty or metrics_frame.empty or coefficients_frame.empty:
+        return None
+    freesolv_rows = review_frame.loc[review_frame["dataset"] == "freesolv"].copy()
+    if freesolv_rows.empty:
+        return None
+    selected = freesolv_rows.iloc[0]
+    key_mask = (
+        (metrics_frame["dataset"] == "freesolv")
+        & (metrics_frame["representation"] == selected["representation"])
+        & (metrics_frame["model"] == selected["model"])
+        & (metrics_frame["method"] == selected["method"])
+    )
+    uncertainty_frame = (
+        metrics_frame.loc[key_mask & metrics_frame["split"].isin(["train", "test"])]
+        .loc[:, ["split", "n_eval", "rmse", "mae", "r2", "predictive_sd_mean", "coverage_90", "mean_log_predictive_density", "draw_count", "runtime_seconds"]]
+        .copy()
+    )
+    if uncertainty_frame.empty:
+        return None
+    uncertainty_frame["split"] = pd.Categorical(uncertainty_frame["split"], categories=["train", "test"], ordered=True)
+    uncertainty_frame = uncertainty_frame.sort_values("split").reset_index(drop=True)
+    coefficient_mask = (
+        (coefficients_frame["dataset"] == "freesolv")
+        & (coefficients_frame["representation"] == selected["representation"])
+        & (coefficients_frame["model"] == selected["model"])
+        & (coefficients_frame["method"] == selected["method"])
+    )
+    coefficient_rows = coefficients_frame.loc[coefficient_mask].copy()
+    if coefficient_rows.empty:
+        return None
+    model_text = _format_freesolv_bayesian_model_text(selected, uncertainty_frame, coefficient_rows)
+    summary_lines = [
+        "FreeSolv Bayesian summary",
+        f"  selected run: {selected['representation']} / {selected['model']} / {selected['method']}",
+    ]
+    for _, row in uncertainty_frame.iterrows():
+        split_label = str(row["split"]).title()
+        summary_lines.append(
+            f"  {split_label}: rmse={float(row['rmse']):.3f}, mae={float(row['mae']):.3f}, "
+            f"mean_predictive_sd={float(row['predictive_sd_mean']):.3f}, coverage_90={float(row['coverage_90']):.3f}"
+        )
+    summary_lines.append(f"  model: {display_path(RESULTS_DIR / 'freesolv_bayesian_model.txt')}")
+    summary_lines.append(f"  uncertainty: {display_path(_details_dir() / 'freesolv_train_test_uncertainty.csv')}")
+    return {
+        "model_text": model_text,
+        "uncertainty_frame": uncertainty_frame,
+        "summary_lines": summary_lines,
+    }
+
+
+def _format_freesolv_bayesian_model_text(
+    selected: pd.Series,
+    uncertainty_frame: pd.DataFrame,
+    coefficient_rows: pd.DataFrame,
+) -> str:
+    parameter_lookup = {
+        str(row["parameter_name"]): row
+        for _, row in coefficient_rows.iterrows()
+    }
+    alpha_row = parameter_lookup.get("alpha")
+    signal_row = parameter_lookup.get("signal_scale")
+    length_row = parameter_lookup.get("lengthscale")
+    sigma_row = parameter_lookup.get("sigma")
+    lines = [
+        "FreeSolv Bayesian model summary",
+        f"Selected run: {selected['representation']} / {selected['model']} / {selected['method']}",
+        f"Split scheme: {selected.get('split_scheme', '')}",
+        (
+            "Rows: "
+            f"train={int(float(selected.get('train_n_eval', 0)))} "
+            f"valid={int(float(selected.get('valid_n_eval', 0)))} "
+            f"test={int(float(selected.get('test_n_eval', 0)))}"
+        ),
+        "",
+        "Train/test predictive uncertainty",
+    ]
+    for _, row in uncertainty_frame.iterrows():
+        lines.extend(
+            [
+                f"- {str(row['split']).title()}",
+                f"  n_eval = {int(row['n_eval'])}",
+                f"  rmse = {float(row['rmse']):.6f}",
+                f"  mae = {float(row['mae']):.6f}",
+                f"  r2 = {float(row['r2']):.6f}",
+                f"  mean_predictive_sd = {float(row['predictive_sd_mean']):.6f}",
+                f"  empirical_90pct_coverage = {float(row['coverage_90']):.6f}",
+                f"  mean_log_predictive_density = {float(row['mean_log_predictive_density']):.6f}",
+            ]
+        )
+    lines.extend(["", "Posterior hyperparameters"])
+    for name in ("alpha", "signal_scale", "lengthscale", "sigma"):
+        row = parameter_lookup.get(name)
+        if row is None:
+            continue
+        lines.append(f"- {name} = {_posterior_summary(row)}")
+    if alpha_row is not None and signal_row is not None and length_row is not None and sigma_row is not None:
+        alpha = float(alpha_row["posterior_mean"])
+        signal_scale = float(signal_row["posterior_mean"])
+        lengthscale = float(length_row["posterior_mean"])
+        sigma = float(sigma_row["posterior_mean"])
+        lines.extend(
+            [
+                "",
+                "Posterior-mean predictive model",
+                (
+                    f"mu(x*) = {alpha:.6f} + "
+                    f"K_rbf(x*, X_train; signal_scale={signal_scale:.6f}, lengthscale={lengthscale:.6f}) @ "
+                    f"[K_rbf(X_train, X_train; signal_scale={signal_scale:.6f}, lengthscale={lengthscale:.6f}) + "
+                    f"{sigma:.6f}^2 I]^-1 @ (y_train - {alpha:.6f})"
+                ),
+                "k_rbf(a, b; signal_scale=s, lengthscale=l) = s^2 * exp(-||a - b||^2 / (2 * l^2))",
+                f"y(x*) | data is summarized by Normal(mu(x*), predictive_sd(x*)^2) with observation noise sigma={sigma:.6f}",
+            ]
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _posterior_summary(row: pd.Series) -> str:
+    return (
+        f"{float(row['posterior_mean']):.6f} "
+        f"(sd {float(row['posterior_sd']):.6f}; "
+        f"p05 {float(row['posterior_p05']):.6f}; "
+        f"p95 {float(row['posterior_p95']):.6f})"
+    )
+
+
 def _build_simple_review_frame(generalization: pd.DataFrame, *, baselines_frame: pd.DataFrame) -> pd.DataFrame:
     rows: list[dict[str, object]] = []
     for dataset, dataset_rows in generalization.groupby("dataset", sort=True):
@@ -838,6 +1003,61 @@ def _build_moleculenet_comparison_frame(review_frame: pd.DataFrame) -> pd.DataFr
             }
         )
     return pd.DataFrame(rows)
+
+
+def _attach_moleculenet_uncertainty(
+    comparison_frame: pd.DataFrame,
+    *,
+    predictions_frame: pd.DataFrame,
+) -> pd.DataFrame:
+    if comparison_frame.empty or predictions_frame.empty:
+        return comparison_frame
+    frame = comparison_frame.copy()
+    required = {"dataset", "representation", "model", "method", "split", "actual", "predicted_mean", "predictive_sd"}
+    if not required.issubset(predictions_frame.columns):
+        return frame
+    for row_index, row in frame.iterrows():
+        if str(row["dataset"]) != "freesolv":
+            continue
+        selected = predictions_frame.loc[
+            (predictions_frame["dataset"] == row["dataset"])
+            & (predictions_frame["representation"] == row["representation"])
+            & (predictions_frame["model"] == row["model"])
+            & (predictions_frame["method"] == row["method"])
+        ].copy()
+        if selected.empty:
+            continue
+        for split_name, prefix in (("train", "train"), ("valid", "valid"), ("test", "test")):
+            interval = _posterior_rmse_interval(selected.loc[selected["split"] == split_name].copy())
+            if interval is None:
+                continue
+            frame.loc[row_index, f"{prefix}_interval_low"] = interval[0]
+            frame.loc[row_index, f"{prefix}_interval_high"] = interval[1]
+    return frame
+
+
+def _posterior_rmse_interval(
+    predictions: pd.DataFrame,
+    *,
+    draws: int = 4000,
+) -> tuple[float, float] | None:
+    if predictions.empty:
+        return None
+    actual = predictions["actual"].to_numpy(dtype=float)
+    predicted_mean = predictions["predicted_mean"].to_numpy(dtype=float)
+    predictive_sd = np.clip(predictions["predictive_sd"].to_numpy(dtype=float), 1e-9, None)
+    if actual.size == 0:
+        return None
+    split_name = str(predictions["split"].iloc[0])
+    seed = DEFAULT_SEED + sum(ord(char) for char in split_name) + actual.size
+    rng = np.random.default_rng(seed)
+    sampled_predictions = rng.normal(
+        loc=predicted_mean[np.newaxis, :],
+        scale=predictive_sd[np.newaxis, :],
+        size=(draws, actual.size),
+    )
+    sampled_rmse = np.sqrt(np.mean(np.square(sampled_predictions - actual[np.newaxis, :]), axis=1))
+    return float(np.quantile(sampled_rmse, 0.05)), float(np.quantile(sampled_rmse, 0.95))
 
 
 def _load_timing_results() -> pd.DataFrame:

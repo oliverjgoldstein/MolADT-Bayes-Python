@@ -361,7 +361,7 @@ def test_makefile_python_setup_reports_missing_venv_support(tmp_path: Path) -> N
     assert "sudo apt install -y python3-venv" in result.stdout
 
 
-def test_makefile_python_setup_declined_auto_install_reports_manual_steps(tmp_path: Path) -> None:
+def test_makefile_python_setup_without_auto_install_reports_manual_steps(tmp_path: Path) -> None:
     _copy_makefile(tmp_path)
     _write_executable(
         tmp_path / "fake-python",
@@ -397,16 +397,14 @@ def test_makefile_python_setup_declined_auto_install_reports_manual_steps(tmp_pa
     env = dict(os.environ)
     env["PATH"] = f"{tmp_path}:{env['PATH']}"
     result = subprocess.run(
-        ["make", "-C", str(tmp_path), "python-setup", "SYSTEM_PYTHON=./fake-python"],
+        ["make", "-C", str(tmp_path), "python-setup", "SYSTEM_PYTHON=./fake-python", "AUTO_INSTALL_VENV=0"],
         capture_output=True,
         text=True,
         check=False,
         env=env,
-        input="n\n",
     )
 
     assert result.returncode != 0
-    assert "Install the Linux venv package now? [y/N]" in result.stdout
     assert "Python could not create .venv." in result.stdout
     assert not (tmp_path / "apt.log").exists()
     assert not (tmp_path / "sudo.log").exists()
@@ -472,12 +470,11 @@ def test_makefile_python_setup_auto_installs_venv_support_with_apt(tmp_path: Pat
         text=True,
         check=False,
         env=env,
-        input="y\n",
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "Install the Linux venv package now? [y/N]" in result.stdout
     assert "Detected missing ensurepip support while creating .venv." in result.stdout
+    assert "without an interactive Makefile prompt." in result.stdout
     assert "Trying package: python3-venv" in result.stdout
     assert "Trying package: python3.11-venv" in result.stdout
     apt_log = (tmp_path / "apt.log").read_text(encoding="utf-8")

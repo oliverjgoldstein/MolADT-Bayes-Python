@@ -365,9 +365,18 @@ def process_freesolv_dataset(
     )
 
 
-def _candidate_freesolv_roots(root: Path) -> tuple[Path, ...]:
+def _candidate_freesolv_roots(downloads: FreeSolvDownloads) -> tuple[Path, ...]:
     candidates: list[Path] = []
-    for candidate in (root, root / "FreeSolv-master", root / "FreeSolv-master" / "FreeSolv-master"):
+    raw_root = downloads.csv_path.parent
+    extract_root = downloads.repo_extract_dir
+    for candidate in (
+        raw_root,
+        raw_root / "FreeSolv-master",
+        raw_root / "FreeSolv-master" / "FreeSolv-master",
+        extract_root,
+        extract_root / "FreeSolv-master",
+        extract_root / "FreeSolv-master" / "FreeSolv-master",
+    ):
         if candidate.is_dir() and candidate not in candidates:
             candidates.append(candidate)
     return tuple(candidates)
@@ -375,7 +384,7 @@ def _candidate_freesolv_roots(root: Path) -> tuple[Path, ...]:
 
 def _find_freesolv_database_json(downloads: FreeSolvDownloads) -> Path | None:
     direct_candidates: list[Path] = []
-    for root in _candidate_freesolv_roots(downloads.repo_extract_dir):
+    for root in _candidate_freesolv_roots(downloads):
         candidate = root / "database.json"
         if candidate.is_file():
             direct_candidates.append(candidate)
@@ -383,7 +392,7 @@ def _find_freesolv_database_json(downloads: FreeSolvDownloads) -> Path | None:
         direct_candidates.sort(key=lambda path: (len(path.parts), path.as_posix()))
         return direct_candidates[0]
     recursive_candidates: list[Path] = []
-    for root in _candidate_freesolv_roots(downloads.repo_extract_dir):
+    for root in _candidate_freesolv_roots(downloads):
         recursive_candidates.extend(find_files(root, ("database.json",)))
     if recursive_candidates:
         recursive_candidates = sorted(dict.fromkeys(recursive_candidates), key=lambda path: (len(path.parts), path.as_posix()))
@@ -405,7 +414,7 @@ def _freesolv_sdf_preference_key(path: Path) -> tuple[int, int, int, str]:
 
 def _find_freesolv_sdf_paths(downloads: FreeSolvDownloads) -> tuple[Path, ...]:
     candidates: list[Path] = []
-    for root in _candidate_freesolv_roots(downloads.repo_extract_dir):
+    for root in _candidate_freesolv_roots(downloads):
         candidates.extend(sorted(root.rglob("*.sdf")))
     if not candidates:
         raise FileNotFoundError("Could not find FreeSolv SDF records")
@@ -419,11 +428,15 @@ def _find_freesolv_sdf_paths(downloads: FreeSolvDownloads) -> tuple[Path, ...]:
 
 
 def _freesolv_sdf_relpath(downloads: FreeSolvDownloads, sdf_path: Path) -> str:
-    for root in _candidate_freesolv_roots(downloads.repo_extract_dir):
+    relative_paths: list[Path] = []
+    for root in _candidate_freesolv_roots(downloads):
         try:
-            return str(sdf_path.relative_to(root))
+            relative_paths.append(sdf_path.relative_to(root))
         except ValueError:
             continue
+    if relative_paths:
+        relative_paths.sort(key=lambda path: (len(path.parts), path.as_posix()))
+        return str(relative_paths[0])
     return sdf_path.name
 
 

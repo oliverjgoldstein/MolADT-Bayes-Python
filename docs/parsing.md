@@ -62,7 +62,6 @@ Use `pretty-example`.
 ./.venv/bin/python -m moladt.cli pretty-example ferrocene
 ./.venv/bin/python -m moladt.cli pretty-example diborane
 ./.venv/bin/python -m moladt.cli pretty-example morphine
-./.venv/bin/python -m moladt.cli pretty-example psilocybin
 ```
 
 These examples show the point of the representation more clearly than benzene does.

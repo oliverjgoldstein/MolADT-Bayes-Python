@@ -3,7 +3,7 @@ from __future__ import annotations
 from scripts.features import compute_moladt_featurized_descriptors
 
 from moladt.chem.validate import validate_molecule
-from moladt.examples import diborane_pretty, ferrocene_pretty, morphine_pretty, psilocybin_pretty
+from moladt.examples import diborane_pretty, ferrocene_pretty, morphine_pretty
 from moladt.examples.sample_molecules import hydrogen, methane, oxygen, water
 from moladt.io.sdf import read_sdf, read_sdf_record
 
@@ -52,23 +52,11 @@ def test_morphine_example_keeps_the_documented_stereochemistry_flags() -> None:
     ]
 
 
-def test_psilocybin_constructs_a_valid_molecule() -> None:
-    assert validate_molecule(psilocybin_pretty) == psilocybin_pretty
-
-
-def test_psilocybin_typed_descriptors_keep_indole_and_phosphoryl_systems() -> None:
-    descriptors = compute_moladt_featurized_descriptors(psilocybin_pretty)
-
-    assert descriptors["system_shared_electrons_sum"] == 12.0
-    assert descriptors["system_member_edges_max"] == 10.0
-
-
 def test_all_examples_include_orbital_shells() -> None:
     examples = (
         diborane_pretty,
         ferrocene_pretty,
         morphine_pretty,
-        psilocybin_pretty,
         hydrogen,
         oxygen,
         water,
@@ -83,7 +71,6 @@ def test_manuscript_examples_keep_sdf_reference_geometry_and_sigma_edges() -> No
     diborane_record = read_sdf_record("molecules/diborane.sdf")
     ferrocene_record = read_sdf_record("molecules/ferrocene.sdf")
     morphine_record = read_sdf_record("molecules/morphine.sdf")
-    psilocybin_record = read_sdf_record("molecules/psilocybin.sdf")
 
     assert _rounded_coordinates(diborane_pretty) == _rounded_coordinates(diborane_record.molecule)
     assert diborane_pretty.local_bonds == diborane_record.molecule.local_bonds
@@ -91,8 +78,6 @@ def test_manuscript_examples_keep_sdf_reference_geometry_and_sigma_edges() -> No
     assert ferrocene_pretty.local_bonds == ferrocene_record.molecule.local_bonds
     assert _rounded_coordinates(morphine_pretty) == _rounded_coordinates(morphine_record.molecule)
     assert morphine_pretty.local_bonds == morphine_record.molecule.local_bonds
-    assert _rounded_coordinates(psilocybin_pretty) == _rounded_coordinates(psilocybin_record.molecule)
-    assert psilocybin_pretty.local_bonds == psilocybin_record.molecule.local_bonds
 
 
 def test_small_example_molecules_match_sdf_geometry_and_sigma_edges() -> None:

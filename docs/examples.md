@@ -9,7 +9,6 @@ This repo keeps its example molecules as checked-in SDF files under `molecules/`
 | Benzene | [`molecules/benzene.sdf`](../molecules/benzene.sdf), [`moladt/examples/benzene.py`](../moladt/examples/benzene.py), [`moladt/examples/benzene_pretty.py`](../moladt/examples/benzene_pretty.py) | `./.venv/bin/python -m moladt.cli parse molecules/benzene.sdf` | A classical six-membered ring with one `pi_ring` Dietz system | Both file-backed and built-in |
 | Water | [`molecules/water.sdf`](../molecules/water.sdf), [`moladt/examples/sample_molecules.py`](../moladt/examples/sample_molecules.py) | `./.venv/bin/python -m moladt.cli parse molecules/water.sdf` | A minimal classical molecule used for round-trip and SMILES tests | Both file-backed and built-in |
 | Morphine | [`molecules/morphine.sdf`](../molecules/morphine.sdf), [`moladt/examples/morphine.py`](../moladt/examples/morphine.py), [`moladt/examples/manuscript.py`](../moladt/examples/manuscript.py) | `./.venv/bin/python -m moladt.cli parse molecules/morphine.sdf` or `./.venv/bin/python -m moladt.cli pretty-example morphine` | Explicit Dietz version of the classic morphine sketch, with the standard SMILES stereochemistry flags preserved on the object | Both file-backed and built-in |
-| Psilocybin | [`molecules/psilocybin.sdf`](../molecules/psilocybin.sdf), [`moladt/examples/psilocybin.py`](../moladt/examples/psilocybin.py), [`moladt/examples/manuscript.py`](../moladt/examples/manuscript.py), [`magic_mushrooms.md`](../magic_mushrooms.md) | `./.venv/bin/python -m moladt.cli parse molecules/psilocybin.sdf` or `./.venv/bin/python -m moladt.cli pretty-example psilocybin` | SDF-backed psilocybin example with one fused indole aromatic system plus one explicit phosphoryl pool | Both file-backed and built-in |
 | Ferrocene | [`molecules/ferrocene.sdf`](../molecules/ferrocene.sdf), [`moladt/examples/ferrocene.py`](../moladt/examples/ferrocene.py), [`moladt/examples/manuscript.py`](../moladt/examples/manuscript.py) | `./.venv/bin/python -m moladt.cli parse molecules/ferrocene.sdf` or `./.venv/bin/python -m moladt.cli pretty-example ferrocene` | Two cyclopentadienyl `pi` systems plus an Fe back-donation-style pool | Both file-backed and built-in |
 | Diborane | [`molecules/diborane.sdf`](../molecules/diborane.sdf), [`moladt/examples/diborane.py`](../moladt/examples/diborane.py), [`moladt/examples/manuscript.py`](../moladt/examples/manuscript.py) | `./.venv/bin/python -m moladt.cli parse molecules/diborane.sdf` or `./.venv/bin/python -m moladt.cli pretty-example diborane` | Two explicit `3c-2e` bridging hydrogen systems | Both file-backed and built-in |
 
@@ -56,24 +55,6 @@ Use:
 
 Morphine is the cleanest built-in example of why the Dietz ADT is not just a parsed string. The built-in object starts from the parsed SDF atoms and sigma edges, then keeps the alkene plus phenyl ring as explicit bonding systems and preserves the five atom-centered stereochemistry flags from the standard boundary SMILES in `smiles_stereochemistry`.
 
-## Psilocybin
-
-- Built-in source: [`moladt/examples/psilocybin.py`](../moladt/examples/psilocybin.py)
-- Manuscript-facing wrapper: [`moladt/examples/manuscript.py`](../moladt/examples/manuscript.py)
-- Focused note: [`magic_mushrooms.md`](../magic_mushrooms.md)
-- File-backed source: [`molecules/psilocybin.sdf`](../molecules/psilocybin.sdf)
-
-Use:
-
-```bash
-./.venv/bin/python -m moladt.cli parse molecules/psilocybin.sdf
-./.venv/bin/python -m moladt.cli pretty-example psilocybin
-```
-
-Psilocybin is a good classical example of where MolADT still helps without needing non-classical bonding. The built-in object starts from the parsed SDF atoms and sigma edges, then makes the fused indole aromaticity explicit as `indole_pi_system` and the `P=O` contribution explicit as `phosphoryl`.
-
-The explicit `Molecule(...)` form is written out in [`magic_mushrooms.md`](../magic_mushrooms.md).
-
 ## Ferrocene
 
 - File-backed source: [`molecules/ferrocene.sdf`](../molecules/ferrocene.sdf)
@@ -111,7 +92,6 @@ Diborane shows explicit multicenter bonding with two bridging hydrogen systems. 
 | Diborane | `[BH2]1[H][BH2][H]1` is standard, but it does not say "two explicit 3c-2e bridges". | `pretty-example diborane` shows two explicit `3c-2e` Dietz bridge systems over the bridging hydrogens. |
 | Ferrocene | `[CH-]1C=CC=C1.[CH-]1C=CC=C1.[Fe+2]` is standard, but it splits the sandwich into ionic fragments. | `pretty-example ferrocene` shows the Fe-centered object with two Cp `pi` systems and one `fe_backdonation` pool. |
 | Morphine | `CN1CC[C@]23C4=C5C=CC(O)=C4O[C@H]2[C@@H](O)C=C[C@H]3[C@H]1C5` | `pretty-example morphine` shows the same fused graph as direct `local_bonds`, explicit `alkene_bridge` and `phenyl_pi_ring` systems, and preserved atom-centered stereochemistry flags. |
-| Psilocybin | `CN(C)CCC1=CNC2=C1C(=CC=C2)OP(=O)(O)O` keeps the indole and phosphate in localized boundary syntax. | `pretty-example psilocybin` shows the same sigma skeleton plus one fused `indole_pi_system` and one `phosphoryl` pool. |
 
 ## Related Example Modules
 
@@ -121,5 +101,4 @@ Diborane shows explicit multicenter bonding with two bridging hydrogen systems. 
 - [`moladt/examples/diborane.py`](../moladt/examples/diborane.py)
 - [`moladt/examples/ferrocene.py`](../moladt/examples/ferrocene.py)
 - [`moladt/examples/morphine.py`](../moladt/examples/morphine.py)
-- [`moladt/examples/psilocybin.py`](../moladt/examples/psilocybin.py)
 - [`moladt/examples/sample_molecules.py`](../moladt/examples/sample_molecules.py)

@@ -92,15 +92,6 @@ def test_small_sample_sdfs_smoke_parse() -> None:
     assert len(methane.local_bonds) == 4
 
 
-def test_psilocybin_sdf_smoke_parse() -> None:
-    record = read_sdf_record(PROJECT_ROOT / "molecules" / "psilocybin.sdf")
-
-    assert record.title == "psilocybin"
-    assert record.property("pubchem_url") == "https://pubchem.ncbi.nlm.nih.gov/compound/10624#section=Structures"
-    assert len(record.molecule.atoms) == 19
-    assert len(record.molecule.local_bonds) == 20
-
-
 def test_manuscript_example_sdfs_smoke_parse() -> None:
     diborane = read_sdf(PROJECT_ROOT / "molecules" / "diborane.sdf")
     ferrocene = read_sdf(PROJECT_ROOT / "molecules" / "ferrocene.sdf")

@@ -10,12 +10,17 @@ From the repo root:
 make python-setup
 ```
 
-That creates `.venv` and installs the package plus benchmark dependencies. Use Python 3.11+.
+That creates `.venv` and installs the package plus benchmark dependencies locally inside this repo. Use Python 3.11+.
+
+- `make python-setup` writes only to `./.venv`.
+- `make python-cmdstan-install` writes only to `./.cmdstan`.
+- Deleting those directories removes the local install and does not interfere with your system Python, global packages, or other virtual environments.
+- On a fresh machine, the first local setup can take a few minutes and up to about 30 minutes if the larger dependencies still need to be downloaded or built.
 
 - macOS, Linux, WSL: use the command as-is.
-- Windows: use WSL2 for the benchmark stack.
+- Windows: if your shell creates `.venv/Scripts/python.exe`, the Make targets use it automatically. WSL2 is still the safest route for the full benchmark stack.
 
-If your shell cannot find the venv Python later, run commands with `./.venv/bin/python ...` or print the activation command with:
+If your shell cannot find the venv Python later, run commands with `./.venv/bin/python ...` on macOS/Linux/WSL or `./.venv/Scripts/python.exe ...` in a Windows-style venv, or print the activation command with:
 
 ```bash
 make python-activate
@@ -24,9 +29,9 @@ make python-activate
 ## 2. First Successful CLI Run
 
 ```bash
-./.venv/bin/python -m moladt.cli parse molecules/benzene.sdf
-./.venv/bin/python -m moladt.cli pretty-example morphine
-./.venv/bin/python -m moladt.cli to-smiles molecules/benzene.sdf
+make python-parse
+make python-pretty-example EXAMPLE=morphine
+make python-to-smiles
 ```
 
 If those three commands work, the local install is in good shape and the example path is reading the checked-in SDF files correctly.
@@ -78,12 +83,14 @@ make python-setup
 ```
 
 - Wrong Python or missing activation:
-  use `./.venv/bin/python ...` directly.
+  use `./.venv/bin/python ...` or `./.venv/Scripts/python.exe ...` directly.
 - Unsupported SMILES:
   see [SMILES scope and validation](smiles-scope-and-validation.md).
 
-For deeper details, use:
+For deeper details, use the local benchmark runner directly:
 
 ```bash
 ./.venv/bin/python -m scripts.run_all --help
+# or, if your environment created a Windows-style venv:
+./.venv/Scripts/python.exe -m scripts.run_all --help
 ```

@@ -13,8 +13,6 @@ BASH := $(strip $(shell command -v bash 2>/dev/null || printf "%s" /bin/bash))
 APT_GET ?= apt-get
 SUDO ?= sudo
 AUTO_INSTALL_VENV ?= 1
-AUTO_FIX_PROMPT ?= 1
-AUTO_APPROVE_FIXES ?= 0
 
 INFERENCE_PRESET ?= paper
 QM9_LIMIT ?=
@@ -162,28 +160,9 @@ python-setup:
 	@set -e; \
 	system_python="$(SYSTEM_PYTHON)"; \
 	auto_install_venv="$(AUTO_INSTALL_VENV)"; \
-	prompt_fixes="$(AUTO_FIX_PROMPT)"; \
-	auto_approve_fixes="$(AUTO_APPROVE_FIXES)"; \
 	apt_get_cmd="$(APT_GET)"; \
 	sudo_cmd="$(SUDO)"; \
 	venv_error_log=".venv-setup.log"; \
-	confirm_fix() { \
-		prompt_text="$$1"; \
-		if [ "$$auto_approve_fixes" = "1" ]; then \
-			printf "%s\n" "$$prompt_text" "Auto-approving this repair."; \
-			return 0; \
-		fi; \
-		if [ "$$prompt_fixes" = "0" ]; then \
-			return 1; \
-		fi; \
-		printf "%s" "$$prompt_text"; \
-		IFS= read -r response || response=""; \
-		printf "%s\n" ""; \
-		case "$$response" in \
-			[Yy]|[Yy][Ee][Ss]) return 0 ;; \
-			*) return 1 ;; \
-		esac; \
-	}; \
 	if [ -z "$$system_python" ]; then \
 		printf "%s\n" \
 		"" \
@@ -235,12 +214,12 @@ python-setup:
 				"$$apt_get_cmd" "$$@"; \
 			fi; \
 		}; \
-		if [ "$$can_use_apt" = "1" ] && confirm_fix "Detected missing ensurepip support while creating .venv. Install the Linux venv package now? [y/N] "; then \
+		if [ "$$can_use_apt" = "1" ]; then \
 			python_short_version="$$( "$$system_python" -c 'import sys; print("{}.{}".format(sys.version_info[0], sys.version_info[1]))' )"; \
 			printf "%s\n" \
 				"" \
 				"Detected missing ensurepip support while creating .venv." \
-				"Attempting automatic installation of Linux venv packages."; \
+				"Attempting automatic installation of Linux venv packages without an interactive Makefile prompt."; \
 			if run_apt update; then \
 				for package in "python3-venv" "python$${python_short_version}-venv"; do \
 					printf "%s\n" "Trying package: $$package"; \

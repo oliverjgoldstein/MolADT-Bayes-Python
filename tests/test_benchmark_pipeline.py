@@ -1211,6 +1211,30 @@ def test_find_freesolv_sdf_paths_recurses_into_nested_snapshot(tmp_path) -> None
     assert _find_freesolv_sdf_paths(downloads) == (sdf_path,)
 
 
+def test_find_freesolv_sdf_paths_prefers_vendored_sdffiles_when_metadata_archive_only_has_database_json(tmp_path) -> None:
+    from scripts.download_data import FreeSolvDownloads
+    from scripts.process_freesolv import _find_freesolv_sdf_paths
+
+    raw_root = tmp_path / "freesolv"
+    vendored_sdf_dir = raw_root / "sdffiles"
+    vendored_sdf_dir.mkdir(parents=True)
+    vendored_sdf = vendored_sdf_dir / "mobley_1.sdf"
+    vendored_sdf.write_text("", encoding="utf-8")
+
+    extract_root = raw_root / "FreeSolv-master"
+    metadata_dir = extract_root / "FreeSolv-master"
+    metadata_dir.mkdir(parents=True)
+    (metadata_dir / "database.json").write_text("{}", encoding="utf-8")
+
+    downloads = FreeSolvDownloads(
+        csv_path=raw_root / "SAMPL.csv",
+        repo_archive_path=raw_root / "FreeSolv-master.zip",
+        repo_extract_dir=extract_root,
+    )
+
+    assert _find_freesolv_sdf_paths(downloads) == (vendored_sdf,)
+
+
 def test_freesolv_split_partition_matches_baseline_counts_for_full_dataset() -> None:
     from scripts.process_freesolv import _freesolv_split_partition
 

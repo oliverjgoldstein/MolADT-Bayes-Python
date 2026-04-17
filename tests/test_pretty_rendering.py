@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from moladt.chem.pretty import pretty_text
-from moladt.examples import DIBORANE_MANUSCRIPT, FERROCENE_MANUSCRIPT, MORPHINE_MANUSCRIPT, PSILOCYBIN_MANUSCRIPT
-from moladt.examples import diborane_pretty, ferrocene_pretty, morphine_pretty, psilocybin_pretty
+from moladt.examples import DIBORANE_MANUSCRIPT, FERROCENE_MANUSCRIPT, MORPHINE_MANUSCRIPT
+from moladt.examples import diborane_pretty, ferrocene_pretty, morphine_pretty
 
 
 def test_ferrocene_pretty_rendering_includes_shells_and_backdonation() -> None:
@@ -37,19 +37,9 @@ def test_manuscript_examples_render_titles_and_notes() -> None:
     ferrocene_text = FERROCENE_MANUSCRIPT.render()
     diborane_text = DIBORANE_MANUSCRIPT.render()
     morphine_text = MORPHINE_MANUSCRIPT.render()
-    psilocybin_text = PSILOCYBIN_MANUSCRIPT.render()
     assert "Ferrocene (Fe(C5H5)2)" in ferrocene_text
     assert "back-donation-style pool" in ferrocene_text
     assert "Diborane (B2H6)" in diborane_text
     assert "3c-2e bridging hydrogen bonding systems" in diborane_text
     assert "Morphine (explicit Dietz skeleton)" in morphine_text
     assert "atom-centered stereochemistry flags" in morphine_text
-    assert "Psilocybin (indole phosphate)" in psilocybin_text
-    assert "phosphoryl pool" in psilocybin_text
-
-
-def test_psilocybin_pretty_rendering_includes_indole_and_phosphoryl_systems() -> None:
-    rendered = pretty_text(psilocybin_pretty)
-    assert "atoms            19" in rendered
-    assert "[#1] indole_pi_system" in rendered
-    assert "[#2] phosphoryl" in rendered
