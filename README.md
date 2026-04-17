@@ -2,7 +2,7 @@
 
 MolADT is a typed molecular data format for Bayesian work over molecules. It keeps chemically meaningful structure in the object itself instead of hiding it inside string syntax.
 
-[Quickstart](docs/quickstart.md) · [Representation](docs/representation.md) · [Data Model](docs/data-model.md) · [Models](docs/models.md) · [Examples](docs/examples.md)
+[Quickstart](docs/quickstart.md) · [Representation](docs/representation.md) · [ADT Representation](docs/data-model.md) · [Models](docs/models.md) · [Examples](docs/examples.md)
 
 ## Why MolADT
 
@@ -113,7 +113,7 @@ For split sizes, the exact benchmark contract, the published FreeSolv RMSE conte
 ## Read More
 
 - [Quickstart](docs/quickstart.md)
-- [Data model](docs/data-model.md)
+- [ADT representation](docs/data-model.md)
 - [Inference and benchmarks](docs/inference-and-benchmarks.md)
 - [Parsing and rendering](docs/parsing.md)
 - [CLI reference](docs/cli.md)
