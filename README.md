@@ -40,17 +40,33 @@ For probabilistic proposals or local graph surgery, use `MutableMolecule` from `
 
 ## Parsing
 
-Use the CLI when you want to inspect how a boundary format lands inside MolADT.
+Use the CLI when you want to inspect or serialize how a boundary format lands inside MolADT.
 
 ```bash
 make python-parse
+./.venv/bin/python -m moladt.cli to-json molecules/benzene.sdf > benzene.moladt.json
+./.venv/bin/python -m moladt.cli from-json benzene.moladt.json
 make python-pretty-example EXAMPLE=morphine
 make python-to-smiles
 ```
 
-- `parse` reads one SDF record, validates it, prints the MolADT structure, and preserves SDF title and property fields
+- `parse` reads one SDF record, validates it, and prints a minimal MolADT report plus the SDF title; add `--properties` when you want the raw SDF property fields too
+- `to-json` reads one SDF record, validates it, and writes the shared MolADT JSON boundary format used across the Python and Haskell repos
+- `from-json` reads that MolADT JSON back into the typed `Molecule` object and prints the usual MolADT report
 - `pretty-example` loads the manuscript-facing built-in objects, written as explicit typed molecules with orbital shells intact
 - `to-smiles` renders validated classical MolADT structures back into the supported SMILES subset
+
+Programmatically, the shortest `SDF -> MolADT -> JSON -> MolADT` path is:
+
+```python
+from moladt.io import molecule_from_json, molecule_to_json, read_sdf_record
+
+record = read_sdf_record("molecules/benzene.sdf")
+payload = molecule_to_json(record.molecule)
+molecule = molecule_from_json(payload)
+```
+
+The JSON file emitted by `to-json` is the same MolADT boundary format that the Haskell repo now accepts with `stack run moladtbayes -- from-json ...`.
 
 The SDF reader accepts V2000 and the core V3000 CTAB subset used by common structure exports:
 
@@ -84,9 +100,9 @@ make qm9long
 make timing
 ```
 
-- `make freesolv`: FreeSolv RMSE comparison. Fixed path `moladt_featurized + bayes_gp_rbf_screened + laplace`. The FreeSolv SVG includes posterior predictive RMSE uncertainty bars from the Stan fit. It writes `results/freesolv/run_.../freesolv_rmse_vs_moleculenet.svg`, `results/freesolv/run_.../freesolv_bayesian_model.txt`, and `results/freesolv/run_.../details/freesolv_train_test_uncertainty.csv`.
-- `make qm9long`: full QM9 `mu` MAE comparison over all aligned local QM9 molecules, using `visnet_ensemble` on `moladt_featurized_geom`. That export keeps the atomic numbers and coordinates from the SDF record and adds the full MolADT feature bundle from the same molecule. The current local bundle yields `107,108 / 13,388 / 13,389` train / validation / test rows under the deterministic `80/10/10` long split. ViSNet runs one member for at most `25` epochs with seed `102`, and the verbose run prints every epoch with validation RMSE and MAE. Writes `results/qm9/long/run_.../qm9_mae_vs_moleculenet.svg`.
-- `make timing`: ZINC SDF ingest and runtime comparison. It measures raw SDF block reads, local SDF parsing into MolADT, the one-time matched corpus build, and MolADT file loading. Writes `results/timing/paper/run_.../timing_overview.svg`.
+- `make freesolv`: FreeSolv RMSE comparison. Fixed path `moladt_featurized + bayes_gp_rbf_screened + laplace`. The paper SVG is a clean bar comparison, and the prose caption is written separately to `caption.txt`. It writes `results/freesolv/run_.../freesolv_rmse_vs_moleculenet.svg`, `results/freesolv/run_.../caption.txt`, `results/freesolv/run_.../freesolv_bayesian_model.txt`, and `results/freesolv/run_.../details/freesolv_train_test_uncertainty.csv`.
+- `make qm9long`: full QM9 `mu` MAE comparison over all aligned local QM9 molecules, using `visnet_ensemble` on `moladt_featurized_geom`. That export keeps the atomic numbers and coordinates from the SDF record and adds the full MolADT feature bundle from the same molecule. The current local bundle yields `107,108 / 13,388 / 13,389` train / validation / test rows under the deterministic `80/10/10` long split. ViSNet runs one member for at most `25` epochs with seed `102`, and the verbose run prints every epoch with validation RMSE and MAE. It writes the clean paper SVG plus `caption.txt`.
+- `make timing`: ZINC timing comparison on the fixed five-stage paper path: `SMILES CSV -> string`, `SDF -> MolADT`, `SDF -> SMILES`, `MolADT -> JSON`, and `JSON -> MolADT`. It writes `results/timing/paper/run_.../timing_overview.svg`, `results/timing/paper/run_.../caption.txt`, and `results/timing/paper/run_.../timing_result_files.txt`.
 
 Results are written under timestamped directories in `results/`, mainly `results/freesolv/run_.../`, `results/qm9/long/run_.../`, and `results/timing/paper/run_.../`.
 

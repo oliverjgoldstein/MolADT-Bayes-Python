@@ -248,20 +248,26 @@ def test_moleculenet_comparison_graphs_write_expected_svg_files(tmp_path) -> Non
 
     freesolv_svg = (tmp_path / "freesolv_rmse_vs_moleculenet.svg").read_text(encoding="utf-8")
     qm9_svg = (tmp_path / "qm9_mae_vs_moleculenet.svg").read_text(encoding="utf-8")
+    freesolv_caption = (tmp_path / "freesolv_rmse_vs_moleculenet.caption.txt").read_text(encoding="utf-8")
+    qm9_caption = (tmp_path / "qm9_mae_vs_moleculenet.caption.txt").read_text(encoding="utf-8")
     assert "FreeSolv: RMSE" in freesolv_svg
     assert "Training" in freesolv_svg
     assert ">Validation</text>" in freesolv_svg
     assert "Test" in freesolv_svg
     assert "Paper" in freesolv_svg
-    assert "moladt_featurized" in freesolv_svg
-    assert "MPNN" in freesolv_svg
+    assert "moladt_featurized" not in freesolv_svg
+    assert "MPNN" not in freesolv_svg
+    assert "moladt_featurized" in freesolv_caption
+    assert "MPNN" in freesolv_caption
     assert "QM9: MAE" in qm9_svg
     assert "Training" in qm9_svg
     assert ">Validation</text>" not in qm9_svg
     assert "Test" in qm9_svg
     assert "Paper" in qm9_svg
-    assert "moladt_featurized" in qm9_svg
-    assert "DTNN" in qm9_svg
+    assert "moladt_featurized" not in qm9_svg
+    assert "DTNN" not in qm9_svg
+    assert "moladt_featurized" in qm9_caption
+    assert "DTNN" in qm9_caption
 
 
 def test_attach_moleculenet_uncertainty_adds_freesolv_intervals() -> None:
@@ -304,7 +310,7 @@ def test_attach_moleculenet_uncertainty_adds_freesolv_intervals() -> None:
     assert row["test_interval_high"] > row["test_interval_low"]
 
 
-def test_freesolv_graph_writes_uncertainty_bar_markup(tmp_path) -> None:
+def test_freesolv_graph_omits_uncertainty_bar_markup(tmp_path) -> None:
     comparison = pd.DataFrame(
         [
             {
@@ -335,12 +341,16 @@ def test_freesolv_graph_writes_uncertainty_bar_markup(tmp_path) -> None:
 
     write_moleculenet_comparison_overviews(comparison, tmp_path)
     freesolv_svg = (tmp_path / "freesolv_rmse_vs_moleculenet.svg").read_text(encoding="utf-8")
+    freesolv_caption = (tmp_path / "caption.txt").read_text(encoding="utf-8")
 
-    assert 'data-uncertainty="Training"' in freesolv_svg
-    assert 'data-uncertainty="Validation"' in freesolv_svg
-    assert 'data-uncertainty="Test"' in freesolv_svg
-    assert "posterior predictive RMSE" in freesolv_svg
-    assert "Stan fit" in freesolv_svg
+    assert 'data-uncertainty="Training"' not in freesolv_svg
+    assert 'data-uncertainty="Validation"' not in freesolv_svg
+    assert 'data-uncertainty="Test"' not in freesolv_svg
+    assert 'data-uncertainty-cap-lower="Training"' not in freesolv_svg
+    assert "posterior predictive RMSE" not in freesolv_svg
+    assert "Stan fit" not in freesolv_svg
+    assert "posterior predictive RMSE" not in freesolv_caption
+    assert "Stan fit" not in freesolv_caption
 
 
 def test_qm9_graph_keeps_training_and_test_values_in_their_own_bars(tmp_path) -> None:
@@ -514,7 +524,7 @@ def test_timing_stage_overview_writes_svg(tmp_path) -> None:
     timing = pd.DataFrame(
         [
             {
-                "stage": "smiles_csv_read",
+                "stage": "smiles_csv_to_string",
                 "description": "Read source SMILES rows.",
                 "molecule_count": 100,
                 "success_count": 100,
@@ -526,8 +536,8 @@ def test_timing_stage_overview_writes_svg(tmp_path) -> None:
                 "peak_rss_mb": 12.0,
             },
             {
-                "stage": "smiles_parse",
-                "description": "Parse source SMILES rows into MolADT objects.",
+                "stage": "sdf_to_moladt",
+                "description": "Parse SDF files into MolADT objects.",
                 "molecule_count": 100,
                 "success_count": 100,
                 "failure_count": 0,
@@ -538,8 +548,20 @@ def test_timing_stage_overview_writes_svg(tmp_path) -> None:
                 "peak_rss_mb": 10.0,
             },
             {
-                "stage": "moladt_json_read",
-                "description": "Read MolADT JSON payloads.",
+                "stage": "sdf_to_smiles",
+                "description": "Read SDF files and render SMILES strings.",
+                "molecule_count": 100,
+                "success_count": 100,
+                "failure_count": 0,
+                "total_runtime_seconds": 0.6,
+                "molecules_per_second": 166.7,
+                "median_latency_us": 8.0,
+                "p95_latency_us": 13.0,
+                "peak_rss_mb": 11.0,
+            },
+            {
+                "stage": "moladt_to_json",
+                "description": "Serialize MolADT objects to JSON files.",
                 "molecule_count": 100,
                 "success_count": 100,
                 "failure_count": 0,
@@ -550,8 +572,8 @@ def test_timing_stage_overview_writes_svg(tmp_path) -> None:
                 "peak_rss_mb": 16.0,
             },
             {
-                "stage": "moladt_file_parse",
-                "description": "Parse MolADT files.",
+                "stage": "json_to_moladt",
+                "description": "Decode JSON files back into MolADT objects.",
                 "molecule_count": 100,
                 "success_count": 100,
                 "failure_count": 0,
@@ -567,11 +589,15 @@ def test_timing_stage_overview_writes_svg(tmp_path) -> None:
     output = tmp_path / "timing_overview.svg"
     write_timing_stage_overview(timing, output)
     svg = output.read_text(encoding="utf-8")
-    assert "Local timing overview" in svg
-    assert "smiles_csv_read" in svg
-    assert "smiles_parse" in svg
-    assert "moladt_json_read" in svg
-    assert "moladt_file_parse" in svg
+    caption = (tmp_path / "caption.txt").read_text(encoding="utf-8")
+    assert "Timing Throughput" in svg
+    assert "SMILES CSV -&gt; string" in svg
+    assert "SDF -&gt; MolADT" in svg
+    assert "SDF -&gt; SMILES" in svg
+    assert "MolADT -&gt; JSON" in svg
+    assert "JSON -&gt; MolADT" in svg
+    assert "matched local timing corpus" in caption
+    assert "SDF to SMILES" in caption
 
 
 def test_results_csv_combines_summary_metric_and_timing_rows(tmp_path, monkeypatch) -> None:
@@ -638,7 +664,7 @@ def test_results_csv_combines_summary_metric_and_timing_rows(tmp_path, monkeypat
     timing = pd.DataFrame(
         [
             {
-                "stage": "smiles_csv_read",
+                "stage": "smiles_csv_to_string",
                 "description": "Read source SMILES rows.",
                 "molecule_count": 100,
                 "success_count": 100,
@@ -663,7 +689,7 @@ def test_results_csv_combines_summary_metric_and_timing_rows(tmp_path, monkeypat
     assert summary_row["literature_context"] == "MPNN RMSE 1.150"
     assert metric_row["representation"] == "moladt"
     assert metric_row["rmse"] == pytest.approx(1.10)
-    assert timing_row["stage"] == "smiles_csv_read"
+    assert timing_row["stage"] == "smiles_csv_to_string"
 
 
 def test_remove_legacy_report_artifacts_cleans_old_files(tmp_path, monkeypatch) -> None:
@@ -680,6 +706,8 @@ def test_remove_legacy_report_artifacts_cleans_old_files(tmp_path, monkeypatch) 
         "predictions.csv",
         "model_coefficients.csv",
         "generalization_metrics.csv",
+        "caption.txt",
+        "timing_result_files.txt",
         "split_rmse_overview.svg",
         "inference_sweep_overview.svg",
         "predicted_vs_actual_overview.svg",

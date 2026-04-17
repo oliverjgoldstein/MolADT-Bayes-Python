@@ -22,9 +22,11 @@ Each predictive run keeps the top level small:
 Timing runs also write:
 
 - `timing_overview.svg`
+- `caption.txt`
+- `timing_result_files.txt`
 - `details/zinc_timing.csv`
 - `details/zinc_timing_items.csv`
-- `details/zinc_timing_library_manifest.csv`
+- `details/zinc_timing_corpus_manifest.csv`
 
 ## The Two Comparison Figures
 
@@ -32,8 +34,9 @@ Each predictive run writes only the two MoleculeNet comparison figures:
 
 - `freesolv_rmse_vs_moleculenet.svg`
 - `qm9_mae_vs_moleculenet.svg`
+- `caption.txt` in the run directory for the paper-facing prose caption
 
-The FreeSolv figure shows local `Training`, `Validation`, and `Test` metrics, followed by the cited `Paper` baseline. The local FreeSolv bars also include posterior predictive RMSE uncertainty bars derived from the selected Stan run.
+The FreeSolv figure shows local `Training`, `Validation`, and `Test` metrics, followed by the cited `Paper` baseline.
 The QM9 figure shows local `Training` and `Test` metrics, followed by the cited `Paper` baseline for the `qm9long` ViSNet run on `moladt_featurized_geom`.
 
 ## Other Useful Files
@@ -54,9 +57,10 @@ Use the files in this order:
 
 For timing runs specifically, `details/zinc_timing.csv` separates:
 
-- the raw source SMILES read (`smiles_csv_read`)
-- the local SMILES parser (`smiles_parse`)
-- the raw MolADT JSON read (`moladt_json_read`)
-- the local MolADT JSON file reader (`moladt_file_parse`)
+- the matched SMILES CSV read (`smiles_csv_to_string`)
+- cached SDF parsing into MolADT (`sdf_to_moladt`)
+- cached SDF rendering back to SMILES (`sdf_to_smiles`)
+- MolADT JSON serialization (`moladt_to_json`)
+- JSON decoding back into MolADT (`json_to_moladt`)
 
-The top-level `timing_overview.svg` plots throughput on a log axis and labels each stage as I/O baseline, string baseline, or our file reader.
+The top-level `timing_overview.svg` is the clean paper figure. The explanatory prose lives in `caption.txt`.

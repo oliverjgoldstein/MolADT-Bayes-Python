@@ -533,6 +533,10 @@ def _remove_legacy_report_artifacts() -> None:
         "generalization_report.md",
         "literature_context.md",
         "zinc_timing.md",
+        "timing_result_files.txt",
+        "caption.txt",
+        "freesolv_rmse_vs_moleculenet.caption.txt",
+        "qm9_mae_vs_moleculenet.caption.txt",
         "predictive_metrics.csv",
         "predictions.csv",
         "model_coefficients.csv",
@@ -1306,13 +1310,13 @@ def _write_timing_report(timing: pd.DataFrame) -> None:
     items_path = _details_dir() / "zinc_timing_items.csv"
     if items_path.exists():
         lines.append("")
-        lines.append(f"Detailed per-item parse timings: `{display_path(items_path)}`")
+        lines.append(f"Detailed per-item timings: `{display_path(items_path)}`")
         items = pd.read_csv(items_path)
         if not items.empty:
             lines.append("")
-            lines.append("## Slowest Parse Items")
+            lines.append("## Slowest Timed Items")
             lines.append("")
-            for stage_name in ("smiles_parse", "moladt_file_parse"):
+            for stage_name in ("sdf_to_moladt", "sdf_to_smiles", "moladt_to_json", "json_to_moladt"):
                 stage_items = items.loc[items["stage"] == stage_name].sort_values("latency_us", ascending=False).head(5)
                 if stage_items.empty:
                     continue
@@ -1324,9 +1328,12 @@ def _write_timing_report(timing: pd.DataFrame) -> None:
                         f"{float(item['latency_us']):.1f} us, success={bool(item['success'])}."
                     )
                 lines.append("")
-    manifest_path = _details_dir() / "zinc_timing_library_manifest.csv"
+    manifest_path = _details_dir() / "zinc_timing_corpus_manifest.csv"
     if manifest_path.exists():
         lines.append(f"Matched timing-library manifest: `{display_path(manifest_path)}`")
+    result_files_path = RESULTS_DIR / "timing_result_files.txt"
+    if result_files_path.exists():
+        lines.append(f"Result-file index: `{display_path(result_files_path)}`")
     (RESULTS_DIR / "zinc_timing.md").write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
 

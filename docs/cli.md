@@ -6,7 +6,7 @@ The Python CLI entrypoint is:
 ./.venv/bin/python -m moladt.cli --help
 ```
 
-It currently exposes four subcommands.
+It currently exposes six subcommands.
 
 ## `parse`
 
@@ -21,7 +21,15 @@ What it does:
 - validates the resulting MolADT structure with `validate_molecule`
 - prints `Title: ...`
 - prints the pretty-printed molecule
-- prints a `Properties:` section if the SDF record contains properties
+- keeps the default output minimal by omitting the raw SDF properties block
+
+If you want the raw SDF metadata as well:
+
+```bash
+./.venv/bin/python -m moladt.cli parse --properties molecules/benzene.sdf
+```
+
+That adds a trailing `Properties:` section with the record fields from the source SDF.
 
 Use `parse` when the source of truth is a file-backed molecule.
 
@@ -72,6 +80,35 @@ Current rejection messages come directly from the SMILES renderer, for example:
 - `SMILES rendering only supports localized double/triple bonds and six-edge pi rings`
 - `pi_ring must be a simple six-membered cycle to render as SMILES`
 
+## `to-json`
+
+```bash
+./.venv/bin/python -m moladt.cli to-json molecules/benzene.sdf > benzene.moladt.json
+```
+
+What it does:
+
+- reads one SDF record from disk
+- validates the resulting MolADT structure
+- writes the shared MolADT JSON boundary format used by both repos
+
+Use `to-json` when you want a stable file-backed MolADT payload instead of the pretty report.
+
+## `from-json`
+
+```bash
+./.venv/bin/python -m moladt.cli from-json benzene.moladt.json
+```
+
+What it does:
+
+- reads a MolADT JSON payload from disk
+- rebuilds the typed `Molecule`
+- validates the decoded structure
+- prints the usual MolADT report
+
+Use `from-json` when a JSON file is already your boundary format and you want the typed object back.
+
 ## `pretty-example`
 
 ```bash
@@ -84,7 +121,9 @@ This command loads named built-in examples from [`moladt/examples/manuscript.py`
 
 ## How the Commands Differ
 
-- `parse` starts from an SDF file and can print record title and properties.
+- `parse` starts from an SDF file, prints the title plus MolADT structure, and adds raw SDF metadata only with `--properties`.
+- `to-json` starts from an SDF file and emits the shared MolADT JSON boundary payload.
+- `from-json` starts from a MolADT JSON file and prints the validated typed structure.
 - `parse-smiles` starts from a SMILES string and only prints the validated MolADT structure.
 - `to-smiles` starts from an SDF file and emits only the rendered SMILES string.
 - `pretty-example` starts from a built-in example object written as an explicit typed molecule with orbital shells intact.
@@ -93,5 +132,6 @@ This command loads named built-in examples from [`moladt/examples/manuscript.py`
 
 - [`moladt/cli.py`](../moladt/cli.py)
 - [`moladt/io/sdf.py`](../moladt/io/sdf.py)
+- [`moladt/io/molecule_json.py`](../moladt/io/molecule_json.py)
 - [`moladt/io/smiles.py`](../moladt/io/smiles.py)
 - [`moladt/chem/validate.py`](../moladt/chem/validate.py)

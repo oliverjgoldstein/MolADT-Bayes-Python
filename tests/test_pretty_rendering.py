@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from moladt.chem.pretty import pretty_text
 from moladt.examples import DIBORANE_MANUSCRIPT, FERROCENE_MANUSCRIPT, MORPHINE_MANUSCRIPT
 from moladt.examples import diborane_pretty, ferrocene_pretty, morphine_pretty
+from moladt.io.sdf import read_sdf
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_ferrocene_pretty_rendering_includes_shells_and_backdonation() -> None:
@@ -31,6 +37,12 @@ def test_morphine_pretty_rendering_includes_explicit_ring_and_pi_systems() -> No
     assert "[#2] phenyl_pi_ring" in rendered
     assert "SMILES Stereochemistry" in rendered
     assert "center #3: TH2 from token @@" in rendered
+
+
+def test_benzene_pretty_rendering_omits_empty_stereochemistry_section() -> None:
+    rendered = pretty_text(read_sdf(PROJECT_ROOT / "molecules" / "benzene.sdf"))
+
+    assert "SMILES Stereochemistry" not in rendered
 
 
 def test_manuscript_examples_render_titles_and_notes() -> None:

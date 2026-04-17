@@ -35,33 +35,37 @@ SERIES_COLORS = {
     "paper": LITERATURE,
 }
 TIMING_OWNER_COLORS = {
-    "I/O baseline": "#1d4ed8",
-    "External toolkit": "#b45309",
-    "One-time setup": "#475569",
-    "String baseline": "#6d28d9",
-    "Our parser": "#0f766e",
-    "Our file reader": "#be123c",
+    "CSV baseline": "#1d4ed8",
+    "Boundary parse": "#0f766e",
+    "Boundary render": "#92400e",
+    "Serialization": "#b45309",
+    "File round-trip": "#be123c",
 }
 TIMING_STAGE_META = {
-    "smiles_csv_read": {
-        "label": "Source SMILES read",
-        "owner": "I/O baseline",
-        "description": "Reads SMILES rows from the normalized source CSV. No chemistry parsing happens here.",
+    "smiles_csv_to_string": {
+        "label": "SMILES CSV -> string",
+        "owner": "CSV baseline",
+        "description": "Reads matched SMILES CSV rows into Python strings.",
     },
-    "smiles_parse": {
-        "label": "SMILES to MolADT",
-        "owner": "String baseline",
-        "description": "Parses each source SMILES string into the local MolADT object with the project SMILES reader.",
+    "sdf_to_moladt": {
+        "label": "SDF -> MolADT",
+        "owner": "Boundary parse",
+        "description": "Parses cached SDF files into the local typed molecule object.",
     },
-    "moladt_json_read": {
-        "label": "MolADT JSON read",
-        "owner": "I/O baseline",
-        "description": "Reads cached MolADT JSON payloads from disk without decoding them into typed objects.",
+    "sdf_to_smiles": {
+        "label": "SDF -> SMILES",
+        "owner": "Boundary render",
+        "description": "Reads cached SDF files and renders them back into the supported SMILES subset.",
     },
-    "moladt_file_parse": {
-        "label": "MolADT JSON to object",
-        "owner": "Our file reader",
-        "description": "Decodes the cached MolADT JSON payload into the local typed molecule object.",
+    "moladt_to_json": {
+        "label": "MolADT -> JSON",
+        "owner": "Serialization",
+        "description": "Serializes parsed MolADT objects to JSON files.",
+    },
+    "json_to_moladt": {
+        "label": "JSON -> MolADT",
+        "owner": "File round-trip",
+        "description": "Reads JSON files and decodes them back into the typed molecule object.",
     },
 }
 
@@ -70,6 +74,7 @@ def write_moleculenet_comparison_overviews(comparison_frame: pd.DataFrame, desti
     if comparison_frame.empty:
         return
     ensure_directory(destination_dir)
+    multiple_figures = len(comparison_frame) > 1
     for _, row in comparison_frame.sort_values(["dataset"]).iterrows():
         dataset = str(row["dataset"])
         metric_name = str(row["metric_name"])
@@ -78,9 +83,6 @@ def write_moleculenet_comparison_overviews(comparison_frame: pd.DataFrame, desti
         valid_value = float(row.get("valid_value", row["local_value"]))
         test_value = float(row.get("test_value", row["local_value"]))
         paper_value = float(row["paper_value"])
-        train_interval = _metric_interval(row, "train")
-        valid_interval = _metric_interval(row, "valid")
-        test_interval = _metric_interval(row, "test")
         selection_split = str(row.get("selection_split", "valid"))
         selection_label = "Validation" if selection_split == "valid" else selection_split.title()
         include_validation_bar = dataset == "freesolv"
@@ -88,59 +90,32 @@ def write_moleculenet_comparison_overviews(comparison_frame: pd.DataFrame, desti
             train_value,
             test_value,
             paper_value,
-            train_interval[1] if train_interval is not None else train_value,
-            test_interval[1] if test_interval is not None else test_value,
         ]
         if include_validation_bar:
             candidates.extend(
                 [
                     valid_value,
-                    valid_interval[1] if valid_interval is not None else valid_value,
                 ]
             )
         value_max = max(*candidates, 1e-6) * 1.2
         width = 900
+        height = 560
         x0 = 28
         y0 = 28
-        bars: list[tuple[str, float, str, tuple[float, float] | None]] = [("Training", train_value, SPLIT_COLORS["train"], train_interval)]
+        bars: list[tuple[str, float, str]] = [("Training", train_value, SPLIT_COLORS["train"])]
         if include_validation_bar:
-            bars.append(("Validation", valid_value, SPLIT_COLORS["valid"], valid_interval))
+            bars.append(("Validation", valid_value, SPLIT_COLORS["valid"]))
         bars.extend(
             [
-                ("Test", test_value, SPLIT_COLORS["test"], test_interval),
-                ("Paper", paper_value, SERIES_COLORS["paper"], None),
+                ("Test", test_value, SPLIT_COLORS["test"]),
+                ("Paper", paper_value, SERIES_COLORS["paper"]),
             ]
         )
-        summary_text = (
-            "Local MolADT benchmark run on the FreeSolv split. Bars show training, validation, test, and the cited MoleculeNet Table 3 baseline. Error bars show posterior predictive RMSE intervals from the Stan fit."
-            if include_validation_bar
-            else "Local MolADT benchmark run on the QM9 split. Bars show training, test, and the cited MoleculeNet Table 3 baseline."
-        )
-        summary_lines = _wrap_text(summary_text, 92)
-        local_lines = _wrap_text(
-            f"Local: {str(row.get('representation', 'moladt'))} / {str(row['model'])} / {str(row['method'])}",
-            92,
-        )
-        selection_lines = _wrap_text(
-            f"Selection: {selection_label} {metric_name}; paper baseline: {str(row['paper_model_name'])} from MoleculeNet",
-            92,
-        )
-        note_lines = _wrap_text(str(row.get("note", "")), 96)[:3]
         title_y = y0 + 40
-        summary_y = title_y + 28
-        header_height = (
-            22
-            + _text_block_height(summary_lines, 18)
-            + _text_block_height(local_lines, 15)
-            + _text_block_height(selection_lines, 15)
-            + 26
-        )
         plot_x = x0 + 72
-        plot_y = summary_y + header_height
+        plot_y = y0 + 78
         plot_width = width - 156
-        plot_height = 244
-        note_y = plot_y + plot_height + 56
-        height = int(note_y + _text_block_height(note_lines, 14) + y0)
+        plot_height = 372
         card_width = width - 56
         card_height = height - 56
         tick_count = 6
@@ -156,35 +131,6 @@ def write_moleculenet_comparison_overviews(comparison_frame: pd.DataFrame, desti
             f"{escape(str(row['dataset_label']))}: {escape(metric_name)}"
             "</text>"
         )
-        _append_wrapped_text(
-            parts,
-            x=x0 + 28,
-            y=summary_y,
-            lines=summary_lines,
-            font_size=17,
-            line_height=18,
-            fill=MUTED,
-        )
-        local_y = summary_y + max(1, len(summary_lines)) * 18 + 10
-        _append_wrapped_text(
-            parts,
-            x=x0 + 28,
-            y=local_y,
-            lines=local_lines,
-            font_size=13,
-            line_height=15,
-            fill=MUTED,
-        )
-        selection_y = local_y + max(1, len(local_lines)) * 15 + 8
-        _append_wrapped_text(
-            parts,
-            x=x0 + 28,
-            y=selection_y,
-            lines=selection_lines,
-            font_size=13,
-            line_height=15,
-            fill=MUTED,
-        )
         for step in range(tick_count):
             fraction = step / (tick_count - 1)
             y_value = value_max * fraction
@@ -196,7 +142,7 @@ def write_moleculenet_comparison_overviews(comparison_frame: pd.DataFrame, desti
         parts.append(f'<line x1="{plot_x}" y1="{plot_y + plot_height}" x2="{plot_x + plot_width}" y2="{plot_y + plot_height}" stroke="{TEXT}" stroke-width="2" />')
         total_bar_width = len(bars) * bar_width + (len(bars) - 1) * bar_gap
         left_pad = plot_x + (plot_width - total_bar_width) / 2
-        for index, (label, value, color, interval) in enumerate(bars):
+        for index, (label, value, color) in enumerate(bars):
             x = left_pad + index * (bar_width + bar_gap)
             bar_height = (value / value_max) * plot_height if value_max > 0 else 0.0
             y = plot_y + plot_height - bar_height
@@ -209,30 +155,19 @@ def write_moleculenet_comparison_overviews(comparison_frame: pd.DataFrame, desti
             parts.append(
                 f'<text x="{x + bar_width / 2:.1f}" y="{plot_y + plot_height + 32}" text-anchor="middle" font-size="13" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}">{escape(label)}</text>'
             )
-            if interval is not None:
-                interval_low, interval_high = interval
-                top_value = max(value, interval_low)
-                top_y = plot_y + plot_height - (top_value / value_max) * plot_height if value_max > 0 else plot_y + plot_height
-                high_y = plot_y + plot_height - (interval_high / value_max) * plot_height if value_max > 0 else plot_y + plot_height
-                center_x = x + bar_width / 2
-                cap_half_width = 11
-                parts.append(
-                    f'<line x1="{center_x:.1f}" y1="{high_y:.1f}" x2="{center_x:.1f}" y2="{top_y:.1f}" stroke="{TEXT}" stroke-width="1.4" data-uncertainty="{escape(label)}" />'
-                )
-                parts.append(
-                    f'<line x1="{center_x - cap_half_width:.1f}" y1="{high_y:.1f}" x2="{center_x + cap_half_width:.1f}" y2="{high_y:.1f}" stroke="{TEXT}" stroke-width="1.4" data-uncertainty-cap="{escape(label)}" />'
-                )
-        _append_wrapped_text(
-            parts,
-            x=x0 + 28,
-            y=note_y,
-            lines=note_lines,
-            font_size=11,
-            line_height=14,
-            fill=MUTED,
-        )
         parts.append("</svg>\n")
         destination.write_text("".join(parts), encoding="utf-8")
+        caption = (
+            f"{str(row['dataset_label'])} {metric_name} comparison for the fixed local MolADT benchmark "
+            f"({str(row.get('representation', 'moladt'))} / {str(row['model'])} / {str(row['method'])}). "
+            f"The local row was selected by {selection_label} {metric_name}. "
+            f"Bars show {'Training, Validation, Test, and Paper' if include_validation_bar else 'Training, Test, and Paper'} {metric_name} values against the cited MoleculeNet {str(row['paper_model_name'])} baseline."
+        )
+        note = str(row.get("note", "")).strip()
+        if note:
+            caption += f" {note}"
+        caption_path = destination_dir / "caption.txt" if not multiple_figures else destination.with_name(f"{destination.stem}.caption.txt")
+        _write_caption_file(caption_path, caption)
 
 
 def write_review_rmse_overview(review_frame: pd.DataFrame, destination: Path) -> None:
@@ -332,24 +267,25 @@ def write_timing_stage_overview(timing: pd.DataFrame, destination: Path) -> None
     if timing.empty:
         return
     stage_order = [
-        "smiles_csv_read",
-        "smiles_parse",
-        "moladt_json_read",
-        "moladt_file_parse",
+        "smiles_csv_to_string",
+        "sdf_to_moladt",
+        "sdf_to_smiles",
+        "moladt_to_json",
+        "json_to_moladt",
     ]
     order_index = {stage: index for index, stage in enumerate(stage_order)}
     rows = timing.copy()
     rows["_order"] = rows["stage"].map(order_index).fillna(len(stage_order)).astype(int)
     rows = rows.sort_values(["_order", "stage"]).reset_index(drop=True)
-    row_height = 96
-    card_width = 1220
-    card_height = 188 + len(rows) * row_height
+    row_height = 74
+    card_width = 980
+    card_height = 110 + len(rows) * row_height
     x0 = 24
     y0 = 24
     total_width = card_width + 48
     total_height = card_height + 48
-    chart_x = x0 + 552
-    chart_width = 574
+    chart_x = x0 + 374
+    chart_width = 510
     max_rate = max(float(rows["molecules_per_second"].max()), 1e-6) * 1.1
     positive_rates = [float(value) for value in rows["molecules_per_second"] if float(value) > 0.0]
     min_rate = min(positive_rates) if positive_rates else 1.0
@@ -372,25 +308,13 @@ def write_timing_stage_overview(timing: pd.DataFrame, destination: Path) -> None
     parts.append(
         f'<rect x="{x0}" y="{y0}" width="{card_width}" height="{card_height}" rx="{CARD_RADIUS}" fill="{CARD_FILL}" stroke="{CARD_STROKE}" />'
     )
-    parts.append(f'<text x="{x0 + 24}" y="{y0 + 36}" font-size="24" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="700">Local timing overview</text>')
-    _append_wrapped_text(
-        parts,
-        x=x0 + 24,
-        y=y0 + 62,
-        lines=_wrap_text(
-            "This chart separates source SMILES I/O, source SMILES parsing, cached MolADT JSON I/O, and cached MolADT JSON decoding.",
-            108,
-        ),
-        font_size=13,
-        line_height=16,
-        fill=MUTED,
-    )
+    parts.append(f'<text x="{x0 + 24}" y="{y0 + 36}" font-size="24" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="700">Timing Throughput</text>')
     parts.append(
-        f'<text x="{chart_x}" y="{y0 + 108}" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="600">'
+        f'<text x="{chart_x}" y="{y0 + 62}" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="600">'
         "Throughput (molecules / second, log scale; farther right is faster)"
         "</text>"
     )
-    axis_y = y0 + 132
+    axis_y = y0 + 86
     for tick in tick_values:
         tick_x = rate_to_x(tick)
         parts.append(f'<line x1="{tick_x:.1f}" y1="{axis_y}" x2="{tick_x:.1f}" y2="{card_height + y0 - 24}" stroke="{GRID}" stroke-width="1" />')
@@ -400,48 +324,36 @@ def write_timing_stage_overview(timing: pd.DataFrame, destination: Path) -> None
     for _, row in rows.iterrows():
         stage = str(row["stage"])
         stage_index = int(row["_order"])
-        y = y0 + 146 + stage_index * row_height
+        y = y0 + 104 + stage_index * row_height
         meta = TIMING_STAGE_META.get(stage, {})
         display_label = str(meta.get("label", stage))
         owner = str(meta.get("owner", "Local stage"))
         owner_color = TIMING_OWNER_COLORS.get(owner, TIMING)
-        description = str(meta.get("description") or row.get("description", ""))
-        badge_width = max(88, min(150, 18 + len(owner) * 6))
-        parts.append(
-            f'<rect x="{x0 + 24}" y="{y - 4}" width="{badge_width}" height="18" rx="{BADGE_RADIUS}" fill="{owner_color}" opacity="0.12" />'
-        )
-        parts.append(
-            f'<text x="{x0 + 24 + badge_width / 2:.1f}" y="{y + 8}" text-anchor="middle" font-size="10" font-family="Helvetica, Arial, sans-serif" fill="{owner_color}" font-weight="600">{escape(owner)}</text>'
-        )
-        parts.append(f'<text x="{x0 + 24}" y="{y + 32}" font-size="15" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="600">{escape(display_label)}</text>')
-        parts.append(f'<text x="{x0 + 24}" y="{y + 48}" font-size="10" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">stage key: {escape(stage)}</text>')
-        for line_index, line in enumerate(_wrap_text(description, 52)[:2]):
-            parts.append(
-                f'<text x="{x0 + 24}" y="{y + 64 + line_index * 13}" font-size="11" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">{escape(line)}</text>'
-            )
-        bar_end_x = rate_to_x(float(row["molecules_per_second"])) if float(row["molecules_per_second"]) > 0.0 else chart_x
+        parts.append(f'<text x="{x0 + 24}" y="{y + 20}" font-size="16" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="600">{escape(display_label)}</text>')
+        parts.append(f'<text x="{x0 + 24}" y="{y + 38}" font-size="11" font-family="Helvetica, Arial, sans-serif" fill="{owner_color}">{escape(owner)}</text>')
+        rate = float(row["molecules_per_second"])
+        bar_end_x = rate_to_x(rate) if rate > 0.0 else chart_x
         bar_width = max(3.0, bar_end_x - chart_x) if float(row["molecules_per_second"]) > 0.0 else 0.0
-        parts.append(f'<rect x="{chart_x}" y="{y + 12}" width="{chart_width}" height="16" rx="{BAR_RADIUS}" fill="{TRACK_FILL}" />')
+        parts.append(f'<rect x="{chart_x}" y="{y + 6}" width="{chart_width}" height="18" rx="{BAR_RADIUS}" fill="{TRACK_FILL}" />')
         if bar_width > 0.0:
             parts.append(
-                f'<rect x="{chart_x}" y="{y + 12}" width="{bar_width:.1f}" height="16" rx="{BAR_RADIUS}" fill="{owner_color}" opacity="0.92" />'
+                f'<rect x="{chart_x}" y="{y + 6}" width="{bar_width:.1f}" height="18" rx="{BAR_RADIUS}" fill="{owner_color}" opacity="0.92" />'
             )
         parts.append(
-            f'<text x="{chart_x + chart_width + 14}" y="{y + 25}" font-size="12" font-family="Menlo, Consolas, monospace" fill="{TEXT}">{float(row["molecules_per_second"]):.1f} mol/s</text>'
-        )
-        parts.append(
-            f'<text x="{chart_x}" y="{y + 50}" font-size="11" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">'
-            f"count {int(row.get('molecule_count', 0))}; "
-            f"success {int(row.get('success_count', 0))}/{int(row.get('molecule_count', 0))}; "
-            f"failures {int(row.get('failure_count', 0))}; "
-            f"runtime {float(row.get('total_runtime_seconds', 0.0)):.3f}s; "
-            f"median {float(row.get('median_latency_us', 0.0)):.1f} us; "
-            f"p95 {float(row.get('p95_latency_us', 0.0)):.1f} us"
-            "</text>"
+            f'<text x="{chart_x + chart_width + 14}" y="{y + 20}" font-size="12" font-family="Menlo, Consolas, monospace" fill="{TEXT}">{rate:.1f} mol/s</text>'
         )
     parts.append("</svg>\n")
     ensure_directory(destination.parent)
     destination.write_text("".join(parts), encoding="utf-8")
+    _write_caption_file(
+        destination.with_name("caption.txt"),
+        (
+            "ZINC timing benchmark on the matched local timing corpus. "
+            "Stages are SMILES CSV to string, SDF to MolADT, SDF to SMILES, MolADT to JSON, and JSON to MolADT. "
+            "Bars show throughput in molecules per second on a log scale, so farther right is faster. "
+            "The matched corpus is prepared once from the normalized ZINC source CSV and reused across all timed stages."
+        ),
+    )
 
 
 def write_predicted_vs_actual_overview(predictions: pd.DataFrame, destination: Path) -> None:
@@ -791,6 +703,11 @@ def _format_rate_tick(value: float) -> str:
     if value >= 1.0:
         return f"{value:.0f}"
     return f"{value:.1f}"
+
+
+def _write_caption_file(path: Path, caption: str) -> None:
+    ensure_directory(path.parent)
+    path.write_text(caption.strip() + "\n", encoding="utf-8")
 
 
 def _append_wrapped_text(

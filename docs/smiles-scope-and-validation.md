@@ -61,7 +61,7 @@ That is why:
 
 The predictive benchmarks use MolADT as the benchmark object. Boundary SMILES still matter because they are one of the ways the repo builds the typed molecule, but the published benchmark graphs compare the fixed local MolADT benchmark paths against MoleculeNet rather than running a separate SMILES benchmark row.
 
-The ZINC timing benchmark is an interoperability/runtime benchmark rather than the central representation comparison. It now uses the minimal four-stage SMILES-vs-MolADT timing path: source SMILES reads, local SMILES parsing into MolADT, MolADT JSON reads, and MolADT JSON decoding.
+The ZINC timing benchmark is an interoperability/runtime benchmark rather than the central representation comparison. It now uses the fixed five-stage SMILES-vs-MolADT timing path: source SMILES reads, cached `SDF -> MolADT`, cached `SDF -> SMILES`, `MolADT -> JSON`, and `JSON -> MolADT`.
 
 ## Related Files
 

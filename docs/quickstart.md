@@ -30,11 +30,13 @@ make python-activate
 
 ```bash
 make python-parse
+./.venv/bin/python -m moladt.cli to-json molecules/benzene.sdf > benzene.moladt.json
+./.venv/bin/python -m moladt.cli from-json benzene.moladt.json
 make python-pretty-example EXAMPLE=morphine
 make python-to-smiles
 ```
 
-If those three commands work, the local install is in good shape and the example path is reading the checked-in SDF files correctly.
+If those commands work, the local install is in good shape, the checked-in SDF files are readable, and the shared MolADT JSON boundary path is working end to end.
 
 ## 3. First Benchmark Run
 
@@ -59,7 +61,7 @@ make timing
 
 - `make freesolv` runs the long FreeSolv comparison and writes `freesolv_rmse_vs_moleculenet.svg`.
 - `make qm9long` runs the full-data QM9 path over all aligned local QM9 molecules, using `visnet_ensemble` only on the SDF-backed `moladt_featurized_geom` export. The geometry path caps at `25` epochs and logs every epoch with validation RMSE and MAE.
-- `make timing` runs the four-stage ZINC SMILES-vs-MolADT timing comparison: source SMILES reads, SMILES parsing, MolADT JSON reads, and MolADT JSON decoding.
+- `make timing` runs the five-stage ZINC SMILES-vs-MolADT timing comparison: source SMILES reads, cached `SDF -> MolADT`, cached `SDF -> SMILES`, `MolADT -> JSON`, and `JSON -> MolADT`.
 
 If a required raw dataset file is too large for GitHub, the repo fetches it on demand. Large downloads and archive extractions show live byte counts, entry counts, throughput, and elapsed time.
 

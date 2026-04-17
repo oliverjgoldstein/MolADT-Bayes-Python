@@ -95,8 +95,8 @@ def _(molecule: Molecule) -> PrettyBlock:
         lines.append("none")
     lines.append("")
 
-    lines.extend(_section_header("SMILES Stereochemistry"))
     if atom_stereo or bond_stereo:
+        lines.extend(_section_header("SMILES Stereochemistry"))
         if atom_stereo:
             lines.append("atom-centered:")
             lines.extend(_indent((_format_atom_stereo(item) for item in atom_stereo), 2))
@@ -105,8 +105,6 @@ def _(molecule: Molecule) -> PrettyBlock:
                 lines.append("")
             lines.append("bond-directed:")
             lines.extend(_indent((_format_bond_stereo(molecule, item) for item in bond_stereo), 2))
-    else:
-        lines.append("none")
 
     return PrettyBlock(tuple(lines[:-1] if lines and lines[-1] == "" else lines))
 

@@ -10,15 +10,14 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from moladt.io.sdf import molecule_to_sdf, parse_sdf_record
-from moladt.io.molecule_json import molecule_to_json_bytes
 from moladt.io.smiles import parse_smiles
 
 from scripts.benchmark_zinc import (
     _load_smiles_rows_with_timing,
-    _measure_moladt_library_read,
-    _measure_moladt_library_parse,
-    _measure_smiles_parse,
-    ParsedSmilesEntry,
+    _measure_json_to_moladt,
+    _measure_moladt_to_json,
+    _measure_sdf_to_moladt,
+    _measure_sdf_to_smiles,
     _prepare_timing_library,
     _read_timing_library_manifest,
 )
@@ -561,34 +560,26 @@ def test_prepare_timing_library_creates_matched_local_corpus(tmp_path, monkeypat
 
     processed_dir = tmp_path / "processed"
     monkeypatch.setattr(benchmark_zinc, "PROCESSED_DATA_DIR", processed_dir)
-    entries = [
-        ParsedSmilesEntry(
-            source_index=index,
-            mol_id=f"zinc_{index:07d}",
-            smiles=smiles,
-            item_size_bytes=len(smiles.encode("utf-8")),
-            payload=molecule_to_json_bytes(parse_smiles(smiles)),
-        )
-        for index, smiles in enumerate(("CCO", "c1ccccc1"), start=1)
-    ]
+    source_path = tmp_path / "zinc_demo.csv"
+    source_path.write_text("smiles,zinc_id\nCCO,ZINC0001\nc1ccccc1,ZINC0002\n", encoding="utf-8")
 
     library, stage = _prepare_timing_library(
-        entries=entries,
         dataset_size="demo",
         dataset_dimension="3D",
         limit=2,
-        source_path=tmp_path / "zinc_demo.csv",
+        source_path=source_path,
         force=True,
     )
 
     manifest = _read_timing_library_manifest(library)
 
     assert library.manifest_path.exists()
+    assert library.smiles_csv_path.exists()
     assert len(manifest) == 2
-    assert stage.stage == "timing_library_prepare"
+    assert stage.stage == "timing_corpus_prepare"
     assert stage.success_count == 2
     assert manifest.iloc[0]["smiles"] in {"CCO", "c1ccccc1"}
-    assert (library.library_root / manifest.iloc[0]["moladt_relative_path"]).exists()
+    assert (library.library_root / manifest.iloc[0]["sdf_relative_path"]).exists()
 
 
 def test_timing_library_parse_stages_succeed_on_matched_entries(tmp_path, monkeypatch) -> None:
@@ -599,52 +590,60 @@ def test_timing_library_parse_stages_succeed_on_matched_entries(tmp_path, monkey
     source_path = tmp_path / "zinc_demo.csv"
     source_path.write_text("smiles,zinc_id\nCCO,ZINC0001\nCCN,ZINC0002\n", encoding="utf-8")
 
-    rows, read_stage = _load_smiles_rows_with_timing(
-        source_path,
-        dataset_size="demo",
-        dataset_dimension="3D",
-        limit=None,
-    )
-    entries, smiles_items, smiles_stage = _measure_smiles_parse(
-        rows,
-        dataset_size="demo",
-        dataset_dimension="3D",
-        source_path=source_path,
-    )
-
     library, _ = _prepare_timing_library(
-        entries=entries,
         dataset_size="demo",
         dataset_dimension="3D",
         limit=2,
         source_path=source_path,
         force=True,
     )
+    rows, read_stage = _load_smiles_rows_with_timing(
+        library.smiles_csv_path,
+        dataset_size="demo",
+        dataset_dimension="3D",
+        limit=None,
+    )
     manifest = _read_timing_library_manifest(library)
-    payloads, moladt_read_stage = _measure_moladt_library_read(
+    molecules, sdf_items, sdf_stage = _measure_sdf_to_moladt(
         library,
         manifest=manifest,
         dataset_size="demo",
         dataset_dimension="3D",
     )
-
-    moladt_items, moladt_stage = _measure_moladt_library_parse(
-        payloads,
+    sdf_smiles_items, sdf_smiles_stage = _measure_sdf_to_smiles(
+        library,
+        manifest=manifest,
         dataset_size="demo",
         dataset_dimension="3D",
-        source_dir=library.moladt_dir,
+    )
+    json_payloads, json_items, json_stage = _measure_moladt_to_json(
+        molecules,
+        dataset_size="demo",
+        dataset_dimension="3D",
+        destination_dir=library.json_dir,
+    )
+    json_roundtrip_items, json_roundtrip_stage = _measure_json_to_moladt(
+        json_payloads,
+        dataset_size="demo",
+        dataset_dimension="3D",
     )
 
     assert read_stage.failure_count == 0
-    assert smiles_stage.failure_count == 0
-    assert moladt_read_stage.failure_count == 0
-    assert moladt_stage.failure_count == 0
-    assert len(entries) == len(manifest)
-    assert len(smiles_items) == len(rows)
-    assert len(payloads) == len(manifest)
-    assert len(moladt_items) == len(manifest)
-    assert all(item.success for item in smiles_items)
-    assert all(item.success for item in moladt_items)
+    assert sdf_stage.failure_count == 0
+    assert sdf_smiles_stage.failure_count == 0
+    assert json_stage.failure_count == 0
+    assert json_roundtrip_stage.failure_count == 0
+    assert len(rows) == len(manifest)
+    assert len(molecules) == len(manifest)
+    assert len(json_payloads) == len(manifest)
+    assert len(sdf_items) == len(manifest)
+    assert len(sdf_smiles_items) == len(manifest)
+    assert len(json_items) == len(manifest)
+    assert len(json_roundtrip_items) == len(manifest)
+    assert all(item.success for item in sdf_items)
+    assert all(item.success for item in sdf_smiles_items)
+    assert all(item.success for item in json_items)
+    assert all(item.success for item in json_roundtrip_items)
 
 
 def test_process_freesolv_creates_processed_directory_before_writing(tmp_path, monkeypatch) -> None:

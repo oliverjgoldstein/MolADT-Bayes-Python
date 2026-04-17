@@ -134,7 +134,7 @@ help:
 		"  make qm9long               Run the full-data QM9 ViSNet benchmark on rich SDF-backed MolADT geometry" \
 		"  make benchmark              Run the combined FreeSolv + QM9 comparison bundle" \
 		"  make benchmark-bg           Run the benchmark in the foreground and mirror output to the active results directory" \
-		"  make timing                 Run the four-stage ZINC SMILES-vs-MolADT timing comparison" \
+		"  make timing                 Run the five-stage ZINC SMILES-vs-MolADT timing comparison" \
 		"  default full QM9 run: make qm9long" \
 		"  full benchmark bundle: make benchmark" \
 		"  quieter run: BENCHMARK_VERBOSE=0 make benchmark" \
@@ -409,7 +409,7 @@ python-benchmark-zinc:
 	"  dataset_size: $(ZINC_DATASET_SIZE)" \
 	"  dataset_dimension: $(ZINC_DATASET_DIMENSION)" \
 	"  zinc_limit: $(if $(ZINC_LIMIT),$(ZINC_LIMIT),full-configured-pass)" \
-	"  stage_contract: source SMILES read, SMILES parse, MolADT JSON read, MolADT JSON decode" \
+	"  stage_contract: SMILES CSV -> string, SDF -> MolADT, SDF -> SMILES, MolADT -> JSON, JSON -> MolADT" \
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
 	"  toolchain_env: $(if $(DARWIN_SDKROOT),apple-xcrun,default)" \
 	"  expected outputs: $(RESULTS_ROOT)/timing_summary.csv and $(RESULTS_ROOT)/details/"
@@ -503,7 +503,7 @@ timing:
 	"  dataset_size: $(ZINC_DATASET_SIZE)" \
 	"  dataset_dimension: $(ZINC_DATASET_DIMENSION)" \
 	"  zinc_limit: $(if $(ZINC_LIMIT),$(ZINC_LIMIT),full-configured-pass)" \
-	"  stage_contract: source SMILES read, SMILES parse, MolADT JSON read, MolADT JSON decode" \
+	"  stage_contract: SMILES CSV -> string, SDF -> MolADT, SDF -> SMILES, MolADT -> JSON, JSON -> MolADT" \
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
 	"  expected outputs: results/$(TIMING_RESULTS_SUBDIR)/timing_summary.csv and details/"
 	MOLADT_RESULTS_DIR=results/$(TIMING_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all zinc-timing --dataset-size $(ZINC_DATASET_SIZE) --dataset-dimension $(ZINC_DATASET_DIMENSION) $(ZINC_LIMIT_TIMING_ARG) --include-moladt $(VERBOSE_ARG)
