@@ -1,0 +1,10 @@
+Timing result files
+
+matched_smiles_csv: data/processed/zinc_timing/zinc15_250K_2D/full/smiles_library.csv
+matched_moladt_csv: data/processed/zinc_timing/zinc15_250K_2D/full/moladt_csv_library.csv
+matched_sdf_dir: data/processed/zinc_timing/zinc15_250K_2D/full/sdf_library
+serialized_json_dir: data/processed/zinc_timing/zinc15_250K_2D/full/json_library
+timing_library_manifest: data/processed/zinc_timing/zinc15_250K_2D/full/manifest.csv
+timing_results_csv: results/timing/paper/run_20260417_162547/details/zinc_timing.csv
+timing_corpus_manifest_csv: results/timing/paper/run_20260417_162547/details/zinc_timing_corpus_manifest.csv
+timing_item_rows_csv: results/timing/paper/run_20260417_162547/details/zinc_timing_items.csv

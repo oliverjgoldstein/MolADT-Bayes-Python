@@ -1,0 +1,2 @@
+dataset,representation,model,seed,artifact_type,path
+qm9,moladt_featurized_geom,visnet_ensemble,ensemble,ensemble_config,model_artifacts/visnet_ensemble/qm9/moladt_featurized_geom/ensemble_config.json

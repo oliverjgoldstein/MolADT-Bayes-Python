@@ -1,0 +1,13 @@
+dataset,representation,model,method,split,seed,nominal_coverage,empirical_coverage
+qm9,moladt_featurized_geom,visnet_ensemble,deep_ensemble,test,ensemble,0.5,0.0
+qm9,moladt_featurized_geom,visnet_ensemble,deep_ensemble,test,ensemble,0.8,0.0
+qm9,moladt_featurized_geom,visnet_ensemble,deep_ensemble,test,ensemble,0.9,0.0
+qm9,moladt_featurized_geom,visnet_ensemble,deep_ensemble,test,ensemble,0.95,0.0
+qm9,moladt_featurized_geom,visnet_ensemble,deep_ensemble,train,ensemble,0.5,0.0
+qm9,moladt_featurized_geom,visnet_ensemble,deep_ensemble,train,ensemble,0.8,1.8672741531911714e-05
+qm9,moladt_featurized_geom,visnet_ensemble,deep_ensemble,train,ensemble,0.9,2.8009112297867574e-05
+qm9,moladt_featurized_geom,visnet_ensemble,deep_ensemble,train,ensemble,0.95,3.734548306382343e-05
+qm9,moladt_featurized_geom,visnet_ensemble,deep_ensemble,valid,ensemble,0.5,0.0
+qm9,moladt_featurized_geom,visnet_ensemble,deep_ensemble,valid,ensemble,0.8,0.0
+qm9,moladt_featurized_geom,visnet_ensemble,deep_ensemble,valid,ensemble,0.9,0.0
+qm9,moladt_featurized_geom,visnet_ensemble,deep_ensemble,valid,ensemble,0.95,0.0
