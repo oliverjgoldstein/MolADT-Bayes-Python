@@ -1,28 +1,29 @@
 # MolADT-Bayes-Python
 
-MolADT is a typed molecular data format for Bayesian work over molecules. It keeps chemically meaningful structure in the object itself instead of hiding it inside string syntax.
+Molecular models often start from strings or plain graphs, then bolt on the chemistry that the representation could not express directly. That is awkward for Bayesian modelling and inverse design: the code wants to edit atoms, bonds, charges, geometry, stereochemistry, and delocalised or multicentre bonding, then validate the candidate before scoring it.
 
-The same representation is useful for inverse design: candidate molecules can be edited as typed atoms, sigma bonds, bonding systems, stereo annotations, charges, and coordinates, then validated, scored, serialized, and passed between the Python and Haskell repos without flattening the candidate back into a lossy string-only form.
+MolADT is the typed molecule object for that job. It keeps chemically meaningful structure in the data model itself, so candidate molecules can be mutated, validated, featurised, serialized, and shared with the Haskell repo without flattening the candidate back into a string-only boundary format.
 
 [Quickstart](docs/quickstart.md) · [Docs index](docs/README.md) · [Representation](docs/representation.md) · [ADT model](docs/data-model.md) · [Models](docs/models.md) · [Examples](docs/examples.md) · [Outputs](docs/outputs.md)
 
-## Why MolADT
+## What This Repo Does
 
-MolADT is designed for the cases where ordinary graph or string encodings make the important chemistry hard to address directly.
+- Builds the Python MolADT toolkit used for parsing, validation, feature extraction, examples, and JSON interchange.
+- Runs the paper-facing FreeSolv, QM9, and timing experiments.
+- Demonstrates FreeSolv inverse design with deterministic, validity-checked MolADT/Dietz growth moves.
+- Exports processed matrices and molecule payloads that the Haskell repo can consume.
 
-- diborane in standard SMILES: `[BH2]1[H][BH2][H]1`
-- ferrocene in standard SMILES: `[CH-]1C=CC=C1.[CH-]1C=CC=C1.[Fe+2]`
-- morphine in standard stereochemical SMILES: `CN1CC[C@]23C4=C5C=CC(O)=C4O[C@H]2[C@@H](O)C=C[C@H]3[C@H]1C5`
+Use this repo when you want the benchmark pipeline, Python-side modelling, generated result artifacts, or a practical molecule-growth experiment. Use the Haskell repo when you want the smaller typed reference implementation and aligned benchmark consumer.
 
-Those are useful interchange formats, but they are awkward as the main in-memory representation.
+## Why The Representation Matters
 
-- diborane wants explicit `3c-2e` bridges
+MolADT is designed for cases where ordinary graph or string encodings make the important chemistry hard to address directly:
+
+- diborane wants explicit `3c-2e` bridge systems
 - ferrocene wants shared Cp/metal bonding systems
-- morphine pushes fused-ring structure and stereo flags into a linear notation
+- morphine wants fused-ring structure and stereochemical annotations available as data
 
-MolADT keeps that chemistry as typed atoms, local bonds, bonding systems, and stereo annotations. The code in this repo works over that object directly instead of treating a string format as the primary model.
-
-That matters for inverse design because proposal operators can work on the object you mean to optimize. A search step can add or remove a candidate bonding system, alter local connectivity, preserve stereo metadata, validate valence, and serialize the result for another model without routing the candidate through a lossy boundary string.
+That matters for inverse design because proposal operators can work on the object being optimised. A search step can add or remove a candidate bonding system, alter local connectivity, preserve stereo metadata, validate valence, and serialize the result for another model without routing the candidate through a lossy boundary string.
 
 ## Quick Start
 
