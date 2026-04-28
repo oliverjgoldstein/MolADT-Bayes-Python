@@ -47,7 +47,7 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["moladt*"]
+include = ["moladt*", "experiments*"]
 
 [tool.setuptools.package-data]
 moladt = ["stan/*.stan"]
