@@ -2,11 +2,13 @@
 
 MolADT is a typed molecular data format for Bayesian work over molecules. It keeps chemically meaningful structure in the object itself instead of hiding it inside string syntax.
 
-[Quickstart](docs/quickstart.md) · [Representation](docs/representation.md) · [ADT Representation](docs/data-model.md) · [Models](docs/models.md) · [Examples](docs/examples.md)
+The same representation is useful for inverse design: candidate molecules can be edited as typed atoms, sigma bonds, bonding systems, stereo annotations, charges, and coordinates, then validated, scored, serialized, and passed between the Python and Haskell repos without flattening the candidate back into a lossy string-only form.
+
+[Quickstart](docs/quickstart.md) · [Docs index](docs/README.md) · [Representation](docs/representation.md) · [ADT model](docs/data-model.md) · [Models](docs/models.md) · [Examples](docs/examples.md) · [Outputs](docs/outputs.md)
 
 ## Why MolADT
 
-Diborane, ferrocene, and morphine are useful examples.
+MolADT is designed for the cases where ordinary graph or string encodings make the important chemistry hard to address directly.
 
 - diborane in standard SMILES: `[BH2]1[H][BH2][H]1`
 - ferrocene in standard SMILES: `[CH-]1C=CC=C1.[CH-]1C=CC=C1.[Fe+2]`
@@ -20,7 +22,11 @@ Those are useful interchange formats, but they are awkward as the main in-memory
 
 MolADT keeps that chemistry as typed atoms, local bonds, bonding systems, and stereo annotations. The code in this repo works over that object directly instead of treating a string format as the primary model.
 
+That matters for inverse design because proposal operators can work on the object you mean to optimize. A search step can add or remove a candidate bonding system, alter local connectivity, preserve stereo metadata, validate valence, and serialize the result for another model without routing the candidate through a lossy boundary string.
+
 ## Quick Start
+
+For the complete setup walkthrough, see [docs/quickstart.md](docs/quickstart.md). The shortest local smoke test is:
 
 ```bash
 make python-setup
@@ -33,40 +39,161 @@ make python-cmdstan-install
 
 If your shell creates a Windows-style virtual environment, the Make targets will use `.venv/Scripts/python.exe` automatically. On a fresh machine, the first local setup can take a few minutes and up to about 30 minutes if the larger dependencies still need to be downloaded or built.
 
-`Molecule` is immutable and destructures as:
-`atoms, local_bonds, systems, smiles_stereochemistry = molecule`
+`Molecule` is immutable. Access its fields directly as `molecule.atoms`, `molecule.local_bonds`, `molecule.systems`, and `molecule.smiles_stereochemistry`, or use `molecule_fields(molecule)` from `moladt.chem.molecule` when you want the tuple form.
 
 For probabilistic proposals or local graph surgery, use `MutableMolecule` from `moladt.chem.mutable` as a writable scratch state and call `freeze()` to return to canonical `Molecule`.
 
-## Parsing
+## Examples
+
+For the longer example catalogue, see [docs/examples.md](docs/examples.md). This README keeps the examples that explain why the representation exists.
+
+The examples below use molecules that exercise the representation directly: morphine for fused rings and stereo, diborane for multicenter bonding, and ferrocene for organometallic bonding systems.
+
+### 1. Inspect An Explicit Molecule
+
+```bash
+./.venv/bin/python -m moladt.cli pretty-example morphine
+```
+
+The built-in morphine object starts from the same fused skeleton as the standard stereochemical SMILES, but it keeps the graph and the extra chemical annotations as fields on the object:
+
+```text
+Morphine (explicit Dietz skeleton)
+Dietz-style ADT that turns the five classic SMILES ring closures into sigma edges, keeps the phenyl ring as an explicit pi system, and preserves the five atom-centered stereochemistry flags from the standard boundary string.
+
+Molecule Report
+===============
+atoms            21
+sigma bonds      25
+bonding systems  2
+net charge       +0
+composition      C17 N O3
+stereo flags     5 atom
+
+Bonding Systems
+---------------
+[#1] alkene_bridge
+  shared electrons: 2
+  member atoms:     C#5, C#6
+  edge bonus:       +1.00 to each listed edge
+
+[#2] phenyl_pi_ring
+  shared electrons: 6
+  member atoms:     C#10, C#11, C#12, C#14, C#15, C#16
+  edge bonus:       +0.50 to each listed edge
+
+SMILES Stereochemistry
+----------------------
+atom-centered:
+  center #2: TH1 from token @
+  center #3: TH2 from token @@
+  center #7: TH1 from token @
+  center #8: TH1 from token @
+  center #18: TH1 from token @
+```
+
+A plain SDF parse still works:
+
+```bash
+./.venv/bin/python -m moladt.cli parse molecules/morphine.sdf
+```
+
+That command reports the SDF sigma network. The manuscript example then adds the explicit `alkene_bridge`, `phenyl_pi_ring`, and stereo annotations that make the object useful for chemistry-aware modeling.
+
+### 2. Round Trip A Rich Object Through Python And Haskell
+
+MolADT JSON is the boundary format shared by this Python repo and the sibling Haskell repo. That makes it a practical candidate format for inverse design loops: Python can generate, mutate, featurize, and benchmark candidates while Haskell can consume the same structured molecule or the same standardized benchmark export.
+
+```bash
+./.venv/bin/python - <<'PY' > morphine.moladt.json
+from moladt.examples import morphine_pretty
+from moladt.io import molecule_to_json
+
+print(molecule_to_json(morphine_pretty))
+PY
+
+./.venv/bin/python -m moladt.cli from-json morphine.moladt.json
+```
+
+The same JSON payload is accepted by the Haskell repo:
+
+```bash
+stack run moladtbayes -- from-json ../MolADT-Bayes-Python/morphine.moladt.json
+```
+
+The full benchmark export path is also shared. Python writes standardized `X/y` matrices under `data/processed/`, and Haskell can consume them without re-running Python feature extraction:
+
+```bash
+./.venv/bin/python -m scripts.run_all freesolv
+MOLADT_PROCESSED_DATA_DIR=../MolADT-Bayes-Python/data/processed \
+  stack run moladtbayes -- infer-benchmark freesolv_moladt_featurized lwis
+```
+
+For inverse design, the important point is the contract: candidates and benchmark rows can cross the repo boundary with the chemistry still explicit. The ADT keeps the atom table, local bonds, delocalized or multicenter bonding systems, stereo layer, and coordinates available to downstream code.
+
+### 3. Use A Mutable Candidate During Search
+
+`Molecule` is immutable on purpose. In a design loop, make a mutable scratch candidate, apply a proposal, validate it, then freeze it back to a canonical `Molecule`.
+
+```python
+from moladt import MutableMolecule
+from moladt.chem.validate import validate_molecule
+from moladt.examples import ferrocene_pretty
+from moladt.io import molecule_from_json, molecule_to_json
+
+def remove_bonding_system_by_tag(molecule, tag):
+    candidate = MutableMolecule.from_molecule(molecule)
+    candidate.systems = [
+        (system_id, system)
+        for system_id, system in candidate.systems
+        if system.tag != tag
+    ]
+    return validate_molecule(candidate.freeze())
+
+proposal = remove_bonding_system_by_tag(ferrocene_pretty, "fe_backdonation")
+
+print(f"candidate atoms: {len(proposal.atoms)}")
+print(f"candidate sigma bonds: {len(proposal.local_bonds)}")
+print(f"candidate bonding systems: {[system.tag for _, system in proposal.systems]}")
+
+payload = molecule_to_json(proposal)
+round_tripped = validate_molecule(molecule_from_json(payload))
+assert round_tripped == proposal
+```
+
+This is intentionally shaped like a proposal operator. A real inverse design run would replace the simple `remove_bonding_system_by_tag` step with a move set, score the frozen candidate with a predictive model, and keep or reject the proposal. The representation supports that style because the editable state and the canonical state have the same fields.
+
+### 4. Compare String And ADT Views
+
+Diborane and ferrocene are useful because compact line notations hide the structure that a design algorithm may need to manipulate.
+
+```bash
+./.venv/bin/python -m moladt.cli pretty-example diborane
+./.venv/bin/python -m moladt.cli pretty-example ferrocene
+```
+
+In MolADT, diborane has two explicit `3c-2e` bridging hydrogen systems. Ferrocene has two cyclopentadienyl `pi` systems plus an Fe back-donation-style pool. Those systems are separate typed objects, so a proposal can preserve, remove, replace, or score them directly.
+
+## Parsing Scope
+
+For detailed parser and renderer behavior, see [docs/parsing.md](docs/parsing.md), [docs/cli.md](docs/cli.md), and [docs/smiles-scope-and-validation.md](docs/smiles-scope-and-validation.md).
 
 Use the CLI when you want to inspect or serialize how a boundary format lands inside MolADT.
 
 ```bash
-make python-parse
-./.venv/bin/python -m moladt.cli to-json molecules/benzene.sdf > benzene.moladt.json
-./.venv/bin/python -m moladt.cli from-json benzene.moladt.json
-make python-pretty-example EXAMPLE=morphine
-make python-to-smiles
+./.venv/bin/python -m moladt.cli parse molecules/morphine.sdf
+./.venv/bin/python -m moladt.cli parse-smiles 'CN1CC[C@]23C4=C5C=CC(O)=C4O[C@H]2[C@@H](O)C=C[C@H]3[C@H]1C5'
+./.venv/bin/python -m moladt.cli to-json molecules/morphine.sdf > morphine.moladt.json
+./.venv/bin/python -m moladt.cli from-json morphine.moladt.json
+./.venv/bin/python -m moladt.cli to-smiles molecules/benzene.sdf
 ```
 
-- `parse` reads one SDF record, validates it, and prints a minimal MolADT report plus the SDF title; add `--properties` when you want the raw SDF property fields too
+- `parse` reads one SDF record, validates it, and prints a MolADT report plus the SDF title; add `--properties` when you want the raw SDF property fields too
+- `parse-smiles` reads a supported SMILES string into the same typed molecule shape
 - `to-json` reads one SDF record, validates it, and writes the shared MolADT JSON boundary format used across the Python and Haskell repos
 - `from-json` reads that MolADT JSON back into the typed `Molecule` object and prints the usual MolADT report
 - `pretty-example` loads the manuscript-facing built-in objects, written as explicit typed molecules with orbital shells intact
 - `to-smiles` renders validated classical MolADT structures back into the supported SMILES subset
-
-Programmatically, the shortest `SDF -> MolADT -> JSON -> MolADT` path is:
-
-```python
-from moladt.io import molecule_from_json, molecule_to_json, read_sdf_record
-
-record = read_sdf_record("molecules/benzene.sdf")
-payload = molecule_to_json(record.molecule)
-molecule = molecule_from_json(payload)
-```
-
-The JSON file emitted by `to-json` is the same MolADT boundary format that the Haskell repo now accepts with `stack run moladtbayes -- from-json ...`.
 
 The SDF reader accepts V2000 and the core V3000 CTAB subset used by common structure exports:
 
@@ -79,8 +206,8 @@ The writer still emits V2000. The parser and renderer are intentionally narrower
 
 If one SDF file contains multiple molecules:
 
-- read a small eager slice with `from moladt.io.sdf import read_sdf_records; titles = [record.title for record in read_sdf_records("bundle.sdf", limit=3)]`
-- stream lazily with `from moladt.io.sdf import iter_sdf_records; first_titles = [record.title for record in iter_sdf_records("bundle.sdf", limit=3)]`
+- read a small eager slice with `from moladt.io.sdf import read_sdf_records`
+- stream lazily with `from moladt.io.sdf import iter_sdf_records`
 
 The local QM9 and vendored FreeSolv raw files in this workspace are still V2000. The downloader and parser prefer V3000 when a future dataset bundle actually provides it, but the current local raws are not being silently relabeled.
 
@@ -89,30 +216,64 @@ The local QM9 and vendored FreeSolv raw files in this workspace are still V2000.
 - the Python MolADT types, parser, renderer, and pretty-printer
 - example molecules including diborane, ferrocene, and morphine
 - feature generation, Stan models, and local benchmark tooling
+- the shared JSON and processed-matrix contracts used by the sibling Haskell repo
+
+The documentation is split by task:
+
+- first run: [Quickstart](docs/quickstart.md)
+- representation: [MolADT representation](docs/representation.md), [ADT model](docs/data-model.md), and [orbitals](docs/orbitals.md)
+- examples and parsing: [Examples](docs/examples.md), [Parsing and rendering](docs/parsing.md), and [CLI reference](docs/cli.md)
+- benchmarks and outputs: [Inference and benchmarks](docs/inference-and-benchmarks.md), [Models and features](docs/models.md), [Outputs](docs/outputs.md), and [results README](results/README.md)
+- interop and data: [Haskell interop](docs/haskell_interop.md), [Data sources](docs/data-sources.md), and [Repo map](docs/repo-map.md)
 
 ## Benchmarking
 
-Benchmark outputs stay local. `results/` is generated on your machine rather than committed.
+FreeSolv has a committed reference bundle so the fitted GP summary, posterior draws, predictions, and processed feature matrices are available in the repo. QM9 and timing keep their paper-facing graphs and captions in Git, while their heavier run details stay local.
 
 ```bash
 make freesolv
+make inverse-design TARGET=-5.0
+make inverse-design TARGET=-5.0 SEED_MOLECULE=methane
 make qm9long
 make timing
 ```
 
 - `make freesolv`: FreeSolv RMSE comparison. Fixed path `moladt_featurized + bayes_gp_rbf_screened + laplace`. The paper SVG is a clean bar comparison, and the prose caption is written separately to `caption.txt`. It writes `results/freesolv/run_.../freesolv_rmse_vs_moleculenet.svg`, `results/freesolv/run_.../caption.txt`, `results/freesolv/run_.../freesolv_bayesian_model.txt`, and `results/freesolv/run_.../details/freesolv_train_test_uncertainty.csv`.
+- `make inverse-design TARGET=-5.0`: FreeSolv inverse-design proof of concept. It reuses the fixed FreeSolv Bayesian GP artifact, starts deterministic search chains from water by default, applies MolADT/Dietz-aware local growth moves, validates every accepted molecule, prints the top generated molecules plus the best Dietz-system molecules to stdout, and writes importable Python files under `results/inverse_design/run_.../` and `results/inverse_design/reference/`. If `TARGET` is omitted, the script uses the median experimental FreeSolv value. Set `SEED_MOLECULE=methane` to start all chains from methane instead.
 - `make qm9long`: full QM9 `mu` MAE comparison over all aligned local QM9 molecules, using `visnet_ensemble` on `moladt_featurized_geom`. That export keeps the atomic numbers and coordinates from the SDF record and adds the full MolADT feature bundle from the same molecule. The current local bundle yields `107,108 / 13,388 / 13,389` train / validation / test rows under the deterministic `80/10/10` long split. ViSNet runs one member for at most `25` epochs with seed `102`, and the verbose run prints every epoch with validation RMSE and MAE. It writes the clean paper SVG plus `caption.txt`.
 - `make timing`: ZINC timing comparison on the fixed eight-stage paper path: `SMILES CSV -> string`, `MolADT CSV -> MolADT`, `SMILES -> JSON`, `SDF -> MolADT`, `SDF -> SMILES`, `MolADT -> JSON`, `JSON -> MolADT`, and `JSON -> SMILES`. It writes `results/timing/paper/run_.../timing_overview.svg`, `results/timing/paper/run_.../caption.txt`, and `results/timing/paper/run_.../timing_result_files.txt`.
 
-Results are written under timestamped directories in `results/`, mainly `results/freesolv/run_.../`, `results/qm9/long/run_.../`, and `results/timing/paper/run_.../`.
+### FreeSolv inverse design
+
+Run the experiment directly with:
+
+```bash
+python -m experiments.freesolv_inverse_design --target -5.0
+python -m experiments.freesolv_inverse_design --target -5.0 --seed-molecule methane
+```
+
+`--target` and `--seed-molecule` are the only user-facing flags. The default seed molecule is `water`, and all `N_SEEDS=5` deterministic search chains start from that same molecule with fixed RNG offsets. Other settings are fixed constants in the module for reproducibility: `N_STEPS=2000`, `TOP_K=10`, `MAX_HEAVY_ATOMS=12`, small internal growth limits, `TEMPERATURE=1.0`, and `RANDOM_SEED=0`.
+
+The growth moves are intentionally small and reviewer-facing: add a terminal atom, close a sigma edge, mutate a non-hydrogen atom, remove a terminal atom, or add a six-electron pi system over an existing carbon six-ring. Heavy-atom edits may replace terminal hydrogens, then terminal hydrogens are refilled conservatively before validation and scoring so the GP sees less under-valenced chemistry. Each proposal is validated against local sigma edges plus Dietz bonding systems before it can be accepted, so delocalized and multicenter bonding are not treated as invisible graph decoration.
+
+The generator enforces a conservative CHONFCl element set, rejects H-H local bonds, caps generated valence at `H=1`, `C=4`, `N=3`, `O=2`, `F=1`, and `Cl=1`, rejects duplicate bonding systems, and only accepts `pi_ring` systems that are simple carbon six-rings over existing local bonds. Candidates are validated before scoring and again before acceptance.
+
+`make inverse-design` writes `results/inverse_design/run_.../top_01_molecule.py` through `top_10_molecule.py` for the timestamped run and refreshes the Git-tracked reference copies in `results/inverse_design/reference/`. It also writes `dietz_01_molecule.py` through `dietz_05_molecule.py` when valid candidates with Dietz bonding systems were seen. Each file defines an importable, validated `molecule` plus the seed molecule, fixed random seed, candidate rank, predicted FreeSolv value, predictive standard deviation, target error, score, and formula.
+
+The predictor loads parameters only from the committed FreeSolv artifact at `results/freesolv/run_20260417_162536/details/model_coefficients.csv`, filtered to `freesolv / moladt_featurized / expt / bayes_gp_rbf_screened / laplace`. The run fails if those four GP parameters are missing or if the processed FreeSolv metadata does not match the same dataset and target.
+
+This is a proof of concept for property-conditioned MolADT inverse design on FreeSolv, not a synthesizability filter or a state-of-the-art molecular generator.
+
+Results are written under timestamped directories in `results/`, mainly `results/freesolv/run_.../`, `results/qm9/long/run_.../`, and `results/timing/paper/run_.../`. The committed artifacts are the FreeSolv reference bundle plus the QM9/timing SVG graphs and captions.
 
 The FreeSolv figure shows `Training`, `Validation`, `Test`, and `Paper`. The QM9 figure shows `Training`, `Test`, and `Paper`.
 
-For split sizes, the exact benchmark contract, the published FreeSolv RMSE context table, and the detailed timing-stage definitions, see [Inference and benchmarks](docs/inference-and-benchmarks.md) and [Outputs](docs/outputs.md).
+For split sizes, the exact benchmark contract, the published FreeSolv RMSE context table, and the detailed timing-stage definitions, see [Inference and benchmarks](docs/inference-and-benchmarks.md), [Outputs](docs/outputs.md), and the checked-in [results README](results/README.md).
 
 ## Read More
 
 - [Quickstart](docs/quickstart.md)
+- [Docs index](docs/README.md)
 - [ADT representation](docs/data-model.md)
 - [Inference and benchmarks](docs/inference-and-benchmarks.md)
 - [Parsing and rendering](docs/parsing.md)
@@ -121,6 +282,8 @@ For split sizes, the exact benchmark contract, the published FreeSolv RMSE conte
 - [Models and features](docs/models.md)
 - [Outputs](docs/outputs.md)
 - [Data sources](docs/data-sources.md)
+- [Results README](results/README.md)
+- [Haskell interop](docs/haskell_interop.md)
 
 ## Related Repo
 
