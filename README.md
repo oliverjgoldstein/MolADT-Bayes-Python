@@ -6,7 +6,7 @@ MolADT is a typed molecule representation for Bayesian modelling, feature genera
 
 Not just a SMILES string. Not just a graph. A molecule object you can inspect, mutate, validate, score, serialize, and share.
 
-[Quickstart](docs/quickstart.md) · [Representation](docs/representation.md) · [ADT model](docs/data-model.md) · [Examples](docs/examples.md) · [CLI](docs/cli.md) · [Models](docs/models.md) · [Benchmarks](docs/inference-and-benchmarks.md) · [Outputs](docs/outputs.md)
+[Quickstart](docs/quickstart.md) · [Representation](docs/representation.md) · [Examples](docs/examples.md) · [CLI](docs/cli.md) · [Models](docs/models.md) · [Benchmarks](docs/inference-and-benchmarks.md) · [Outputs](docs/outputs.md)
 
 ## Why MolADT
 
@@ -15,13 +15,13 @@ Molecular ML pipelines often begin with a compact boundary format, then add chem
 | What you need | What MolADT gives you |
 | --- | --- |
 | Explicit structure | `atoms`, `local_bonds`, `systems`, and `smiles_stereochemistry` as first-class fields |
-| Better proposal moves | edit molecules directly with `MutableMolecule`, then freeze and validate |
+| Typed proposal space | proposal kernels operate on molecule fields and preserve invariants before scoring |
 | Unusual bonding | diborane `3c-2e` bridges, ferrocene Cp/metal systems, aromatic pi systems |
 | Safe scoring | validate valence, connectivity, bonding systems, and FreeSolv-specific candidate rules before prediction |
 | Interop | JSON payloads and processed matrices shared with the Haskell repo |
 | Benchmarks | FreeSolv, QM9, ZINC timing, and committed result artifacts |
 
-Read the deeper case for the representation in [MolADT representation](docs/representation.md), [ADT model](docs/data-model.md), and [orbitals](docs/orbitals.md).
+Read the deeper case for the representation in [MolADT representation](docs/representation.md) and [orbitals](docs/orbitals.md).
 
 ## Bayesian Generative Tasks
 
@@ -173,32 +173,205 @@ Bonding Systems
   edge bonus:       +0.50 to each listed edge
 ```
 
-## Use The ADT
+## The ADT At The Center
 
-```python
-from moladt import MutableMolecule
-from moladt.chem.validate import validate_molecule
-from moladt.examples import ferrocene_pretty
-from moladt.io import molecule_from_json, molecule_to_json
+The sibling Haskell repo states the concept as record ADTs. Python mirrors that shape with typed dataclasses, so the molecule remains the same object across generation, validation, scoring, JSON, and Haskell interop.
 
-candidate = MutableMolecule.from_molecule(ferrocene_pretty)
-candidate.systems = [
-    (system_id, system)
-    for system_id, system in candidate.systems
-    if system.tag != "fe_backdonation"
-]
-
-molecule = validate_molecule(candidate.freeze())
-print(len(molecule.atoms), len(molecule.local_bonds), len(molecule.systems))
-
-payload = molecule_to_json(molecule)
-round_tripped = validate_molecule(molecule_from_json(payload))
-assert round_tripped == molecule
+```haskell
+data Molecule = Molecule
+  { atoms      :: Map AtomId Atom
+  , localBonds :: Set Edge
+  , systems    :: [(SystemId, BondingSystem)]
+  , smilesStereochemistry :: SmilesStereochemistry
+  }
 ```
 
-`Molecule` is immutable. `MutableMolecule` is the scratchpad for proposal moves. That split keeps generated candidates easy to edit and easy to validate.
+```python
+@dataclass(frozen=True, slots=True)
+class Molecule:
+    atoms: Mapping[AtomId, Atom]
+    local_bonds: frozenset[Edge]
+    systems: tuple[tuple[SystemId, BondingSystem], ...]
+    smiles_stereochemistry: SmilesStereochemistry = field(default_factory=SmilesStereochemistry)
+```
 
-See [ADT model](docs/data-model.md) for the field layout and [Examples](docs/examples.md) for diborane, ferrocene, morphine, benzene, and file-backed molecules.
+An atom is not only a label in a graph. It carries element attributes, position, charge, and local shell data:
+
+```haskell
+data Atom = Atom
+  { atomID       :: AtomId
+  , attributes   :: ElementAttributes
+  , coordinate   :: Coordinate
+  , shells       :: Shells
+  , formalCharge :: Int
+  }
+```
+
+```python
+@dataclass(frozen=True, slots=True)
+class Atom:
+    atom_id: AtomId
+    attributes: ElementAttributes
+    coordinate: Coordinate
+    shells: Shells
+    formal_charge: int = 0
+```
+
+Delocalised and multicentre bonds are first-class values:
+
+```haskell
+data BondingSystem = BondingSystem
+  { sharedElectrons :: NonNegative
+  , memberAtoms     :: Set AtomId
+  , memberEdges     :: Set Edge
+  , tag             :: Maybe String
+  }
+```
+
+```python
+@dataclass(frozen=True, slots=True)
+class BondingSystem:
+    shared_electrons: NonNegative
+    member_atoms: frozenset[AtomId]
+    member_edges: frozenset[Edge]
+    tag: str | None = None
+```
+
+The orbital layer is typed too:
+
+```haskell
+data P = Px | Py | Pz
+data D = Dxy | Dyz | Dxz | Dx2y2 | Dz2
+
+data Orbital subshellType = Orbital
+  { orbitalType      :: subshellType
+  , electronCount    :: Int
+  , orientation      :: Maybe Coordinate
+  , hybridComponents :: Maybe [(Double, PureOrbital)]
+  }
+
+data Shell = Shell
+  { principalQuantumNumber :: Int
+  , sSubShell              :: Maybe (SubShell So)
+  , pSubShell              :: Maybe (SubShell P)
+  , dSubShell              :: Maybe (SubShell D)
+  , fSubShell              :: Maybe (SubShell F)
+  }
+```
+
+```python
+class So(Enum):
+    S = "s"
+
+class P(Enum):
+    PX = "px"
+    PY = "py"
+    PZ = "pz"
+
+class D(Enum):
+    DXY = "dxy"
+    DYZ = "dyz"
+    DXZ = "dxz"
+    DX2Y2 = "dx2y2"
+    DZ2 = "dz2"
+
+class F(Enum):
+    FXXX = "fxxx"
+    FXXY = "fxxy"
+    FXXZ = "fxxz"
+    FXYY = "fxyy"
+    FXYZ = "fxyz"
+    FXZZ = "fxzz"
+    FZZZ = "fzzz"
+
+@dataclass(frozen=True, slots=True)
+class PureSOrbital:
+    orbital: So
+
+@dataclass(frozen=True, slots=True)
+class PurePOrbital:
+    orbital: P
+
+@dataclass(frozen=True, slots=True)
+class PureDOrbital:
+    orbital: D
+
+@dataclass(frozen=True, slots=True)
+class PureFOrbital:
+    orbital: F
+
+PureOrbital: TypeAlias = PureSOrbital | PurePOrbital | PureDOrbital | PureFOrbital
+SubshellType = TypeVar("SubshellType", So, P, D, F)
+
+@dataclass(frozen=True, slots=True)
+class Orbital(Generic[SubshellType]):
+    orbital_type: SubshellType
+    electron_count: int
+    orientation: Coordinate | None = None
+    hybrid_components: tuple[tuple[float, PureOrbital], ...] | None = None
+
+@dataclass(frozen=True, slots=True)
+class Shell:
+    principal_quantum_number: int
+    s_subshell: SubShell[So] | None = None
+    p_subshell: SubShell[P] | None = None
+    d_subshell: SubShell[D] | None = None
+    f_subshell: SubShell[F] | None = None
+
+Shells: TypeAlias = tuple[Shell, ...]
+```
+
+That lets a heavier atom such as iodine be represented by shell occupancy rather than by an opaque string. Its final valence shell is the `5s2 5p5` part of the ADT:
+
+```haskell
+Shell
+  { principalQuantumNumber = 5
+  , sSubShell = Just (SubShell
+      [ Orbital
+          { orbitalType      = So
+          , electronCount    = 2
+          , orientation      = Nothing
+          , hybridComponents = Nothing
+          }
+      ])
+  , pSubShell = Just (SubShell
+      [ Orbital
+          { orbitalType      = Px
+          , electronCount    = 2
+          , orientation      = Just (angCoord 1 0 0)
+          , hybridComponents = Nothing
+          }
+      , Orbital
+          { orbitalType      = Py
+          , electronCount    = 2
+          , orientation      = Just (angCoord 0 1 0)
+          , hybridComponents = Nothing
+          }
+      , Orbital
+          { orbitalType      = Pz
+          , electronCount    = 1
+          , orientation      = Just (angCoord 0 0 1)
+          , hybridComponents = Nothing
+          }
+      ])
+  , dSubShell = Nothing
+  , fSubShell = Nothing
+  }
+```
+
+Python stores the same iodine occupancy in [`moladt/chem/orbital.py`](moladt/chem/orbital.py):
+
+```python
+IODINE: Shells = (
+    _shell(1, s_counts=(2,)),
+    _shell(2, s_counts=(2,), p_counts=(2, 2, 2)),
+    _shell(3, s_counts=(2,), p_counts=(2, 2, 2), d_counts=(2, 2, 2, 2, 2)),
+    _shell(4, s_counts=(2,), p_counts=(2, 2, 2), d_counts=(2, 2, 2, 2, 2)),
+    _shell(5, s_counts=(2,), p_counts=(2, 2, 1)),
+)
+```
+
+See [Representation](docs/representation.md), [Orbitals](docs/orbitals.md), and [Examples](docs/examples.md) for how the same ADT covers diborane, ferrocene, morphine, benzene, and file-backed molecules.
 
 ## Python And Haskell
 
@@ -263,7 +436,7 @@ Benchmark details are in [Inference and benchmarks](docs/inference-and-benchmark
 | Area | Start here |
 | --- | --- |
 | First run | [Quickstart](docs/quickstart.md) |
-| Representation | [MolADT representation](docs/representation.md), [ADT model](docs/data-model.md), [orbitals](docs/orbitals.md) |
+| Representation | [MolADT representation](docs/representation.md), [orbitals](docs/orbitals.md) |
 | Examples | [Examples](docs/examples.md) |
 | Parsing and rendering | [Parsing and rendering](docs/parsing.md), [SMILES scope](docs/smiles-scope-and-validation.md), [CLI](docs/cli.md) |
 | Models and features | [Models and features](docs/models.md) |

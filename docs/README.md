@@ -7,7 +7,7 @@ Start here when you need more than the root [README](../README.md).
 | Need | Read |
 | --- | --- |
 | Install and run the first commands | [Quickstart](quickstart.md) |
-| Understand the representation | [Representation](representation.md), [ADT model](data-model.md) |
+| Understand the representation | [Representation](representation.md) |
 | Inspect molecules | [Examples](examples.md), [Parsing](parsing.md), [CLI](cli.md) |
 | Run models | [Models](models.md), [Inference and benchmarks](inference-and-benchmarks.md) |
 | Find result files | [Outputs](outputs.md), [results README](../results/README.md) |

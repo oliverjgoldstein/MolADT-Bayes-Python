@@ -1,77 +1,313 @@
 # Representation
 
-MolADT is a typed molecule object.
+MolADT is a molecule ADT.
 
-It is not just:
+The central object is not a SMILES string, a plain graph, or an untyped hypergraph. It is a record: atoms, sigma edges, Dietz bonding systems, stereochemistry, coordinates, charges, and shell data all have their own fields.
 
-- a SMILES string
-- a plain graph
-- a hypergraph
+## Molecule ADT
 
-It is a record with atoms, local bonds, bonding systems, stereochemistry, coordinates, charges, and shell data.
+The sibling Haskell repo writes the core representation directly as an algebraic data type:
 
-## The Core Shape
-
-```text
-Molecule = atoms + local_bonds + systems + smiles_stereochemistry
+```haskell
+data Molecule = Molecule
+  { atoms      :: Map AtomId Atom
+  , localBonds :: Set Edge
+  , systems    :: [(SystemId, BondingSystem)]
+  , smilesStereochemistry :: SmilesStereochemistry
+  }
 ```
 
-| Part | Meaning |
+Python mirrors the same shape with typed dataclasses and snake-case names:
+
+```python
+@dataclass(frozen=True, slots=True)
+class Molecule:
+    atoms: Mapping[AtomId, Atom]
+    local_bonds: frozenset[Edge]
+    systems: tuple[tuple[SystemId, BondingSystem], ...]
+    smiles_stereochemistry: SmilesStereochemistry = field(default_factory=SmilesStereochemistry)
+```
+
+| Haskell field | Python field | Meaning |
+| --- | --- | --- |
+| `atoms` | `atoms` | Atom table keyed by stable ids. |
+| `localBonds` | `local_bonds` | Ordinary two-atom sigma edges. |
+| `systems` | `systems` | Dietz electron-sharing systems. |
+| `smilesStereochemistry` | `smiles_stereochemistry` | Stereo annotations preserved at the boundary. |
+
+## Atom ADT
+
+An atom is the point where element data, position, charge, and orbital shells meet:
+
+```haskell
+data AtomicSymbol = H | C | N | O | S | P | Si | F | Cl | Br | I | Fe | B | Na
+
+data ElementAttributes = ElementAttributes
+  { symbol       :: AtomicSymbol
+  , atomicNumber :: Int
+  , atomicWeight :: Double
+  }
+
+data Atom = Atom
+  { atomID       :: AtomId
+  , attributes   :: ElementAttributes
+  , coordinate   :: Coordinate
+  , shells       :: Shells
+  , formalCharge :: Int
+  }
+```
+
+```python
+class AtomicSymbol(Enum):
+    H = "H"
+    C = "C"
+    N = "N"
+    O = "O"
+    S = "S"
+    P = "P"
+    Si = "Si"
+    F = "F"
+    Cl = "Cl"
+    Br = "Br"
+    I = "I"
+    Fe = "Fe"
+    B = "B"
+    Na = "Na"
+
+@dataclass(frozen=True, slots=True)
+class ElementAttributes:
+    symbol: AtomicSymbol
+    atomic_number: int
+    atomic_weight: float
+
+@dataclass(frozen=True, slots=True)
+class Atom:
+    atom_id: AtomId
+    attributes: ElementAttributes
+    coordinate: Coordinate
+    shells: Shells
+    formal_charge: int = 0
+```
+
+The `formalCharge` field is explicit. Shells are attached to atoms directly, so local electronic structure does not have to be recovered from a string later.
+
+## Dietz Layer
+
+MolADT separates local sigma edges from electron-sharing systems:
+
+```haskell
+newtype AtomId   = AtomId Integer
+newtype SystemId = SystemId Int
+
+data Edge = Edge AtomId AtomId
+
+data BondingSystem = BondingSystem
+  { sharedElectrons :: NonNegative
+  , memberAtoms     :: Set AtomId
+  , memberEdges     :: Set Edge
+  , tag             :: Maybe String
+  }
+```
+
+```python
+@dataclass(frozen=True, slots=True, order=True)
+class AtomId:
+    value: int
+
+@dataclass(frozen=True, slots=True, order=True)
+class SystemId:
+    value: int
+
+@dataclass(frozen=True, slots=True, order=True)
+class Edge:
+    a: AtomId
+    b: AtomId
+
+@dataclass(frozen=True, slots=True)
+class BondingSystem:
+    shared_electrons: NonNegative
+    member_atoms: frozenset[AtomId]
+    member_edges: frozenset[Edge]
+    tag: str | None = None
+```
+
+That is why the same molecule can carry both a normal graph and explicit non-classical bonding. Examples:
+
+| Molecule | What the ADT stores explicitly |
 | --- | --- |
-| `atoms` | Atom table with ids, element data, coordinates, shells, and charges. |
-| `local_bonds` | Ordinary two-atom sigma edges. |
-| `systems` | Dietz bonding systems for delocalized or multicenter electrons. |
-| `smiles_stereochemistry` | Stereo flags preserved from boundary SMILES input. |
+| Benzene | six local ring edges plus a six-electron `pi_ring` system |
+| Diborane | two `3c-2e` bridge systems |
+| Ferrocene | cyclopentadienyl pi systems plus Fe/Cp electron pools |
+| Morphine | fused graph, delocalisation, and preserved stereochemistry flags |
+
+## Orbital Layer
+
+Shells are also ADTs. The Haskell shape is:
+
+```haskell
+data So = So
+data P = Px | Py | Pz
+data D = Dxy | Dyz | Dxz | Dx2y2 | Dz2
+data F = Fxxx | Fxxy | Fxxz | Fxyy | Fxyz | Fxzz | Fzzz
+
+data PureOrbital
+  = PureSo So
+  | PureP  P
+  | PureD  D
+  | PureF  F
+
+data Orbital subshellType = Orbital
+  { orbitalType      :: subshellType
+  , electronCount    :: Int
+  , orientation      :: Maybe Coordinate
+  , hybridComponents :: Maybe [(Double, PureOrbital)]
+  }
+
+newtype SubShell subshellType = SubShell
+  { orbitals :: [Orbital subshellType] }
+
+data Shell = Shell
+  { principalQuantumNumber :: Int
+  , sSubShell              :: Maybe (SubShell So)
+  , pSubShell              :: Maybe (SubShell P)
+  , dSubShell              :: Maybe (SubShell D)
+  , fSubShell              :: Maybe (SubShell F)
+  }
+
+type Shells = [Shell]
+```
+
+```python
+class So(Enum):
+    S = "s"
+
+class P(Enum):
+    PX = "px"
+    PY = "py"
+    PZ = "pz"
+
+class D(Enum):
+    DXY = "dxy"
+    DYZ = "dyz"
+    DXZ = "dxz"
+    DX2Y2 = "dx2y2"
+    DZ2 = "dz2"
+
+class F(Enum):
+    FXXX = "fxxx"
+    FXXY = "fxxy"
+    FXXZ = "fxxz"
+    FXYY = "fxyy"
+    FXYZ = "fxyz"
+    FXZZ = "fxzz"
+    FZZZ = "fzzz"
+
+@dataclass(frozen=True, slots=True)
+class PureSOrbital:
+    orbital: So
+
+@dataclass(frozen=True, slots=True)
+class PurePOrbital:
+    orbital: P
+
+@dataclass(frozen=True, slots=True)
+class PureDOrbital:
+    orbital: D
+
+@dataclass(frozen=True, slots=True)
+class PureFOrbital:
+    orbital: F
+
+PureOrbital: TypeAlias = PureSOrbital | PurePOrbital | PureDOrbital | PureFOrbital
+SubshellType = TypeVar("SubshellType", So, P, D, F)
+
+@dataclass(frozen=True, slots=True)
+class Orbital(Generic[SubshellType]):
+    orbital_type: SubshellType
+    electron_count: int
+    orientation: Coordinate | None = None
+    hybrid_components: tuple[tuple[float, PureOrbital], ...] | None = None
+
+@dataclass(frozen=True, slots=True)
+class SubShell(Generic[SubshellType]):
+    orbitals: tuple[Orbital[SubshellType], ...]
+
+@dataclass(frozen=True, slots=True)
+class Shell:
+    principal_quantum_number: int
+    s_subshell: SubShell[So] | None = None
+    p_subshell: SubShell[P] | None = None
+    d_subshell: SubShell[D] | None = None
+    f_subshell: SubShell[F] | None = None
+
+Shells: TypeAlias = tuple[Shell, ...]
+```
+
+For iodine, the final valence shell is represented as `5s2 5p5`:
+
+```haskell
+Shell
+  { principalQuantumNumber = 5
+  , sSubShell = Just (SubShell
+      [ Orbital
+          { orbitalType      = So
+          , electronCount    = 2
+          , orientation      = Nothing
+          , hybridComponents = Nothing
+          }
+      ])
+  , pSubShell = Just (SubShell
+      [ Orbital
+          { orbitalType      = Px
+          , electronCount    = 2
+          , orientation      = Just (angCoord 1 0 0)
+          , hybridComponents = Nothing
+          }
+      , Orbital
+          { orbitalType      = Py
+          , electronCount    = 2
+          , orientation      = Just (angCoord 0 1 0)
+          , hybridComponents = Nothing
+          }
+      , Orbital
+          { orbitalType      = Pz
+          , electronCount    = 1
+          , orientation      = Just (angCoord 0 0 1)
+          , hybridComponents = Nothing
+          }
+      ])
+  , dSubShell = Nothing
+  , fSubShell = Nothing
+  }
+```
+
+Python stores iodine as the same shell tuple:
+
+```python
+IODINE: Shells = (
+    _shell(1, s_counts=(2,)),
+    _shell(2, s_counts=(2,), p_counts=(2, 2, 2)),
+    _shell(3, s_counts=(2,), p_counts=(2, 2, 2), d_counts=(2, 2, 2, 2, 2)),
+    _shell(4, s_counts=(2,), p_counts=(2, 2, 2), d_counts=(2, 2, 2, 2, 2)),
+    _shell(5, s_counts=(2,), p_counts=(2, 2, 1)),
+)
+```
+
+See [Orbitals](orbitals.md) for the orbital model in more detail.
 
 ## Why It Helps
 
-SMILES is a good boundary string. It is not the best working object for Bayesian generation.
+SMILES is a useful boundary string. It is not the best working object for Bayesian generation.
 
-MolADT keeps the object explicit so code can:
+MolADT keeps the support of the model explicit:
 
-- edit a molecule directly
-- validate it
-- compute features
-- score it with a Bayesian model
-- export the exact generated candidate
+- priors operate over molecule fields
+- proposal kernels modify typed atoms, edges, systems, and charges
+- validators enforce valence, connectivity, and bonding-system invariants
+- feature maps and posterior scores stay attached to the exact generated object
+- JSON exports preserve the same typed candidate for later inspection
 
-That is why the FreeSolv inverse-design task can generate molecules under typed chemistry rules instead of proposing arbitrary strings and filtering later.
-
-## Inspect A Molecule
-
-```python
-from moladt.chem.validate import validate_molecule
-from moladt.examples import benzene
-
-molecule = validate_molecule(benzene)
-
-symbols = [atom.attributes.symbol.value for atom in molecule.atoms.values()]
-system_tags = [system.tag for _, system in molecule.systems]
-
-print(symbols.count("C"), symbols.count("H"))
-print(len(molecule.local_bonds), system_tags)
-```
-
-Benzene is still a normal graph through `local_bonds`, but its six-electron aromatic system is also explicit in `systems`.
-
-## Examples
-
-| Molecule | What MolADT can say explicitly |
-| --- | --- |
-| Benzene | six local ring edges plus a `pi_ring` system |
-| Diborane | two `3c-2e` bridge systems |
-| Ferrocene | Cp ring systems plus Fe/Cp bonding pools |
-| Morphine | fused graph, delocalization, and stored stereochemistry flags |
-
-## Viewer
-
-Export a molecule to a standalone HTML viewer:
-
-```bash
-make molecule-viewer VIEWER_INPUT=molecules/benzene.sdf
-```
-
-The viewer shows local bonds and Dietz bonding-system annotations separately.
+For the FreeSolv inverse task, generation rules are built around feasible local moves over this ADT. Validation remains the final guardrail, but the generator is not trying arbitrary strings and hoping they parse.
 
 ## Boundary Formats
 
@@ -80,7 +316,8 @@ MolADT can read and write boundary formats:
 - SDF for structure files
 - conservative SMILES for classical strings
 - MolADT JSON for typed interchange
+- standalone HTML viewer exports
 
-The boundary format is not the model. The `Molecule` object is the model.
+The boundary format is not the model. The `Molecule` ADT is the model.
 
-See [ADT model](data-model.md), [Examples](examples.md), and [Parsing](parsing.md).
+See [Examples](examples.md), [Parsing](parsing.md), [Orbitals](orbitals.md), [CLI](cli.md), and [Haskell interop](haskell_interop.md).
