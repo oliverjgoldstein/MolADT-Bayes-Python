@@ -7,111 +7,210 @@ from moladt.chem.molecule import Atom, AtomicSymbol, Molecule
 from moladt.chem.validate import validate_molecule
 
 rank = 8
-target_freesolv = -5
+target_freesolv = -20
 seed_molecule = 'water'
 random_seed = 0
-predicted_freesolv = -5.01628547231
-predictive_sd = 6.15640095498
-target_error = 0.016285472315
-score = -0.016285472315
-formula = 'CH3ClF2N2'
+predicted_freesolv = -8.90329181504
+predictive_sd = 5.33781220081
+target_error = 11.096708185
+score = -3.77967944024
+formula = 'C3H7Cl2N3O3'
 
 atoms = {
     AtomId(1): Atom(
         atom_id=AtomId(1),
-        attributes=element_attributes(AtomicSymbol.F),
+        attributes=element_attributes(AtomicSymbol.O),
         coordinate=Coordinate(
             mk_angstrom(-0.011),
             mk_angstrom(0.963),
             mk_angstrom(0.007),
         ),
-        shells=element_shells(AtomicSymbol.F),
+        shells=element_shells(AtomicSymbol.O),
         formal_charge=0,
     ),
     AtomId(2): Atom(
         atom_id=AtomId(2),
-        attributes=element_attributes(AtomicSymbol.N),
+        attributes=element_attributes(AtomicSymbol.C),
         coordinate=Coordinate(
             mk_angstrom(-0.711),
             mk_angstrom(-0.249435565298),
             mk_angstrom(0.107),
         ),
-        shells=element_shells(AtomicSymbol.N),
+        shells=element_shells(AtomicSymbol.C),
         formal_charge=0,
     ),
     AtomId(3): Atom(
         atom_id=AtomId(3),
-        attributes=element_attributes(AtomicSymbol.C),
+        attributes=element_attributes(AtomicSymbol.N),
         coordinate=Coordinate(
             mk_angstrom(-0.111),
             mk_angstrom(-1.28866604984),
             mk_angstrom(0.307),
         ),
-        shells=element_shells(AtomicSymbol.C),
+        shells=element_shells(AtomicSymbol.N),
         formal_charge=0,
     ),
     AtomId(4): Atom(
         atom_id=AtomId(4),
-        attributes=element_attributes(AtomicSymbol.Cl),
+        attributes=element_attributes(AtomicSymbol.C),
         coordinate=Coordinate(
-            mk_angstrom(-0.786),
-            mk_angstrom(-0.119531754731),
-            mk_angstrom(0.507),
+            mk_angstrom(0.639),
+            mk_angstrom(2.08883302492),
+            mk_angstrom(0.107),
         ),
-        shells=element_shells(AtomicSymbol.Cl),
+        shells=element_shells(AtomicSymbol.C),
         formal_charge=0,
     ),
     AtomId(5): Atom(
         atom_id=AtomId(5),
         attributes=element_attributes(AtomicSymbol.N),
         coordinate=Coordinate(
-            mk_angstrom(-0.786),
-            mk_angstrom(-0.119531754731),
-            mk_angstrom(0.507),
+            mk_angstrom(-0.711),
+            mk_angstrom(-2.32789653438),
+            mk_angstrom(0.407),
         ),
         shells=element_shells(AtomicSymbol.N),
         formal_charge=0,
     ),
     AtomId(6): Atom(
         atom_id=AtomId(6),
-        attributes=element_attributes(AtomicSymbol.F),
+        attributes=element_attributes(AtomicSymbol.C),
         coordinate=Coordinate(
-            mk_angstrom(-1.386),
-            mk_angstrom(-1.15876223927),
-            mk_angstrom(0.607),
+            mk_angstrom(1.939),
+            mk_angstrom(2.08883302492),
+            mk_angstrom(0.107),
         ),
-        shells=element_shells(AtomicSymbol.F),
+        shells=element_shells(AtomicSymbol.C),
         formal_charge=0,
     ),
     AtomId(7): Atom(
         atom_id=AtomId(7),
-        attributes=element_attributes(AtomicSymbol.H),
+        attributes=element_attributes(AtomicSymbol.Cl),
+        coordinate=Coordinate(
+            mk_angstrom(0.739),
+            mk_angstrom(2.08883302492),
+            mk_angstrom(0.107),
+        ),
+        shells=element_shells(AtomicSymbol.Cl),
+        formal_charge=0,
+    ),
+    AtomId(8): Atom(
+        atom_id=AtomId(8),
+        attributes=element_attributes(AtomicSymbol.O),
+        coordinate=Coordinate(
+            mk_angstrom(2.614),
+            mk_angstrom(3.25796732003),
+            mk_angstrom(0.207),
+        ),
+        shells=element_shells(AtomicSymbol.O),
+        formal_charge=0,
+    ),
+    AtomId(9): Atom(
+        atom_id=AtomId(9),
+        attributes=element_attributes(AtomicSymbol.Cl),
+        coordinate=Coordinate(
+            mk_angstrom(-1.411),
+            mk_angstrom(-1.11546096908),
+            mk_angstrom(0.607),
+        ),
+        shells=element_shells(AtomicSymbol.Cl),
+        formal_charge=0,
+    ),
+    AtomId(10): Atom(
+        atom_id=AtomId(10),
+        attributes=element_attributes(AtomicSymbol.O),
+        coordinate=Coordinate(
+            mk_angstrom(-0.736),
+            mk_angstrom(-2.37119780457),
+            mk_angstrom(0.407),
+        ),
+        shells=element_shells(AtomicSymbol.O),
+        formal_charge=0,
+    ),
+    AtomId(11): Atom(
+        atom_id=AtomId(11),
+        attributes=element_attributes(AtomicSymbol.N),
         coordinate=Coordinate(
             mk_angstrom(-0.061),
-            mk_angstrom(0.876397459622),
+            mk_angstrom(-1.37526859022),
+            mk_angstrom(0.307),
+        ),
+        shells=element_shells(AtomicSymbol.N),
+        formal_charge=0,
+    ),
+    AtomId(12): Atom(
+        atom_id=AtomId(12),
+        attributes=element_attributes(AtomicSymbol.H),
+        coordinate=Coordinate(
+            mk_angstrom(0.639),
+            mk_angstrom(-0.249435565298),
+            mk_angstrom(0.107),
+        ),
+        shells=element_shells(AtomicSymbol.H),
+        formal_charge=0,
+    ),
+    AtomId(13): Atom(
+        atom_id=AtomId(13),
+        attributes=element_attributes(AtomicSymbol.H),
+        coordinate=Coordinate(
+            mk_angstrom(1.339),
+            mk_angstrom(3.30126859022),
             mk_angstrom(0.207),
         ),
         shells=element_shells(AtomicSymbol.H),
         formal_charge=0,
     ),
-    AtomId(8): Atom(
-        atom_id=AtomId(8),
+    AtomId(14): Atom(
+        atom_id=AtomId(14),
         attributes=element_attributes(AtomicSymbol.H),
         coordinate=Coordinate(
-            mk_angstrom(-0.786),
-            mk_angstrom(-0.119531754731),
+            mk_angstrom(0.039),
+            mk_angstrom(3.12806350946),
+            mk_angstrom(0.307),
+        ),
+        shells=element_shells(AtomicSymbol.H),
+        formal_charge=0,
+    ),
+    AtomId(15): Atom(
+        atom_id=AtomId(15),
+        attributes=element_attributes(AtomicSymbol.H),
+        coordinate=Coordinate(
+            mk_angstrom(1.364),
+            mk_angstrom(3.25796732003),
+            mk_angstrom(0.207),
+        ),
+        shells=element_shells(AtomicSymbol.H),
+        formal_charge=0,
+    ),
+    AtomId(16): Atom(
+        atom_id=AtomId(16),
+        attributes=element_attributes(AtomicSymbol.H),
+        coordinate=Coordinate(
+            mk_angstrom(-1.386),
+            mk_angstrom(-3.49703082949),
             mk_angstrom(0.507),
         ),
         shells=element_shells(AtomicSymbol.H),
         formal_charge=0,
     ),
-    AtomId(9): Atom(
-        atom_id=AtomId(9),
+    AtomId(17): Atom(
+        atom_id=AtomId(17),
         attributes=element_attributes(AtomicSymbol.H),
         coordinate=Coordinate(
-            mk_angstrom(-2.186),
-            mk_angstrom(-0.119531754731),
+            mk_angstrom(0.614),
+            mk_angstrom(-2.54440288533),
             mk_angstrom(0.507),
+        ),
+        shells=element_shells(AtomicSymbol.H),
+        formal_charge=0,
+    ),
+    AtomId(18): Atom(
+        atom_id=AtomId(18),
+        attributes=element_attributes(AtomicSymbol.H),
+        coordinate=Coordinate(
+            mk_angstrom(1.339),
+            mk_angstrom(-1.37526859022),
+            mk_angstrom(0.307),
         ),
         shells=element_shells(AtomicSymbol.H),
         formal_charge=0,
@@ -120,13 +219,23 @@ atoms = {
 
 local_bonds = frozenset({
     mk_edge(AtomId(1), AtomId(2)),
+    mk_edge(AtomId(1), AtomId(4)),
     mk_edge(AtomId(2), AtomId(3)),
-    mk_edge(AtomId(2), AtomId(7)),
-    mk_edge(AtomId(3), AtomId(4)),
+    mk_edge(AtomId(2), AtomId(11)),
+    mk_edge(AtomId(2), AtomId(12)),
     mk_edge(AtomId(3), AtomId(5)),
-    mk_edge(AtomId(3), AtomId(8)),
+    mk_edge(AtomId(3), AtomId(10)),
+    mk_edge(AtomId(4), AtomId(6)),
+    mk_edge(AtomId(4), AtomId(13)),
+    mk_edge(AtomId(4), AtomId(14)),
     mk_edge(AtomId(5), AtomId(6)),
     mk_edge(AtomId(5), AtomId(9)),
+    mk_edge(AtomId(6), AtomId(7)),
+    mk_edge(AtomId(6), AtomId(8)),
+    mk_edge(AtomId(8), AtomId(15)),
+    mk_edge(AtomId(10), AtomId(16)),
+    mk_edge(AtomId(11), AtomId(17)),
+    mk_edge(AtomId(11), AtomId(18)),
 })
 
 systems = (

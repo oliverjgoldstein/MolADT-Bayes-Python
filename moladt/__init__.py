@@ -14,6 +14,7 @@ from .chem.molecule import (
 )
 from .chem.mutable import MutableMolecule
 from .chem.pretty import PrettyBlock, pretty_text
+from .viewer import molecule_viewer_html, molecule_viewer_payload, write_molecule_viewer_html
 
 __all__ = [
     "Atom",
@@ -34,5 +35,8 @@ __all__ = [
     "SystemId",
     "mk_bonding_system",
     "mk_edge",
+    "molecule_viewer_html",
+    "molecule_viewer_payload",
     "pretty_text",
+    "write_molecule_viewer_html",
 ]

@@ -14,20 +14,27 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 def test_ferrocene_pretty_rendering_includes_shells_and_backdonation() -> None:
     rendered = pretty_text(ferrocene_pretty)
     assert "Molecule Report" in rendered
+    assert "heavy atoms      11" in rendered
+    assert "atom    Z   chg  sigma  used" in rendered
     assert "bonding systems  3" in rendered
     assert "Bonding Systems" in rendered
     assert "[#3] fe_backdonation" in rendered
     assert "[Fe#1]" in rendered
+    assert "#3[fe_backdonation]" in rendered
+    assert "Electron Shells" in rendered
     assert "shells:" in rendered
 
 
 def test_diborane_pretty_rendering_includes_3c2e_bridges() -> None:
     rendered = pretty_text(diborane_pretty)
     assert "atoms            8" in rendered
+    assert "heavy atoms      2" in rendered
     assert "Sigma Network" in rendered
     assert "[#1] bridge_h3_3c2e" in rendered
     assert "[#2] bridge_h4_3c2e" in rendered
     assert "edge bonus:       +0.50 to each listed edge" in rendered
+    assert "[B#1]" in rendered
+    assert "used" in rendered
 
 
 def test_morphine_pretty_rendering_includes_explicit_ring_and_pi_systems() -> None:

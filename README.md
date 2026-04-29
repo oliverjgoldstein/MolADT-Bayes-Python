@@ -65,11 +65,21 @@ Dietz-style ADT that turns the five classic SMILES ring closures into sigma edge
 Molecule Report
 ===============
 atoms            21
+heavy atoms      21
 sigma bonds      25
 bonding systems  2
 net charge       +0
 composition      C17 N O3
 stereo flags     5 atom
+
+Atoms
+-----
+atom    Z  chg  sigma  used  xyz (Angstrom)  sigma neighbors  systems
+...
+
+Electron Shells
+---------------
+...
 
 Bonding Systems
 ---------------
@@ -186,6 +196,7 @@ Use the CLI when you want to inspect or serialize how a boundary format lands in
 ./.venv/bin/python -m moladt.cli parse-smiles 'CN1CC[C@]23C4=C5C=CC(O)=C4O[C@H]2[C@@H](O)C=C[C@H]3[C@H]1C5'
 ./.venv/bin/python -m moladt.cli to-json molecules/morphine.sdf > morphine.moladt.json
 ./.venv/bin/python -m moladt.cli from-json morphine.moladt.json
+./.venv/bin/python -m moladt.cli view-html morphine.moladt.json --format json --output morphine.viewer.html
 ./.venv/bin/python -m moladt.cli to-smiles molecules/benzene.sdf
 ```
 
@@ -193,6 +204,7 @@ Use the CLI when you want to inspect or serialize how a boundary format lands in
 - `parse-smiles` reads a supported SMILES string into the same typed molecule shape
 - `to-json` reads one SDF record, validates it, and writes the shared MolADT JSON boundary format used across the Python and Haskell repos
 - `from-json` reads that MolADT JSON back into the typed `Molecule` object and prints the usual MolADT report
+- `view-html` exports a standalone beta 3D browser viewer with drag rotation, wheel zoom, JSON drop loading, atom picking, and colored Dietz bonding-system annotations
 - `pretty-example` loads the manuscript-facing built-in objects, written as explicit typed molecules with orbital shells intact
 - `to-smiles` renders validated classical MolADT structures back into the supported SMILES subset
 
@@ -227,6 +239,41 @@ The documentation is split by task:
 - benchmarks and outputs: [Inference and benchmarks](docs/inference-and-benchmarks.md), [Models and features](docs/models.md), [Outputs](docs/outputs.md), and [results README](results/README.md)
 - interop and data: [Haskell interop](docs/haskell_interop.md), [Data sources](docs/data-sources.md), and [Repo map](docs/repo-map.md)
 
+## Inverse Design
+
+The FreeSolv inverse-design experiment grows molecules toward a target hydration free energy using the checked-in FreeSolv Bayesian GP. It starts from water by default, uses fixed random seeds, validates every accepted proposal, and writes the top generated molecules as importable Python files.
+
+Run the default water-seeded experiment with:
+
+```bash
+make inverse-design TARGET=-5.0
+```
+
+Here `-5.0` means “try to find molecules predicted near `-5.0` kcal/mol hydration free energy.” Water is the default seed molecule, so no seed argument is needed for the paper-facing run.
+
+To start from another supported seed, for example methane:
+
+```bash
+make inverse-design TARGET=-5.0 SEED_MOLECULE=methane
+```
+
+The equivalent direct Python commands are:
+
+```bash
+python -m experiments.freesolv_inverse_design --target -5.0
+python -m experiments.freesolv_inverse_design --target -5.0 --seed-molecule methane
+```
+
+`--target` and `--seed-molecule` are the only user-facing flags. If no target is supplied, the script uses the median experimental FreeSolv value from the processed dataset. Other settings are fixed constants in `experiments/freesolv_inverse_design.py` for reproducibility: `N_STEPS=2000`, `N_SEEDS=5`, `TOP_K=10`, `MAX_HEAVY_ATOMS=12`, `TEMPERATURE=1.0`, `RANDOM_SEED=0`, and `CONFIDENCE_NOISE_FLOOR=1.0`.
+
+The predictor loads the committed FreeSolv coefficient summary at `results/freesolv/run_20260417_162536/details/model_coefficients.csv`, filtered to `freesolv / moladt_featurized / expt / bayes_gp_rbf_screened / laplace`, and the matching Laplace posterior draws at `results/freesolv/run_20260417_162536/details/stan_output/freesolv/moladt_featurized/bayes_gp_rbf_screened/laplace/`. Candidate scores use the posterior-draw averaged GP predictive mean and predictive standard deviation. Lower-uncertainty molecules are preferred through a Gaussian log score for the target, so the retained molecules are both target-matching and comparatively confident.
+
+The generator uses small MolADT/Dietz-aware moves: add a terminal atom, close a sigma edge, mutate a non-hydrogen atom, remove a terminal atom, or add a six-electron pi system over an existing carbon six-ring. Every proposal is validated against local sigma edges plus Dietz bonding systems before it can be accepted, so delocalized and multicenter bonding are not ignored as plain graph decoration.
+
+At the end, the run prints diagnostics and the top molecules to stdout. It writes `results/inverse_design/run_.../top_01_molecule.py` through `top_10_molecule.py` for the timestamped run and refreshes the Git-tracked reference copies in `results/inverse_design/reference/`. It also writes `dietz_01_molecule.py` through `dietz_05_molecule.py` when valid candidates with Dietz bonding systems were seen. Each file defines an importable, validated `molecule` plus the seed molecule, fixed random seed, candidate rank, predicted FreeSolv value, target error, score, and formula.
+
+This is a proof of concept for property-conditioned MolADT inverse design on FreeSolv, not a synthesizability filter or a state-of-the-art molecular generator.
+
 ## Benchmarking
 
 FreeSolv has a committed reference bundle so the fitted GP summary, posterior draws, predictions, and processed feature matrices are available in the repo. QM9 and timing keep their paper-facing graphs and captions in Git, while their heavier run details stay local.
@@ -243,27 +290,6 @@ make timing
 - `make inverse-design TARGET=-5.0`: FreeSolv inverse-design proof of concept. It reuses the fixed FreeSolv Bayesian GP artifact, starts deterministic search chains from water by default, applies MolADT/Dietz-aware local growth moves, validates every accepted molecule, prints the top generated molecules plus the best Dietz-system molecules to stdout, and writes importable Python files under `results/inverse_design/run_.../` and `results/inverse_design/reference/`. If `TARGET` is omitted, the script uses the median experimental FreeSolv value. Set `SEED_MOLECULE=methane` to start all chains from methane instead.
 - `make qm9long`: full QM9 `mu` MAE comparison over all aligned local QM9 molecules, using `visnet_ensemble` on `moladt_featurized_geom`. That export keeps the atomic numbers and coordinates from the SDF record and adds the full MolADT feature bundle from the same molecule. The current local bundle yields `107,108 / 13,388 / 13,389` train / validation / test rows under the deterministic `80/10/10` long split. ViSNet runs one member for at most `25` epochs with seed `102`, and the verbose run prints every epoch with validation RMSE and MAE. It writes the clean paper SVG plus `caption.txt`.
 - `make timing`: ZINC timing comparison on the fixed eight-stage paper path: `SMILES CSV -> string`, `MolADT CSV -> MolADT`, `SMILES -> JSON`, `SDF -> MolADT`, `SDF -> SMILES`, `MolADT -> JSON`, `JSON -> MolADT`, and `JSON -> SMILES`. It writes `results/timing/paper/run_.../timing_overview.svg`, `results/timing/paper/run_.../caption.txt`, and `results/timing/paper/run_.../timing_result_files.txt`.
-
-### FreeSolv inverse design
-
-Run the experiment directly with:
-
-```bash
-python -m experiments.freesolv_inverse_design --target -5.0
-python -m experiments.freesolv_inverse_design --target -5.0 --seed-molecule methane
-```
-
-`--target` and `--seed-molecule` are the only user-facing flags. The default seed molecule is `water`, and all `N_SEEDS=5` deterministic search chains start from that same molecule with fixed RNG offsets. Other settings are fixed constants in the module for reproducibility: `N_STEPS=2000`, `TOP_K=10`, `MAX_HEAVY_ATOMS=12`, small internal growth limits, `TEMPERATURE=1.0`, and `RANDOM_SEED=0`.
-
-The growth moves are intentionally small and reviewer-facing: add a terminal atom, close a sigma edge, mutate a non-hydrogen atom, remove a terminal atom, or add a six-electron pi system over an existing carbon six-ring. Heavy-atom edits may replace terminal hydrogens, then terminal hydrogens are refilled conservatively before validation and scoring so the GP sees less under-valenced chemistry. Each proposal is validated against local sigma edges plus Dietz bonding systems before it can be accepted, so delocalized and multicenter bonding are not treated as invisible graph decoration.
-
-The generator enforces a conservative CHONFCl element set, rejects H-H local bonds, caps generated valence at `H=1`, `C=4`, `N=3`, `O=2`, `F=1`, and `Cl=1`, rejects duplicate bonding systems, and only accepts `pi_ring` systems that are simple carbon six-rings over existing local bonds. Candidates are validated before scoring and again before acceptance.
-
-`make inverse-design` writes `results/inverse_design/run_.../top_01_molecule.py` through `top_10_molecule.py` for the timestamped run and refreshes the Git-tracked reference copies in `results/inverse_design/reference/`. It also writes `dietz_01_molecule.py` through `dietz_05_molecule.py` when valid candidates with Dietz bonding systems were seen. Each file defines an importable, validated `molecule` plus the seed molecule, fixed random seed, candidate rank, predicted FreeSolv value, predictive standard deviation, target error, score, and formula.
-
-The predictor loads parameters only from the committed FreeSolv artifact at `results/freesolv/run_20260417_162536/details/model_coefficients.csv`, filtered to `freesolv / moladt_featurized / expt / bayes_gp_rbf_screened / laplace`. The run fails if those four GP parameters are missing or if the processed FreeSolv metadata does not match the same dataset and target.
-
-This is a proof of concept for property-conditioned MolADT inverse design on FreeSolv, not a synthesizability filter or a state-of-the-art molecular generator.
 
 Results are written under timestamped directories in `results/`, mainly `results/freesolv/run_.../`, `results/qm9/long/run_.../`, and `results/timing/paper/run_.../`. The committed artifacts are the FreeSolv reference bundle plus the QM9/timing SVG graphs and captions.
 

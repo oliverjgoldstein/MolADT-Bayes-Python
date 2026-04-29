@@ -38,6 +38,7 @@ MAX_TOTAL_ATOMS = 4 * MAX_HEAVY_ATOMS + 8
 HEAVY_ATOM_GROWTH_LIMIT = MAX_HEAVY_ATOMS + 2
 DEFAULT_SEED_MOLECULE = "water"
 REFERENCE_RESULTS_ENV = "MOLADT_REFERENCE_RESULTS_DIR"
+CONFIDENCE_NOISE_FLOOR = 1.0
 
 DATASET_PREFIX = "freesolv_moladt_featurized"
 DEFAULT_MODEL_DIR = PROJECT_ROOT / "results" / "freesolv" / "run_20260417_162536"
@@ -120,6 +121,7 @@ class SearchResult:
     molecule_file_paths: tuple[Path, ...] = ()
     dietz_file_paths: tuple[Path, ...] = ()
     model_parameter_source: Path | None = None
+    model_draw_source: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,6 +130,15 @@ class FreeSolvModelParameters:
     signal_scale: float
     lengthscale: float
     sigma: float
+    source_path: Path
+
+
+@dataclass(frozen=True, slots=True)
+class FreeSolvPosteriorDraws:
+    alpha: np.ndarray
+    signal_scale: np.ndarray
+    lengthscale: np.ndarray
+    sigma: np.ndarray
     source_path: Path
 
 
@@ -143,9 +154,14 @@ class FreeSolvBayesianPredictor:
     signal_scale: float
     lengthscale: float
     sigma: float
+    alpha_draws: np.ndarray
+    signal_scale_draws: np.ndarray
+    lengthscale_draws: np.ndarray
+    sigma_draws: np.ndarray
+    draw_weights: np.ndarray
     chol: np.ndarray
-    weight: np.ndarray
     parameter_source_path: Path
+    draw_source_path: Path
 
     @classmethod
     def load(cls) -> FreeSolvBayesianPredictor:
@@ -164,12 +180,19 @@ class FreeSolvBayesianPredictor:
         selected_indices = _screen_top_correlation_features(X_train_all, y_train, top_k=GP_SCREENED_FEATURE_COUNT)
         X_train = X_train_all[:, selected_indices]
         parameters = _load_gp_parameter_means()
+        draws = _load_gp_posterior_draws()
+        draw_weights = _precompute_gp_draw_weights(
+            X_train=X_train,
+            y_train=y_train,
+            alpha=draws.alpha,
+            signal_scale=draws.signal_scale,
+            lengthscale=draws.lengthscale,
+            sigma=draws.sigma,
+        )
 
         train_kernel = _rbf_kernel(X_train, X_train, lengthscale=parameters.lengthscale, signal_scale=parameters.signal_scale)
         train_kernel[np.diag_indices_from(train_kernel)] += parameters.sigma**2 + 1e-8
         chol = np.linalg.cholesky(train_kernel)
-        centered_y = y_train - parameters.alpha
-        weight = np.linalg.solve(chol.T, np.linalg.solve(chol, centered_y))
         return cls(
             feature_names=feature_names,
             train_mean=train_mean,
@@ -181,9 +204,14 @@ class FreeSolvBayesianPredictor:
             signal_scale=parameters.signal_scale,
             lengthscale=parameters.lengthscale,
             sigma=parameters.sigma,
+            alpha_draws=draws.alpha,
+            signal_scale_draws=draws.signal_scale,
+            lengthscale_draws=draws.lengthscale,
+            sigma_draws=draws.sigma,
+            draw_weights=draw_weights,
             chol=chol,
-            weight=weight,
             parameter_source_path=parameters.source_path,
+            draw_source_path=draws.source_path,
         )
 
     def predict(self, molecule: Molecule) -> Prediction:
@@ -191,11 +219,21 @@ class FreeSolvBayesianPredictor:
         raw = np.asarray([float(descriptors.get(name, 0.0)) for name in self.feature_names], dtype=float)
         standardized = (raw - self.train_mean) / self.train_std
         x_eval = standardized[list(self.selected_indices)].reshape(1, -1)
+        mean_by_draw = _gp_mean_by_draw(
+            x_eval=x_eval,
+            X_train=self.X_train,
+            alpha=self.alpha_draws,
+            signal_scale=self.signal_scale_draws,
+            lengthscale=self.lengthscale_draws,
+            draw_weights=self.draw_weights,
+        )
+        predictive_mean = float(np.mean(mean_by_draw))
+
         cross_kernel = _rbf_kernel(x_eval, self.X_train, lengthscale=self.lengthscale, signal_scale=self.signal_scale)
-        mean = float((self.alpha + cross_kernel @ self.weight)[0])
         solve = np.linalg.solve(self.chol, cross_kernel.T)
-        marginal_var = self.signal_scale**2 + self.sigma**2 - float(np.sum(np.square(solve), axis=0)[0])
-        return Prediction(mean=mean, sd=math.sqrt(max(marginal_var, 1e-9)))
+        conditional_var = self.signal_scale**2 + self.sigma**2 - float(np.sum(np.square(solve), axis=0)[0])
+        predictive_var = max(conditional_var, 1e-9) + float(np.var(mean_by_draw))
+        return Prediction(mean=predictive_mean, sd=math.sqrt(max(predictive_var, 1e-9)))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -260,6 +298,7 @@ def run_inverse_design(
     resolved_target = default_target_from_freesolv_dataset() if target is None else float(target)
     active_predictor = predictor or FreeSolvBayesianPredictor.load()
     model_parameter_source = getattr(active_predictor, "parameter_source_path", None)
+    model_draw_source = getattr(active_predictor, "draw_source_path", None)
 
     candidate_by_key: dict[bytes, Candidate] = {}
     diagnostics = SearchDiagnostics()
@@ -325,6 +364,7 @@ def run_inverse_design(
         dietz_candidates=dietz_candidates,
         diagnostics=diagnostics,
         model_parameter_source=model_parameter_source,
+        model_draw_source=model_draw_source,
     )
 
 
@@ -479,6 +519,8 @@ def print_report(result: SearchResult, *, stream: TextIO) -> None:
     print("Diagnostics", file=stream)
     if result.model_parameter_source is not None:
         print(f"  FreeSolv model parameters: {result.model_parameter_source.relative_to(PROJECT_ROOT)}", file=stream)
+    if result.model_draw_source is not None:
+        print(f"  FreeSolv posterior draws: {result.model_draw_source.relative_to(PROJECT_ROOT)}", file=stream)
     print(f"  seed molecule: {result.seed_molecule}", file=stream)
     print(f"  deterministic seed: {RANDOM_SEED}", file=stream)
     print(f"  total proposals: {result.diagnostics.total_proposals}", file=stream)
@@ -567,6 +609,7 @@ def heavy_atom_count(molecule: Molecule) -> int:
 
 def write_result_molecule_files(result: SearchResult, output_dir: Path) -> SearchResult:
     target_dir = ensure_directory(output_dir)
+    _remove_stale_candidate_files(target_dir)
     written_paths = tuple(
         _write_candidate_python_file(target_dir, "top", rank, candidate, result.target, result.seed_molecule)
         for rank, candidate in enumerate(result.top_candidates[:TOP_K], start=1)
@@ -585,13 +628,20 @@ def write_result_molecule_files(result: SearchResult, output_dir: Path) -> Searc
         molecule_file_paths=written_paths,
         dietz_file_paths=dietz_paths,
         model_parameter_source=result.model_parameter_source,
+        model_draw_source=result.model_draw_source,
     )
+
+
+def _remove_stale_candidate_files(output_dir: Path) -> None:
+    for prefix in ("top", "dietz"):
+        for path in output_dir.glob(f"{prefix}_*_molecule.py"):
+            path.unlink()
 
 
 def _score_molecule(predictor: FreeSolvPredictor, molecule: Molecule, target: float) -> Candidate:
     molecule = _validate_candidate(molecule)
     prediction = predictor.predict(molecule)
-    score = -abs(prediction.mean - target)
+    score = _confidence_adjusted_target_score(prediction, target)
     heavy_atoms = heavy_atom_count(molecule)
     if heavy_atoms > MAX_HEAVY_ATOMS:
         score -= 0.1 * float(heavy_atoms - MAX_HEAVY_ATOMS)
@@ -601,6 +651,12 @@ def _score_molecule(predictor: FreeSolvPredictor, molecule: Molecule, target: fl
         predictive_sd=prediction.sd,
         score=score,
     )
+
+
+def _confidence_adjusted_target_score(prediction: Prediction, target: float) -> float:
+    variance = prediction.sd**2 + CONFIDENCE_NOISE_FLOOR**2
+    target_error = prediction.mean - target
+    return -0.5 * (target_error**2 / variance) - 0.5 * math.log(variance)
 
 
 def _load_gp_parameter_means() -> FreeSolvModelParameters:
@@ -634,6 +690,53 @@ def _load_gp_parameter_means() -> FreeSolvModelParameters:
         sigma=parameter_means["sigma"],
         source_path=coefficients_path,
     )
+
+
+def _load_gp_posterior_draws() -> FreeSolvPosteriorDraws:
+    draws_path = _find_gp_draws_path()
+    draw_frame = pd.read_csv(draws_path, comment="#")
+    required = ("alpha", "signal_scale", "lengthscale", "sigma")
+    missing = [name for name in required if name not in draw_frame.columns]
+    if missing:
+        raise RuntimeError(f"Missing FreeSolv GP posterior draw columns: {', '.join(missing)}")
+    alpha = draw_frame["alpha"].to_numpy(dtype=float)
+    signal_scale = draw_frame["signal_scale"].to_numpy(dtype=float)
+    lengthscale = draw_frame["lengthscale"].to_numpy(dtype=float)
+    sigma = draw_frame["sigma"].to_numpy(dtype=float)
+    finite_mask = (
+        np.isfinite(alpha)
+        & np.isfinite(signal_scale)
+        & np.isfinite(lengthscale)
+        & np.isfinite(sigma)
+        & (signal_scale > 0.0)
+        & (lengthscale > 0.0)
+        & (sigma > 0.0)
+    )
+    if not np.any(finite_mask):
+        raise RuntimeError(f"No finite FreeSolv GP posterior draws found in {draws_path}")
+    return FreeSolvPosteriorDraws(
+        alpha=alpha[finite_mask],
+        signal_scale=signal_scale[finite_mask],
+        lengthscale=lengthscale[finite_mask],
+        sigma=sigma[finite_mask],
+        source_path=draws_path,
+    )
+
+
+def _find_gp_draws_path() -> Path:
+    draws_dir = (
+        _find_model_dir()
+        / "details"
+        / "stan_output"
+        / "freesolv"
+        / "moladt_featurized"
+        / MODEL_NAME
+        / METHOD_NAME
+    )
+    draw_files = tuple(sorted(draws_dir.glob("*.csv")))
+    if len(draw_files) != 1:
+        raise FileNotFoundError(f"Expected one committed FreeSolv GP posterior draw CSV in {draws_dir}; found {len(draw_files)}")
+    return draw_files[0]
 
 
 def _find_model_dir() -> Path:
@@ -674,6 +777,46 @@ def _screen_top_correlation_features(X_train: np.ndarray, y_train: np.ndarray, *
     return tuple(sorted(index for _, index in sorted(scores, reverse=True)[:feature_count]))
 
 
+def _precompute_gp_draw_weights(
+    *,
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    alpha: np.ndarray,
+    signal_scale: np.ndarray,
+    lengthscale: np.ndarray,
+    sigma: np.ndarray,
+) -> np.ndarray:
+    weights = np.empty((alpha.shape[0], X_train.shape[0]), dtype=float)
+    for draw_index, (draw_alpha, draw_signal, draw_length, draw_sigma) in enumerate(
+        zip(alpha, signal_scale, lengthscale, sigma, strict=True)
+    ):
+        train_kernel = _rbf_kernel(X_train, X_train, lengthscale=draw_length, signal_scale=draw_signal)
+        train_kernel[np.diag_indices_from(train_kernel)] += draw_sigma**2 + 1e-8
+        try:
+            chol = np.linalg.cholesky(train_kernel)
+        except np.linalg.LinAlgError as exc:
+            raise RuntimeError(f"FreeSolv GP covariance was not positive definite for posterior draw {draw_index}") from exc
+        centered_y = y_train - draw_alpha
+        weights[draw_index] = np.linalg.solve(chol.T, np.linalg.solve(chol, centered_y))
+    return weights
+
+
+def _gp_mean_by_draw(
+    *,
+    x_eval: np.ndarray,
+    X_train: np.ndarray,
+    alpha: np.ndarray,
+    signal_scale: np.ndarray,
+    lengthscale: np.ndarray,
+    draw_weights: np.ndarray,
+) -> np.ndarray:
+    sqdist = np.sum(np.square(X_train - x_eval.reshape(1, -1)), axis=1)
+    cross_kernel_by_draw = np.square(signal_scale)[:, np.newaxis] * np.exp(
+        -0.5 * sqdist[np.newaxis, :] / np.maximum(np.square(lengthscale), 1e-9)[:, np.newaxis]
+    )
+    return alpha + np.einsum("dn,dn->d", cross_kernel_by_draw, draw_weights)
+
+
 def _rbf_kernel(X_left: np.ndarray, X_right: np.ndarray, *, lengthscale: float, signal_scale: float) -> np.ndarray:
     left_sq = np.sum(np.square(X_left), axis=1)[:, np.newaxis]
     right_sq = np.sum(np.square(X_right), axis=1)[np.newaxis, :]
@@ -681,10 +824,11 @@ def _rbf_kernel(X_left: np.ndarray, X_right: np.ndarray, *, lengthscale: float, 
     return (signal_scale**2) * np.exp(-0.5 * sqdist / max(lengthscale**2, 1e-9))
 
 
-def _candidate_sort_key(target: float) -> Callable[[Candidate], tuple[float, int, float, int]]:
-    def sort_key(candidate: Candidate) -> tuple[float, int, float, int]:
+def _candidate_sort_key(target: float) -> Callable[[Candidate], tuple[float, float, int, float, int]]:
+    def sort_key(candidate: Candidate) -> tuple[float, float, int, float, int]:
         return (
             candidate.score,
+            -candidate.predictive_sd,
             1 if candidate.molecule.systems else 0,
             -abs(candidate.predicted_mean - target),
             -len(candidate.molecule.atoms),

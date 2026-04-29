@@ -39,6 +39,14 @@ class ExplodingPredictor:
         raise AssertionError("invalid molecules must be rejected before scoring")
 
 
+class FixedPredictor:
+    def __init__(self, prediction: Prediction) -> None:
+        self.prediction = prediction
+
+    def predict(self, molecule) -> Prediction:
+        return self.prediction
+
+
 def test_cli_exposes_only_target_seed_molecule_plus_default_help() -> None:
     parser = build_parser()
 
@@ -133,6 +141,14 @@ def test_invalid_molecule_is_rejected_before_scoring() -> None:
         _score_molecule(ExplodingPredictor(), mutable.freeze(), -5.0)
 
 
+def test_score_prefers_more_confident_prediction_at_same_target_error() -> None:
+    confident = _score_molecule(FixedPredictor(Prediction(mean=-5.0, sd=1.0)), water, -5.0)
+    uncertain = _score_molecule(FixedPredictor(Prediction(mean=-5.0, sd=6.0)), water, -5.0)
+
+    assert confident.score > uncertain.score
+    assert confident.predictive_sd < uncertain.predictive_sd
+
+
 def test_add_pi_ring_system_never_duplicates_same_ring() -> None:
     molecule = _carbon_six_ring_seed()
     with_pi = add_pi_ring_system(molecule, random.Random(0))
@@ -166,11 +182,40 @@ def test_result_writer_exports_importable_top_molecule_files(tmp_path) -> None:
     assert payload["formula"]
 
 
+def test_result_writer_removes_stale_candidate_files(tmp_path) -> None:
+    stale = tmp_path / "dietz_01_molecule.py"
+    stale.write_text("stale = True\n", encoding="utf-8")
+    result = run_inverse_design(
+        target=-5.0,
+        n_steps=0,
+        n_seeds=1,
+        top_k=1,
+        predictor=FakePredictor(),
+    )
+
+    write_result_molecule_files(result, tmp_path)
+
+    assert not stale.exists()
+    assert (tmp_path / "top_01_molecule.py").exists()
+
+
 def test_freesolv_predictor_loads_committed_freesolv_gp_parameters() -> None:
     predictor = FreeSolvBayesianPredictor.load()
 
     assert predictor.parameter_source_path == DEFAULT_MODEL_DIR / "details" / "model_coefficients.csv"
+    assert predictor.draw_source_path == (
+        DEFAULT_MODEL_DIR
+        / "details"
+        / "stan_output"
+        / "freesolv"
+        / "moladt_featurized"
+        / "bayes_gp_rbf_screened"
+        / "laplace"
+        / "bayes_gp_rbf_screened-20260417162646.csv"
+    )
     assert predictor.alpha == -5.016285472314999
     assert predictor.signal_scale == 6.1231904871500005
     assert predictor.lengthscale == 3.81351448765
     assert predictor.sigma == 0.63860079588
+    assert predictor.alpha_draws.shape == (2000,)
+    assert predictor.draw_weights.shape == (2000, 513)
