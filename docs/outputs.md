@@ -1,69 +1,66 @@
 # Outputs
 
-Each focused run writes a small timestamped bundle under `results/`.
+Runs write timestamped folders under `results/`.
 
-## Main Locations
+## Main Folders
 
-- FreeSolv: `results/freesolv/run_<timestamp>/`
-- QM9: `results/qm9/long/run_<timestamp>/` for the full-data `qm9long` run
-- combined benchmark: `results/paper/run_<timestamp>/` for the default long run, or `results/run_<timestamp>/` for explicit lighter overrides
-- ZINC timing: `results/timing/paper/run_<timestamp>/` by default, or `results/timing/run_<timestamp>/` when you override `INFERENCE_PRESET`
+| Command | Folder |
+| --- | --- |
+| `make freesolv` | `results/freesolv/run_<timestamp>/` |
+| `make inverse-design` | `results/inverse_design/run_<timestamp>/` and `results/inverse_design/reference/` |
+| `make qm9long` | `results/qm9/long/run_<timestamp>/` |
+| `make timing` | `results/timing/paper/run_<timestamp>/` |
 
-## What You See First
+## Predictive Runs
 
-Each predictive run keeps the top level small:
+Common files:
 
 - `results.csv`
+- `caption.txt`
 - `freesolv_rmse_vs_moleculenet.svg`
-- `freesolv_bayesian_model.txt`
 - `qm9_mae_vs_moleculenet.svg`
 - `details/`
 
-Timing runs also write:
-
-- `timing_overview.svg`
-- `caption.txt`
-- `timing_result_files.txt`
-- `details/zinc_timing.csv`
-- `details/zinc_timing_items.csv`
-- `details/zinc_timing_corpus_manifest.csv`
-
-## The Two Comparison Figures
-
-Each predictive run writes only the two MoleculeNet comparison figures:
-
-- `freesolv_rmse_vs_moleculenet.svg`
-- `qm9_mae_vs_moleculenet.svg`
-- `caption.txt` in the run directory for the paper-facing prose caption
-
-The FreeSolv figure shows local `Training`, `Validation`, and `Test` metrics, followed by the cited `Paper` baseline.
-The QM9 figure shows local `Training` and `Test` metrics, followed by the cited `Paper` baseline for the `qm9long` ViSNet run on `moladt_featurized_geom`.
-
-## Other Useful Files
+Useful detail files:
 
 - `details/predictive_metrics.csv`
 - `details/aggregated_predictive_metrics.csv`
 - `details/predictions.csv`
-- `details/freesolv_train_test_uncertainty.csv`
+- `details/model_coefficients.csv`
 - `details/moleculenet_comparison.csv`
 
-## How To Read The Bundle
+## Inverse Design
 
-Use the files in this order:
+The reference folder is Git-trackable:
 
-1. `results.csv` for the summary row view
-2. `freesolv_rmse_vs_moleculenet.svg` and `qm9_mae_vs_moleculenet.svg` for the paper comparison
-3. `details/` when you need raw rows for analysis or plotting
+- `top_01_molecule.py` through `top_10_molecule.py`
+- `generated_molecules.csv`
+- `generated_molecules.jsonl`
 
-For timing runs specifically, `details/zinc_timing.csv` separates:
+The top files are the 10 generated molecules with the highest model-side Bayesian credible score percentage.
 
-- the matched SMILES CSV read (`smiles_csv_to_string`)
-- the cached MolADT CSV decode (`moladt_csv_to_moladt`)
-- SMILES parsing plus JSON serialization (`smiles_to_json`)
-- cached SDF parsing into MolADT (`sdf_to_moladt`)
-- cached SDF rendering back to SMILES (`sdf_to_smiles`)
-- MolADT JSON serialization (`moladt_to_json`)
-- JSON decoding back into MolADT (`json_to_moladt`)
-- JSON decoding plus SMILES rendering (`json_to_smiles`)
+Read the generated pool:
 
-The top-level `timing_overview.svg` is the clean paper figure. The explanatory prose lives in `caption.txt`.
+```python
+import json
+from pathlib import Path
+
+path = Path("results/inverse_design/reference/generated_molecules.jsonl")
+
+for line in path.open():
+    record = json.loads(line)
+    print(record["rank"], record["formula"], record["bayesian_credible_score_percent"])
+    break
+```
+
+## Timing
+
+Timing runs write:
+
+- `timing_overview.svg`
+- `caption.txt`
+- `details/zinc_timing.csv`
+- `details/zinc_timing_items.csv`
+- `details/zinc_timing_corpus_manifest.csv`
+
+The timing comparison covers SMILES reads, SDF parsing, MolADT JSON, and round trips back to MolADT or SMILES.

@@ -101,6 +101,7 @@ def test_makefile_inverse_design_target_uses_target_and_seed_flags(tmp_path: Pat
     )
 
     assert "Running reviewer-facing FreeSolv inverse design." in result.stdout
+    assert "model: latest results/freesolv/run_* moladt_featurized Bayesian GP artifact" in result.stdout
     assert "cli_flags: --target and --seed-molecule only" in result.stdout
     assert "seed_molecule: water" in result.stdout
     assert "results_dir: results/inverse_design/run_" in result.stdout
@@ -132,6 +133,46 @@ def test_makefile_inverse_design_accepts_seed_molecule(tmp_path: Path) -> None:
 
     assert "seed_molecule: methane" in result.stdout
     assert "--target -5.0 --seed-molecule methane" in result.stdout
+
+
+def test_makefile_molecule_viewer_target_exports_html(tmp_path: Path) -> None:
+    _copy_makefile(tmp_path)
+    _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
+
+    result = subprocess.run(
+        [
+            "make",
+            "-C",
+            str(tmp_path),
+            "-n",
+            "molecule-viewer",
+            "SYSTEM_PYTHON=python3",
+            "VIEWER_INPUT=molecules/morphine.sdf",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "Exporting standalone MolADT molecule viewer." in result.stdout
+    assert "input: molecules/morphine.sdf" in result.stdout
+    assert "output: results/viewer/morphine.viewer.html" in result.stdout
+    assert './.venv/bin/python -m moladt.cli view-html "molecules/morphine.sdf" --output "results/viewer/morphine.viewer.html"' in result.stdout
+
+
+def test_makefile_test_molecule_viewer_target_runs_viewer_tests(tmp_path: Path) -> None:
+    _copy_makefile(tmp_path)
+    _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
+
+    result = subprocess.run(
+        ["make", "-C", str(tmp_path), "-n", "test-molecule-viewer", "SYSTEM_PYTHON=python3"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "Running MolADT molecule viewer tests." in result.stdout
+    assert "./.venv/bin/python -m pytest -q tests/test_molecule_viewer.py" in result.stdout
 
 
 def test_makefile_qm9_target_prints_recovered_predictive_path(tmp_path: Path) -> None:

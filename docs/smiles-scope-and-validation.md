@@ -1,71 +1,46 @@
-# SMILES Scope and Validation
+# SMILES Scope
 
-The SMILES layer in this repo is intentionally conservative. It is meant to cover a stable classical subset cleanly and to reject structures that do not fit that subset instead of silently inventing an encoding.
+The SMILES layer is conservative by design. It should accept what it can represent cleanly and reject the rest.
 
 ## Supported
 
 - atoms and bracket atoms
-- explicit bracket hydrogens and formal charges
-- implicit terminal hydrogens on supported bare atoms such as `C`, `N`, `O`, halogens, and aromatic lowercase atoms
-- atom-centered `@` and `@@` stereochemistry on bracket atoms
-- directional `/` and `\` bond annotations
+- formal charges
+- explicit bracket hydrogens
+- implicit terminal hydrogens on supported bare atoms
 - branches
 - ring digits `1-9`
 - single, double, and triple bonds
-- graph-based six-membered `pi_ring` recovery from aromatic lowercase input
-- benzene-style aromatic input such as `c1ccccc1`
-- fused classical ring cases such as the stereochemical morphine boundary string, with ring closures, localized double bonds, and atom-centered stereochemistry preserved conservatively
+- aromatic six-membered ring recovery into `pi_ring`
+- atom-centered `@` / `@@`
+- bond directions `/` and `\`
 
 ## Not Supported
 
-- non-classical multicenter systems such as diborane and ferrocene
-- arbitrary delocalized systems outside localized double/triple bonds and simple six-edge `pi_ring` cases
-- components that need more than 9 ring closures
+- diborane-style multicenter SMILES rendering
+- ferrocene-style organometallic rendering
+- arbitrary delocalized systems
+- components needing more than 9 ring closures
+- full stereo regeneration from stored MolADT stereo annotations
 
-Those molecules still remain representable in the MolADT core. The restriction is on the current SMILES parser and renderer, not on the core molecule ADT.
+Those molecules can still be represented in MolADT. The limit is only the current SMILES boundary.
 
-## What Gets Validated
+## Validation
 
-User-facing CLI flows call `validate_molecule` before rendering or benchmarking:
+CLI flows validate before printing, rendering, or benchmarking.
 
-- `parse` reads an SDF record, then validates the resulting MolADT structure.
-- `parse-smiles` parses the conservative SMILES subset, then validates the resulting MolADT structure.
-- `to-smiles` validates the molecule before trying to render it.
+Validation catches:
 
-Validation checks include:
+- missing atom references
+- self-bonds
+- inconsistent bond maps
+- valence violations
 
-- self-bonds and missing-atom references
-- symmetric bond-map construction
-- maximum valence bounds by element
+## Practical Rule
 
-## Rendering Boundary
+Use SMILES for classical molecules. Use MolADT directly when the bonding structure needs more than a string can say.
 
-`to-smiles` and `molecule_to_smiles(...)` work on validated molecules in the supported classical subset. Current renderer rejections come from the code, for example:
-
-- `SMILES rendering only supports localized double/triple bonds and six-edge pi rings`
-- `pi_ring must be a simple six-membered cycle to render as SMILES`
-- `SMILES rendering currently supports at most 9 ring closures per component`
-
-That is why:
-
-- `c1ccccc1` is supported input
-- bare `C` and bare `O` become methane- and water-style MolADT objects with inferred terminal hydrogens
-- the stereochemical morphine boundary string preserves its five atom-centered `@`/`@@` flags and keeps its localized double-bond pattern explicit
-- an explicit Kekule string stays explicit and does not get silently promoted to a delocalized `pi_ring`
-- parsed SMILES stereochemistry is stored on `molecule.smiles_stereochemistry`
-- the current renderer does not yet regenerate `@`, `@@`, `/`, or `\` from stored stereochemistry annotations
-- benzene from `molecules/benzene.sdf` renders successfully
-- ferrocene and diborane remain MolADT examples but are not `to-smiles` targets
-
-## Benchmarking Boundary
-
-The predictive benchmarks use MolADT as the benchmark object. Boundary SMILES still matter because they are one of the ways the repo builds the typed molecule, but the published benchmark graphs compare the fixed local MolADT benchmark paths against MoleculeNet rather than running a separate SMILES benchmark row.
-
-The ZINC timing benchmark is an interoperability/runtime benchmark rather than the central representation comparison. It now uses the fixed eight-stage SMILES-vs-MolADT timing path: source SMILES reads, cached `MolADT CSV -> MolADT`, `SMILES -> JSON`, cached `SDF -> MolADT`, cached `SDF -> SMILES`, `MolADT -> JSON`, `JSON -> MolADT`, and `JSON -> SMILES`.
-
-## Related Files
+Related files:
 
 - [`moladt/io/smiles.py`](../moladt/io/smiles.py)
 - [`moladt/chem/validate.py`](../moladt/chem/validate.py)
-- [`tests/test_parser_roundtrip.py`](../tests/test_parser_roundtrip.py)
-- [`tests/test_validation_properties.py`](../tests/test_validation_properties.py)

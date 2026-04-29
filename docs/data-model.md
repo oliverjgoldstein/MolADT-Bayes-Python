@@ -1,249 +1,86 @@
-# MolADT ADT Representation
+# ADT Model
 
-MolADT in Python is meant to behave like a typed record ADT, not like a large object-oriented chemistry API. The canonical value is `Molecule`, and every other type exists to make that record explicit.
-
-## Full Shape
-
-At a high level, the full nested shape is:
+MolADT is a small typed record model. The main value is `Molecule`.
 
 ```text
 Molecule
-  = atoms: Map AtomId Atom
-  + local_bonds: Set Edge
-  + systems: [(SystemId, BondingSystem)]
-  + smiles_stereochemistry: SmilesStereochemistry
+  atoms: Map AtomId Atom
+  local_bonds: Set Edge
+  systems: [(SystemId, BondingSystem)]
+  smiles_stereochemistry: SmilesStereochemistry
+```
 
+## Main Fields
+
+| Field | Meaning |
+| --- | --- |
+| `atoms` | Atom table keyed by stable `AtomId`. |
+| `local_bonds` | Ordinary localized sigma edges. |
+| `systems` | Dietz bonding systems for delocalized or multicenter structure. |
+| `smiles_stereochemistry` | Stereo annotations parsed from SMILES-like boundary formats. |
+
+## Atom
+
+```text
 Atom
-  = atom_id
-  + attributes: ElementAttributes
-  + coordinate: Coordinate
-  + shells: Shells
-  + formal_charge
+  atom_id
+  attributes
+  coordinate
+  shells
+  formal_charge
+```
 
+Atoms carry element data, 3D coordinates, local shell/orbital structure, and explicit charge.
+
+## Bonding System
+
+```text
 BondingSystem
-  = shared_electrons
-  + member_atoms
-  + member_edges
-  + tag
+  shared_electrons
+  member_atoms
+  member_edges
+  tag
 ```
 
-So the representation is not just a graph. It is:
+`local_bonds` is the local graph. `systems` overlays electron-sharing pools on top of that graph.
 
-- a typed atom table
-- an explicit sigma-network
-- a separate Dietz bonding-system layer for delocalized or multicenter structure
-- a stereo annotation layer for boundary SMILES information
-- orbital shell structure stored on each atom
+Examples:
 
-## Core Molecule Record
+- benzene: a six-electron `pi_ring`
+- diborane: two `3c-2e` bridge systems
+- ferrocene: Cp `pi` systems and an Fe back-donation pool
+
+## Mutable Edits
+
+`Molecule` is immutable. Use `MutableMolecule` as a scratchpad:
 
 ```python
-@dataclass(frozen=True, slots=True)
-class Molecule:
-    atoms: Mapping[AtomId, Atom]
-    local_bonds: frozenset[Edge]
-    systems: tuple[tuple[SystemId, BondingSystem], ...]
-    smiles_stereochemistry: SmilesStereochemistry = field(default_factory=SmilesStereochemistry)
+from moladt import AtomId, MutableMolecule, mk_edge
+from moladt.chem.validate import ValidationError, validate_molecule
+from moladt.examples import water
+
+mutable = MutableMolecule.from_molecule(water)
+mutable.local_bonds.add(mk_edge(AtomId(1), AtomId(3)))
+
+try:
+    validate_molecule(mutable.freeze())
+except ValidationError as exc:
+    print(f"invalid edit: {exc}")
+
+mutable.local_bonds.remove(mk_edge(AtomId(1), AtomId(3)))
+molecule = validate_molecule(mutable.freeze())
 ```
 
-This is the Python analogue of a Haskell record ADT: one product type whose fields are the molecule.
+The inverse-design code uses this pattern: edit, freeze, validate, score.
 
-- `atoms` is the main atom table, keyed by stable `AtomId`
-- `local_bonds` is the explicit undirected sigma-network
-- `systems` is the extra non-local bonding layer
-- `smiles_stereochemistry` stores stereochemical annotations that came from a SMILES-like boundary format
+## Haskell Alignment
 
-The accessors are intentionally plain functions:
+The sibling Haskell repo uses the same shape as a record ADT. Python keeps that style with frozen dataclasses and plain fields rather than a large object-oriented API.
 
-```python
-molecule_atoms(molecule)
-molecule_local_bonds(molecule)
-molecule_systems(molecule)
-molecule_smiles_stereochemistry(molecule)
-molecule_fields(molecule)
+Shortest summary:
+
+```text
+Molecule = atoms + sigma edges + bonding systems + stereo annotations
 ```
 
-That keeps the surface close to record selection and destructuring.
-
-## Dietz Layer
-
-The non-local chemistry lives in the Dietz primitives from `moladt.chem.dietz`.
-
-```python
-@dataclass(frozen=True, slots=True, order=True)
-class AtomId:
-    value: int
-
-
-@dataclass(frozen=True, slots=True, order=True)
-class SystemId:
-    value: int
-
-
-@dataclass(frozen=True, slots=True, order=True)
-class Edge:
-    a: AtomId
-    b: AtomId
-
-
-@dataclass(frozen=True, slots=True)
-class BondingSystem:
-    shared_electrons: NonNegative
-    member_atoms: frozenset[AtomId]
-    member_edges: frozenset[Edge]
-    tag: str | None = None
-```
-
-This is the part that makes MolADT more than a plain string or plain graph.
-
-- `Edge` is a canonical undirected pair
-- `local_bonds` gives the localized sigma framework
-- `BondingSystem` overlays an electron-sharing system on top of a set of edges
-- `tag` is an optional label such as a ring or bridge name
-
-In other words, `local_bonds` says where the local edges are, and `systems` says which of those edges participate in delocalized or multicenter pools.
-
-## Atom Record
-
-Each atom is also a typed record:
-
-```python
-@dataclass(frozen=True, slots=True)
-class ElementAttributes:
-    symbol: AtomicSymbol
-    atomic_number: int
-    atomic_weight: float
-
-
-@dataclass(frozen=True, slots=True)
-class Atom:
-    atom_id: AtomId
-    attributes: ElementAttributes
-    coordinate: Coordinate
-    shells: Shells
-    formal_charge: int = 0
-```
-
-That means an atom carries:
-
-- identity: `atom_id`
-- chemistry: `ElementAttributes`
-- geometry: `coordinate`
-- electronic shell structure: `shells`
-- explicit charge: `formal_charge`
-
-## Stereo Layer
-
-The SMILES stereo layer is kept separate from the main bonding structure.
-
-```python
-@dataclass(frozen=True, slots=True)
-class SmilesAtomStereo:
-    center: AtomId
-    stereo_class: SmilesAtomStereoClass
-    configuration: int
-    token: str
-
-
-@dataclass(frozen=True, slots=True)
-class SmilesBondStereo:
-    start_atom: AtomId
-    end_atom: AtomId
-    direction: SmilesBondStereoDirection
-
-
-@dataclass(frozen=True, slots=True)
-class SmilesStereochemistry:
-    atom_stereo: tuple[SmilesAtomStereo, ...] = ()
-    bond_stereo: tuple[SmilesBondStereo, ...] = ()
-```
-
-This is important structurally:
-
-- stereochemistry is not overloaded into `local_bonds`
-- atom-centered and bond-centered stereo are explicit records
-- the canonical `Molecule` still keeps stereo as one field of the overall ADT
-
-## Orbitals And Shells
-
-The orbital hierarchy is also explicit and typed.
-
-```python
-@dataclass(frozen=True, slots=True)
-class Orbital(Generic[SubshellType]):
-    orbital_type: SubshellType
-    electron_count: int
-    orientation: Coordinate | None = None
-    hybrid_components: tuple[tuple[float, PureOrbital], ...] | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class SubShell(Generic[SubshellType]):
-    orbitals: tuple[Orbital[SubshellType], ...]
-
-
-@dataclass(frozen=True, slots=True)
-class Shell:
-    principal_quantum_number: int
-    s_subshell: SubShell[So] | None = None
-    p_subshell: SubShell[P] | None = None
-    d_subshell: SubShell[D] | None = None
-    f_subshell: SubShell[F] | None = None
-
-
-Shells = tuple[Shell, ...]
-```
-
-So the path is:
-
-`Molecule -> Atom -> Shells -> Shell -> SubShell -> Orbital`
-
-This is why the representation is closer to an ADT tree than to a flat interchange format.
-
-## MutableMolecule
-
-`MutableMolecule` is the editable scratch version of the same record shape.
-
-```python
-@dataclass(slots=True)
-class MutableMolecule:
-    atoms: dict[AtomId, Atom]
-    local_bonds: set[Edge]
-    systems: list[tuple[SystemId, BondingSystem]]
-    smiles_stereochemistry: SmilesStereochemistry = field(default_factory=SmilesStereochemistry)
-```
-
-Use it when you want local graph surgery or proposal edits, then call `freeze()` to return to canonical `Molecule`.
-
-```python
-mutable = MutableMolecule.from_molecule(molecule)
-# edit mutable.atoms / mutable.local_bonds / mutable.systems
-molecule = mutable.freeze()
-```
-
-The important point is that `MutableMolecule` is not the main representation. It is just a writable builder around the immutable ADT-like form.
-
-## Relation To Haskell
-
-The Haskell repo carries the same model more literally:
-
-```haskell
-data Molecule = Molecule
-  { atoms :: Map AtomId Atom
-  , localBonds :: Set Edge
-  , systems :: [(SystemId, BondingSystem)]
-  , smilesStereochemistry :: SmilesStereochemistry
-  }
-```
-
-That is why the Python design stays minimal.
-
-- `@dataclass(frozen=True, slots=True)` plays the role of the immutable record value
-- module-level accessors play the role of record selectors
-- `MutableMolecule` is only a convenience for edits before returning to the main record shape
-
-If you want the shortest summary, MolADT is:
-
-`Molecule = atoms + sigma edges + bonding systems + stereo annotations`
-
-with shell and orbital structure stored directly on each atom.
+See also [Representation](representation.md), [Orbitals](orbitals.md), and [Haskell interop](haskell_interop.md).

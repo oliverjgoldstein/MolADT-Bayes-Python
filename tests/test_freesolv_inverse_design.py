@@ -1,18 +1,25 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from io import StringIO
+import json
 import random
 import runpy
 
 import pytest
 
+from experiments import freesolv_inverse_design as inverse_design
 from experiments.freesolv_inverse_design import (
-    DEFAULT_MODEL_DIR,
     FreeSolvBayesianPredictor,
     Prediction,
     _carbon_six_ring_seed,
+    _find_gp_draws_path,
+    _find_model_dir,
+    _molecule_key,
     _remove_atom_if_terminal,
     _score_molecule,
+    _seed_atom,
+    _seed_molecule,
     load_seed_molecules,
     molecular_formula,
     add_pi_ring_system,
@@ -22,6 +29,7 @@ from experiments.freesolv_inverse_design import (
     write_result_molecule_files,
 )
 from moladt.chem.dietz import AtomId, mk_edge
+from moladt.chem.molecule import AtomicSymbol
 from moladt.chem.mutable import MutableMolecule
 from moladt.chem.validate import ValidationError, validate_molecule
 from moladt.examples import diborane_pretty
@@ -84,7 +92,8 @@ def test_tiny_smoke_run_prints_dietz_molecules() -> None:
 
     output = stream.getvalue()
     assert status == 0
-    assert "Top generated molecules" in output
+    assert "Top generated molecules by Bayesian credible score" in output
+    assert "Bayesian credible score:" in output
     assert "seed molecule: water" in output
     assert "bonding_systems:" in output
 
@@ -101,6 +110,106 @@ def test_generated_candidates_validate() -> None:
     assert result.diagnostics.accepted_proposals >= 0
     for candidate in result.top_candidates:
         validate_molecule(candidate.molecule)
+
+
+def test_top_candidates_are_highest_bayesian_credible_score_generated_candidates() -> None:
+    result = run_inverse_design(
+        target=-5.0,
+        n_steps=0,
+        n_seeds=1,
+        top_k=3,
+        predictor=FakePredictor(),
+        min_unique_valid_molecules=8,
+    )
+
+    top_scores = [candidate.bayesian_credible_score_percent for candidate in result.top_candidates]
+    generated_scores = [candidate.bayesian_credible_score_percent for candidate in result.generated_candidates]
+
+    assert top_scores == sorted(generated_scores, reverse=True)[:3]
+
+
+def test_generated_candidate_uniqueness_ignores_incidental_coordinates() -> None:
+    first = _seed_molecule(
+        (
+            _seed_atom(1, AtomicSymbol.O, 0.0, 0.0, 0.0),
+            _seed_atom(2, AtomicSymbol.H, 0.9, 0.0, 0.0),
+            _seed_atom(3, AtomicSymbol.H, -0.2, 0.8, 0.0),
+        ),
+        ((1, 2), (1, 3)),
+    )
+    second = _seed_molecule(
+        (
+            _seed_atom(1, AtomicSymbol.O, 10.0, 0.0, 0.0),
+            _seed_atom(2, AtomicSymbol.H, 10.9, 0.0, 0.0),
+            _seed_atom(3, AtomicSymbol.H, 9.8, 0.8, 0.0),
+        ),
+        ((1, 2), (1, 3)),
+    )
+
+    assert _molecule_key(first) == _molecule_key(second)
+
+
+def test_generation_moves_construct_valid_candidates_without_rejection_loop() -> None:
+    result = run_inverse_design(
+        target=-5.0,
+        n_steps=50,
+        n_seeds=2,
+        top_k=5,
+        predictor=FakePredictor(),
+    )
+
+    assert result.diagnostics.total_proposals == 100
+    assert result.diagnostics.valid_proposals == 100
+    assert result.diagnostics.invalid_proposals == 0
+
+
+def test_inverse_design_can_require_minimum_unique_valid_molecules() -> None:
+    stream = StringIO()
+    result = run_inverse_design(
+        target=-5.0,
+        n_steps=0,
+        n_seeds=1,
+        top_k=3,
+        predictor=FakePredictor(),
+        min_unique_valid_molecules=3,
+        progress_stream=stream,
+    )
+
+    assert result.minimum_unique_valid_molecules == 3
+    assert len(result.generated_candidates) == 3
+    assert result.diagnostics.unique_valid_molecules_seen >= 4
+    assert result.diagnostics.total_proposals > 0
+    assert "Generated unique valid candidates: 1/3" in stream.getvalue()
+    assert "Generated unique valid candidates: 3/3" in stream.getvalue()
+    assert "elapsed " in stream.getvalue()
+    assert "s/candidate" in stream.getvalue()
+
+
+def test_inverse_design_minimum_unique_target_stops_before_planned_steps() -> None:
+    result = run_inverse_design(
+        target=-5.0,
+        n_steps=50,
+        n_seeds=1,
+        top_k=3,
+        predictor=FakePredictor(),
+        min_unique_valid_molecules=3,
+    )
+
+    assert len(result.generated_candidates) == 3
+    assert result.diagnostics.total_proposals < 50
+
+
+def test_inverse_design_fails_if_minimum_unique_valid_molecules_exceeds_proposal_budget() -> None:
+    with pytest.raises(RuntimeError):
+        run_inverse_design(
+            target=-5.0,
+            n_steps=0,
+            n_seeds=1,
+            top_k=1,
+            predictor=FakePredictor(),
+            min_unique_valid_molecules=2,
+            max_total_proposals=0,
+        )
 
 
 def test_fixed_water_seed_run_is_deterministic() -> None:
@@ -141,11 +250,34 @@ def test_invalid_molecule_is_rejected_before_scoring() -> None:
         _score_molecule(ExplodingPredictor(), mutable.freeze(), -5.0)
 
 
+def test_underfilled_freesolv_candidate_is_rejected_before_scoring() -> None:
+    molecule = _seed_molecule(
+        (
+            _seed_atom(1, AtomicSymbol.C, 0.0, 0.0, 0.0),
+            _seed_atom(2, AtomicSymbol.H, 1.09, 0.0, 0.0),
+        ),
+        ((1, 2),),
+    )
+
+    with pytest.raises(ValidationError):
+        _score_molecule(ExplodingPredictor(), molecule, -5.0)
+
+
+def test_charged_freesolv_candidate_is_rejected_before_scoring() -> None:
+    mutable = MutableMolecule.from_molecule(water)
+    oxygen = mutable.atoms[AtomId(1)]
+    mutable.atoms[AtomId(1)] = replace(oxygen, formal_charge=1)
+
+    with pytest.raises(ValidationError):
+        _score_molecule(ExplodingPredictor(), mutable.freeze(), -5.0)
+
+
 def test_score_prefers_more_confident_prediction_at_same_target_error() -> None:
     confident = _score_molecule(FixedPredictor(Prediction(mean=-5.0, sd=1.0)), water, -5.0)
     uncertain = _score_molecule(FixedPredictor(Prediction(mean=-5.0, sd=6.0)), water, -5.0)
 
     assert confident.score > uncertain.score
+    assert confident.bayesian_credible_score_percent > uncertain.bayesian_credible_score_percent
     assert confident.predictive_sd < uncertain.predictive_sd
 
 
@@ -180,6 +312,15 @@ def test_result_writer_exports_importable_top_molecule_files(tmp_path) -> None:
     assert payload["seed_molecule"] == "water"
     assert payload["random_seed"] == 0
     assert payload["formula"]
+    assert "bayesian_credible_score_percent" in payload
+    assert (tmp_path / "generated_molecules.csv").exists()
+    jsonl_records = (tmp_path / "generated_molecules.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(jsonl_records) == len(result.generated_candidates)
+    generated_record = json.loads(jsonl_records[0])
+    assert generated_record["rank"] == 1
+    assert "bayesian_credible_score_percent" in generated_record
+    assert "atoms" in generated_record["molecule"]
+    assert "local_bonds" in generated_record["molecule"]
 
 
 def test_result_writer_removes_stale_candidate_files(tmp_path) -> None:
@@ -199,23 +340,48 @@ def test_result_writer_removes_stale_candidate_files(tmp_path) -> None:
     assert (tmp_path / "top_01_molecule.py").exists()
 
 
+def test_freesolv_model_dir_uses_latest_run_directory(tmp_path, monkeypatch) -> None:
+    old_run = _write_minimal_freesolv_model_run(tmp_path / "run_20240101_000000")
+    latest_run = _write_minimal_freesolv_model_run(tmp_path / "run_20240102_000000")
+    monkeypatch.setattr(inverse_design, "FREESOLV_RESULTS_DIR", tmp_path)
+
+    assert _find_model_dir() == latest_run
+    assert _find_model_dir() != old_run
+
+
+def test_latest_freesolv_model_dir_fails_fast_when_artifacts_are_missing(tmp_path, monkeypatch) -> None:
+    _write_minimal_freesolv_model_run(tmp_path / "run_20240101_000000")
+    (tmp_path / "run_20240102_000000" / "details").mkdir(parents=True)
+    monkeypatch.setattr(inverse_design, "FREESOLV_RESULTS_DIR", tmp_path)
+
+    with pytest.raises(FileNotFoundError, match="Latest FreeSolv run"):
+        _find_model_dir()
+
+
 def test_freesolv_predictor_loads_committed_freesolv_gp_parameters() -> None:
     predictor = FreeSolvBayesianPredictor.load()
+    model_dir = _find_model_dir()
 
-    assert predictor.parameter_source_path == DEFAULT_MODEL_DIR / "details" / "model_coefficients.csv"
-    assert predictor.draw_source_path == (
-        DEFAULT_MODEL_DIR
+    assert predictor.parameter_source_path == model_dir / "details" / "model_coefficients.csv"
+    assert predictor.draw_source_path == _find_gp_draws_path(model_dir)
+    assert predictor.signal_scale > 0.0
+    assert predictor.lengthscale > 0.0
+    assert predictor.sigma > 0.0
+    assert predictor.alpha_draws.shape == (2000,)
+    assert predictor.draw_weights.shape == (2000, 513)
+
+
+def _write_minimal_freesolv_model_run(run_dir):
+    draws_dir = (
+        run_dir
         / "details"
         / "stan_output"
         / "freesolv"
         / "moladt_featurized"
         / "bayes_gp_rbf_screened"
         / "laplace"
-        / "bayes_gp_rbf_screened-20260417162646.csv"
     )
-    assert predictor.alpha == -5.016285472314999
-    assert predictor.signal_scale == 6.1231904871500005
-    assert predictor.lengthscale == 3.81351448765
-    assert predictor.sigma == 0.63860079588
-    assert predictor.alpha_draws.shape == (2000,)
-    assert predictor.draw_weights.shape == (2000, 513)
+    draws_dir.mkdir(parents=True)
+    (run_dir / "details" / "model_coefficients.csv").write_text("parameter_name,posterior_mean\n", encoding="utf-8")
+    (draws_dir / "draws.csv").write_text("alpha,signal_scale,lengthscale,sigma\n", encoding="utf-8")
+    return run_dir

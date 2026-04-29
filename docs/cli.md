@@ -1,158 +1,47 @@
 # CLI
 
-The Python CLI entrypoint is:
+Run:
 
 ```bash
 ./.venv/bin/python -m moladt.cli --help
 ```
 
-It currently exposes seven subcommands.
+## Commands
 
-## `parse`
+| Command | Use |
+| --- | --- |
+| `parse` | Read one SDF record, validate it, and print a MolADT report. |
+| `parse-smiles` | Read a supported SMILES string and print the typed molecule. |
+| `to-smiles` | Render a supported classical MolADT molecule back to SMILES. |
+| `to-json` | Convert one SDF molecule to shared MolADT JSON. |
+| `from-json` | Read MolADT JSON back into a validated molecule. |
+| `view-html` | Export a standalone HTML molecule viewer. |
+| `pretty-example` | Print built-in examples such as diborane, ferrocene, or morphine. |
+
+## Examples
 
 ```bash
 ./.venv/bin/python -m moladt.cli parse molecules/benzene.sdf
-```
-
-What it does:
-
-- reads one SDF record from the given path
-- accepts SDF V2000 and the core V3000 CTAB subset
-- validates the resulting MolADT structure with `validate_molecule`
-- prints `Title: ...`
-- prints the pretty-printed molecule
-- keeps the default output minimal by omitting the raw SDF properties block
-
-If you want the raw SDF metadata as well:
-
-```bash
 ./.venv/bin/python -m moladt.cli parse --properties molecules/benzene.sdf
-```
-
-That adds a trailing `Properties:` section with the record fields from the source SDF.
-
-Use `parse` when the source of truth is a file-backed molecule.
-
-The current V3000 support is intentionally narrow: atom coordinates, bond tables, atom-local formal charges, and trailing property blocks. The local writer still emits V2000.
-
-## `parse-smiles`
-
-```bash
-./.venv/bin/python -m moladt.cli parse-smiles '<smiles>'
-```
-
-What it validates:
-
-- the conservative SMILES grammar implemented in [`moladt/io/smiles.py`](../moladt/io/smiles.py)
-- atom, bond, and ring-closure syntax inside that subset
-- terminal-hydrogen inference for supported bare atoms
-- six-membered `pi_ring` recovery from aromatic lowercase syntax
-- atom-centered `@`/`@@` and bond-directed `/` `\` annotations, stored on `smiles_stereochemistry`
-- structural validation through `validate_molecule`, including valence checks and bond-map consistency
-
-On success it prints the pretty-printed MolADT structure. It does not print a title or property block because the source is a SMILES string, not an SDF record.
-
-## `to-smiles`
-
-```bash
+./.venv/bin/python -m moladt.cli parse-smiles 'c1ccccc1'
 ./.venv/bin/python -m moladt.cli to-smiles molecules/benzene.sdf
-```
-
-What it accepts:
-
-- validated molecules in the conservative classical subset
-- localized single, double, and triple bonds
-- six-edge `pi_ring` systems that can be rendered as aromatic or deterministic Kekule-style output
-
-Current limitation:
-
-- stored `smiles_stereochemistry` annotations are preserved on parse, but the renderer does not yet emit `@`, `@@`, `/`, or `\`
-
-What it rejects:
-
-- empty molecules
-- structures where rendering would require dropping bonded atoms
-- structures outside the supported classical subset, including non-classical multicenter systems like diborane and ferrocene
-- components that would need more than 9 ring closures
-
-Current rejection messages come directly from the SMILES renderer, for example:
-
-- `SMILES rendering only supports localized double/triple bonds and six-edge pi rings`
-- `pi_ring must be a simple six-membered cycle to render as SMILES`
-
-## `to-json`
-
-```bash
 ./.venv/bin/python -m moladt.cli to-json molecules/benzene.sdf > benzene.moladt.json
-```
-
-What it does:
-
-- reads one SDF record from disk
-- validates the resulting MolADT structure
-- writes the shared MolADT JSON boundary format used by both repos
-
-Use `to-json` when you want a stable file-backed MolADT payload instead of the pretty report.
-
-## `from-json`
-
-```bash
 ./.venv/bin/python -m moladt.cli from-json benzene.moladt.json
-```
-
-What it does:
-
-- reads a MolADT JSON payload from disk
-- rebuilds the typed `Molecule`
-- validates the decoded structure
-- prints the usual MolADT report
-
-Use `from-json` when a JSON file is already your boundary format and you want the typed object back.
-
-## `view-html`
-
-```bash
 ./.venv/bin/python -m moladt.cli view-html molecules/benzene.sdf --output benzene.viewer.html
-./.venv/bin/python -m moladt.cli view-html benzene.moladt.json --format json --output benzene.viewer.html
-```
-
-What it does:
-
-- reads one SDF record or one MolADT JSON payload
-- validates the resulting typed molecule
-- writes a standalone beta HTML viewer with a 3D molecule canvas
-- keeps local sigma bonds and Dietz bonding systems visually separate
-- includes colored annotations for bonding-system edges, labels, shared-electron counts, and atom membership
-
-The generated viewer supports mouse or touch rotation, wheel zoom, atom picking, bonding-system toggles, and dropping another MolADT JSON file into the window.
-
-Use `view-html` when you want to inspect an ADT molecule visually instead of reading the text report.
-
-## `pretty-example`
-
-```bash
 ./.venv/bin/python -m moladt.cli pretty-example ferrocene
-./.venv/bin/python -m moladt.cli pretty-example diborane
-./.venv/bin/python -m moladt.cli pretty-example morphine
 ```
 
-This command loads named built-in examples from [`moladt/examples/manuscript.py`](../moladt/examples/manuscript.py), validates them, and prints the manuscript-facing pretty rendering. It currently supports `ferrocene`, `diborane`, and `morphine`.
+## Notes
 
-## How the Commands Differ
+- `parse` accepts SDF V2000 and the core V3000 CTAB subset.
+- `view-html` accepts SDF or MolADT JSON.
+- `to-smiles` is intentionally conservative. It does not cover non-classical multicenter examples such as diborane or ferrocene.
+- Parsed SMILES stereochemistry is stored on the molecule, but the current SMILES renderer does not emit all stereo syntax back out.
 
-- `parse` starts from an SDF file, prints the title plus MolADT structure, and adds raw SDF metadata only with `--properties`.
-- `to-json` starts from an SDF file and emits the shared MolADT JSON boundary payload.
-- `from-json` starts from a MolADT JSON file and prints the validated typed structure.
-- `view-html` starts from SDF or MolADT JSON and writes an interactive standalone HTML viewer.
-- `parse-smiles` starts from a SMILES string and only prints the validated MolADT structure.
-- `to-smiles` starts from an SDF file and emits only the rendered SMILES string.
-- `pretty-example` starts from a built-in example object written as an explicit typed molecule with orbital shells intact.
-
-## Related Files
+Implementation files:
 
 - [`moladt/cli.py`](../moladt/cli.py)
 - [`moladt/io/sdf.py`](../moladt/io/sdf.py)
-- [`moladt/io/molecule_json.py`](../moladt/io/molecule_json.py)
 - [`moladt/io/smiles.py`](../moladt/io/smiles.py)
-- [`moladt/chem/validate.py`](../moladt/chem/validate.py)
+- [`moladt/io/molecule_json.py`](../moladt/io/molecule_json.py)
 - [`moladt/viewer.py`](../moladt/viewer.py)

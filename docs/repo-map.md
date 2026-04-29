@@ -1,79 +1,24 @@
 # Repo Map
 
-This page describes the current layout of the Python repo as it exists today.
+Main folders:
 
-## Top-Level Areas
+| Path | Purpose |
+| --- | --- |
+| `moladt/chem/` | Core molecule, Dietz bonding, coordinates, validation, pretty printing. |
+| `moladt/io/` | SDF, SMILES, and MolADT JSON. |
+| `moladt/examples/` | Built-in molecules and manuscript examples. |
+| `moladt/inference/` | Descriptor code over MolADT molecules. |
+| `scripts/` | Data processing, benchmark orchestration, reports, timing. |
+| `stan/` | Stan model files. |
+| `molecules/` | Small SDF examples. |
+| `data/` | Raw and processed benchmark data. |
+| `results/` | Local and reference outputs. |
+| `tests/` | Pytest coverage. |
+| `docs/` | Project documentation. |
 
-### [`moladt/chem/`](../moladt/chem/)
+Useful entrypoints:
 
-Core MolADT chemistry types and helpers:
-
-- constants and element tables
-- coordinates and units
-- Dietz-style bonding-system machinery
-- molecule helpers and pretty printing
-- structural validation
-
-### [`moladt/examples/`](../moladt/examples/)
-
-Built-in example molecules and manuscript-facing render wrappers:
-
-- benzene
-- water and other small sample molecules
-- diborane
-- ferrocene
-- morphine
-
-### [`moladt/inference/`](../moladt/inference/)
-
-Lightweight descriptor code over the MolADT representation. This is the repo-local inference-oriented feature layer inside the package.
-
-### [`moladt/io/`](../moladt/io/)
-
-File and text I/O:
-
-- SDF parsing and rendering
-- conservative SMILES parsing and rendering
-
-### [`moladt/stan/`](../moladt/stan/)
-
-Current package namespace for Stan-related Python code. The actual Stan model files live in the top-level [`stan/`](../stan/) directory, and benchmark execution lives in [`scripts/stan_runner.py`](../scripts/stan_runner.py).
-
-### [`scripts/`](../scripts/)
-
-Benchmark orchestration and data-processing entrypoints:
-
-- dataset download
-- feature extraction
-- deterministic train/valid/test export
-- Stan fitting
-- summary/report generation
-- ZINC timing
-
-### [`molecules/`](../molecules/)
-
-Small file-backed examples used for CLI demos and parser tests:
-
-- `benzene.sdf`
-- `water.sdf`
-
-### [`tests/`](../tests/)
-
-Pytest coverage for:
-
-- benchmark/export plumbing
-- example validity
-- parser and SMILES round-trips
-- pretty rendering
-- reporting artifacts
-- validation invariants
-
-### [`docs/`](./)
-
-GitHub-native documentation for setup, CLI use, benchmarks, SMILES scope, interop, and repo structure.
-
-## Related Benchmark Files
-
-- [`stan/`](../stan/)
-- [`results/`](../results/)
-- [`data/processed/`](../data/processed/)
+- `moladt/cli.py`
+- `experiments/freesolv_inverse_design.py`
+- `scripts/run_all.py`
+- `Makefile`

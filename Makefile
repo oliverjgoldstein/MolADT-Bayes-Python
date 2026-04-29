@@ -23,6 +23,10 @@ ZINC_LIMIT ?=
 INCLUDE_MOLADT ?= 0
 BENCHMARK_VERBOSE ?= 1
 EXAMPLE ?= ferrocene
+VIEWER_INPUT ?= molecules/benzene.sdf
+VIEWER_OUTPUT ?= results/viewer/$(basename $(notdir $(VIEWER_INPUT))).viewer.html
+VIEWER_FORMAT_ARG := $(if $(VIEWER_FORMAT),--format $(VIEWER_FORMAT),)
+VIEWER_TITLE_ARG := $(if $(VIEWER_TITLE),--title "$(VIEWER_TITLE)",)
 MODELS ?= bayes_linear_student_t,bayes_hierarchical_shrinkage
 FREESOLV_MODELS ?= bayes_gp_rbf_screened
 QM9_MODELS ?= bayes_linear_student_t
@@ -119,7 +123,7 @@ BEST_QM9_EXTRA_MODELS := visnet_ensemble
 QM9_LONG_RESULTS_SUBDIR := qm9/long/run_$(RUN_TIMESTAMP)
 QM9_LONG_SEED := 102
 
-.PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-activate python-parse python-parse-smiles python-to-smiles python-pretty-example python-benchmark-qm9 python-benchmark-zinc freesolv inverse-design qm9long benchmark benchmark-bg timing catboost-geom-model catboost-geom-model-paper model
+.PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-activate python-parse python-parse-smiles python-to-smiles python-pretty-example molecule-viewer test-molecule-viewer python-benchmark-qm9 python-benchmark-zinc freesolv inverse-design qm9long benchmark benchmark-bg timing catboost-geom-model catboost-geom-model-paper model
 
 help:
 	@printf "%s\n" \
@@ -133,6 +137,8 @@ help:
 	"  make python-parse-smiles    Parse c1ccccc1" \
 	"  make python-to-smiles       Render molecules/benzene.sdf to SMILES" \
 		"  make python-pretty-example  Render EXAMPLE=ferrocene or EXAMPLE=diborane" \
+		"  make molecule-viewer        Export a standalone 3D molecule viewer HTML file" \
+		"  make test-molecule-viewer   Run the molecule viewer tests" \
 		"  make freesolv              Run the long FreeSolv MolADT-vs-MoleculeNet comparison" \
 		"  make inverse-design        Run the FreeSolv MolADT inverse-design proof of concept" \
 		"  make qm9long               Run the full-data QM9 ViSNet benchmark on rich SDF-backed MolADT geometry" \
@@ -381,6 +387,27 @@ python-to-smiles:
 python-pretty-example:
 	$(PYTHON_CMD) -m moladt.cli pretty-example $(EXAMPLE)
 
+molecule-viewer:
+	@printf "%s\n" \
+	"Exporting standalone MolADT molecule viewer." \
+	"  repo: MolADT-Bayes-Python" \
+	"  command: moladt.cli view-html" \
+	"  input: $(VIEWER_INPUT)" \
+	"  output: $(VIEWER_OUTPUT)" \
+	"  format: $(if $(VIEWER_FORMAT),$(VIEWER_FORMAT),auto)" \
+	"  title: $(if $(VIEWER_TITLE),$(VIEWER_TITLE),input title or filename)" \
+	"  usage: make molecule-viewer VIEWER_INPUT=molecules/morphine.sdf"
+	$(PYTHON_CMD) -m moladt.cli view-html "$(VIEWER_INPUT)" --output "$(VIEWER_OUTPUT)" $(VIEWER_FORMAT_ARG) $(VIEWER_TITLE_ARG)
+
+test-molecule-viewer:
+	@printf "%s\n" \
+	"Running MolADT molecule viewer tests." \
+	"  repo: MolADT-Bayes-Python" \
+	"  command: tests/test_molecule_viewer.py" \
+	"  export smoke target: molecule-viewer" \
+	"  example: make molecule-viewer VIEWER_INPUT=molecules/benzene.sdf"
+	$(PYTHON_CMD) -m pytest -q tests/test_molecule_viewer.py
+
 python-benchmark-qm9:
 	@printf "%s\n" \
 	"Running QM9 benchmark export and Stan sweep." \
@@ -440,10 +467,12 @@ inverse-design:
 	"Running reviewer-facing FreeSolv inverse design." \
 	"  repo: MolADT-Bayes-Python" \
 	"  command: experiments.freesolv_inverse_design" \
-	"  model: fixed FreeSolv moladt_featurized Bayesian GP artifact" \
+	"  model: latest results/freesolv/run_* moladt_featurized Bayesian GP artifact" \
 	"  cli_flags: --target and --seed-molecule only" \
 	"  target: $(if $(TARGET),$(TARGET),median experimental FreeSolv value)" \
 	"  seed_molecule: $(if $(SEED_MOLECULE),$(SEED_MOLECULE),water)" \
+	"  minimum_unique_valid_molecules: 1000" \
+	"  chemistry_rules: connected neutral CHONFCl closed-valence candidates only" \
 	"  results_dir: results/$(INVERSE_DESIGN_RESULTS_SUBDIR)" \
 	"  reference_dir: results/inverse_design/reference" \
 	"  output: generated MolADT/Dietz molecules on stdout plus top_*.py and dietz_*.py files"

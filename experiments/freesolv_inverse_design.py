@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+import csv
 from dataclasses import dataclass, replace
+import json
 import math
 import os
 import random
 import sys
+import time
 from pathlib import Path
 from typing import Callable, Protocol, Sequence, TextIO
 
@@ -29,6 +32,8 @@ from scripts.stan_runner import GP_SCREENED_FEATURE_COUNT
 
 N_STEPS = 2000
 N_SEEDS = 5
+MIN_UNIQUE_VALID_MOLECULES = 1_000
+MAX_PROPOSALS_PER_REQUIRED_MOLECULE = 100
 TOP_K = 10
 TOP_DIETZ_K = 5
 MAX_HEAVY_ATOMS = 12
@@ -38,10 +43,10 @@ MAX_TOTAL_ATOMS = 4 * MAX_HEAVY_ATOMS + 8
 HEAVY_ATOM_GROWTH_LIMIT = MAX_HEAVY_ATOMS + 2
 DEFAULT_SEED_MOLECULE = "water"
 REFERENCE_RESULTS_ENV = "MOLADT_REFERENCE_RESULTS_DIR"
-CONFIDENCE_NOISE_FLOOR = 1.0
+CREDIBLE_SCORE_NOISE_FLOOR = 1.0
 
 DATASET_PREFIX = "freesolv_moladt_featurized"
-DEFAULT_MODEL_DIR = PROJECT_ROOT / "results" / "freesolv" / "run_20260417_162536"
+FREESOLV_RESULTS_DIR = PROJECT_ROOT / "results" / "freesolv"
 MODEL_NAME = "bayes_gp_rbf_screened"
 METHOD_NAME = "laplace"
 TARGET_NAME = "expt"
@@ -80,6 +85,8 @@ GROWTH_MAX_VALENCE = {
     AtomicSymbol.F: 1.0,
     AtomicSymbol.Cl: 1.0,
 }
+VALENCE_TOLERANCE = 1e-9
+TERMINAL_FREE_SOLV_SYMBOLS = (AtomicSymbol.H, AtomicSymbol.F, AtomicSymbol.Cl)
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +105,7 @@ class Candidate:
     molecule: Molecule
     predicted_mean: float
     predictive_sd: float
+    bayesian_credible_score_percent: float
     score: float
 
 
@@ -117,9 +125,12 @@ class SearchResult:
     seed_molecule: str
     top_candidates: tuple[Candidate, ...]
     diagnostics: SearchDiagnostics
+    generated_candidates: tuple[Candidate, ...] = ()
+    minimum_unique_valid_molecules: int = 0
     dietz_candidates: tuple[Candidate, ...] = ()
     molecule_file_paths: tuple[Path, ...] = ()
     dietz_file_paths: tuple[Path, ...] = ()
+    generated_candidate_file_paths: tuple[Path, ...] = ()
     model_parameter_source: Path | None = None
     model_draw_source: Path | None = None
 
@@ -179,8 +190,9 @@ class FreeSolvBayesianPredictor:
         y_train = y_frame.iloc[:, 0].to_numpy(dtype=float)
         selected_indices = _screen_top_correlation_features(X_train_all, y_train, top_k=GP_SCREENED_FEATURE_COUNT)
         X_train = X_train_all[:, selected_indices]
-        parameters = _load_gp_parameter_means()
-        draws = _load_gp_posterior_draws()
+        model_dir = _find_model_dir()
+        parameters = _load_gp_parameter_means(model_dir)
+        draws = _load_gp_posterior_draws(model_dir)
         draw_weights = _precompute_gp_draw_weights(
             X_train=X_train,
             y_train=y_train,
@@ -267,6 +279,7 @@ def main(
 ) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    output_stream = stream or sys.stdout
     result = run_inverse_design(
         target=args.target,
         n_steps=n_steps,
@@ -274,13 +287,15 @@ def main(
         top_k=top_k,
         predictor=predictor,
         seed_molecule=args.seed_molecule,
+        min_unique_valid_molecules=0 if predictor is not None else MIN_UNIQUE_VALID_MOLECULES,
+        progress_stream=output_stream,
     )
     if predictor is None:
         result = write_result_molecule_files(result, configured_results_dir())
         reference_results_dir = os.environ.get(REFERENCE_RESULTS_ENV)
         if reference_results_dir:
             write_result_molecule_files(result, _resolve_output_dir(reference_results_dir))
-    print_report(result, stream=stream or sys.stdout)
+    print_report(result, stream=output_stream)
     return 0
 
 
@@ -293,6 +308,9 @@ def run_inverse_design(
     rng_seed: int = RANDOM_SEED,
     predictor: FreeSolvPredictor | None = None,
     seed_molecule: str = DEFAULT_SEED_MOLECULE,
+    min_unique_valid_molecules: int = 0,
+    max_total_proposals: int | None = None,
+    progress_stream: TextIO | None = None,
 ) -> SearchResult:
     used_default_target = target is None
     resolved_target = default_target_from_freesolv_dataset() if target is None else float(target)
@@ -304,65 +322,106 @@ def run_inverse_design(
     diagnostics = SearchDiagnostics()
     seeds = load_seed_molecules(seed_molecule=seed_molecule, n_seeds=n_seeds)
 
+    chains: list[tuple[random.Random, Molecule, Candidate]] = []
     for seed_index, starting_molecule in enumerate(seeds):
         rng = random.Random(rng_seed + seed_index)
         current = _validate_candidate(starting_molecule)
         current_candidate = _score_molecule(active_predictor, current, resolved_target)
         candidate_by_key[_molecule_key(current)] = current_candidate
+        chains.append((rng, current, current_candidate))
 
-        for _ in range(n_steps):
-            diagnostics.total_proposals += 1
-            proposal = propose_molecule(current, rng)
-            if proposal is None:
-                diagnostics.invalid_proposals += 1
-                continue
+    seed_candidate_keys = frozenset(candidate_by_key)
+    generated_candidate_keys: set[bytes] = set()
+    planned_proposals = max(0, n_steps) * len(chains)
+    minimum_unique = max(0, int(min_unique_valid_molecules))
+    if minimum_unique and not chains:
+        raise ValueError("At least one seed chain is required when requesting generated molecules")
+    proposal_limit = _proposal_limit(
+        planned_proposals=planned_proposals,
+        minimum_unique_valid_molecules=minimum_unique,
+        max_total_proposals=max_total_proposals,
+    )
+    chain_index = 0
+    progress_start = time.perf_counter()
+
+    while chains and (
+        len(generated_candidate_keys) < minimum_unique
+        if minimum_unique
+        else diagnostics.total_proposals < planned_proposals
+    ):
+        if diagnostics.total_proposals >= proposal_limit:
+            raise RuntimeError(
+                "FreeSolv inverse design could not generate "
+                f"{minimum_unique} unique valid molecules within "
+                f"{proposal_limit} proposal attempts; generated {len(generated_candidate_keys)}"
+            )
+
+        rng, current, current_candidate = chains[chain_index]
+        diagnostics.total_proposals += 1
+        proposal = propose_molecule(current, rng)
+        if proposal is None:
+            diagnostics.invalid_proposals += 1
+        else:
             try:
                 proposal = _validate_candidate(proposal)
             except (ValueError, ValidationError):
                 diagnostics.invalid_proposals += 1
-                continue
-
-            diagnostics.valid_proposals += 1
-            proposal_key = _molecule_key(proposal)
-            existing_candidate = candidate_by_key.get(proposal_key)
-            if existing_candidate is None:
-                proposal_candidate = _score_molecule(active_predictor, proposal, resolved_target)
-                candidate_by_key[proposal_key] = proposal_candidate
             else:
-                proposal_candidate = existing_candidate
+                diagnostics.valid_proposals += 1
+                proposal_key = _molecule_key(proposal)
+                existing_candidate = candidate_by_key.get(proposal_key)
+                if existing_candidate is None:
+                    proposal_candidate = _score_molecule(active_predictor, proposal, resolved_target)
+                    candidate_by_key[proposal_key] = proposal_candidate
+                    if proposal_key not in seed_candidate_keys:
+                        generated_candidate_keys.add(proposal_key)
+                    _print_generation_progress(
+                        progress_stream,
+                        generated_count=len(generated_candidate_keys),
+                        target_count=minimum_unique,
+                        elapsed_seconds=time.perf_counter() - progress_start,
+                    )
+                else:
+                    proposal_candidate = existing_candidate
 
-            score_delta = proposal_candidate.score - current_candidate.score
-            if score_delta >= 0.0 or rng.random() < math.exp(score_delta / TEMPERATURE):
-                current = _validate_candidate(proposal)
-                current_candidate = proposal_candidate
-                diagnostics.accepted_proposals += 1
+                score_delta = proposal_candidate.score - current_candidate.score
+                if score_delta >= 0.0 or rng.random() < math.exp(score_delta / TEMPERATURE):
+                    current = _validate_candidate(proposal)
+                    current_candidate = proposal_candidate
+                    diagnostics.accepted_proposals += 1
+
+        chains[chain_index] = (rng, current, current_candidate)
+        chain_index = (chain_index + 1) % len(chains)
 
     diagnostics.unique_valid_molecules_seen = len(candidate_by_key)
-    top_candidates = tuple(
+    all_candidates = tuple(
         sorted(
             candidate_by_key.values(),
             key=_candidate_sort_key(resolved_target),
             reverse=True,
-        )[:top_k]
+        )
     )
+    generated_candidates = tuple(
+        candidate
+        for candidate in all_candidates
+        if _molecule_key(candidate.molecule) in generated_candidate_keys
+    )
+    ranked_candidates = generated_candidates or all_candidates
+    top_candidates = ranked_candidates[:top_k]
     dietz_candidates = tuple(
-        sorted(
-            (
-                candidate
-                for candidate in candidate_by_key.values()
-                if candidate.molecule.systems
-            ),
-            key=_candidate_sort_key(resolved_target),
-            reverse=True,
-        )[: min(top_k, TOP_DIETZ_K)]
-    )
+        candidate
+        for candidate in ranked_candidates
+        if candidate.molecule.systems
+    )[: min(top_k, TOP_DIETZ_K)]
     return SearchResult(
         target=resolved_target,
         used_default_target=used_default_target,
         seed_molecule=seed_molecule,
         top_candidates=top_candidates,
+        generated_candidates=generated_candidates,
         dietz_candidates=dietz_candidates,
         diagnostics=diagnostics,
+        minimum_unique_valid_molecules=minimum_unique,
         model_parameter_source=model_parameter_source,
         model_draw_source=model_draw_source,
     )
@@ -398,10 +457,61 @@ def default_target_from_freesolv_dataset() -> float:
     return float(np.median(np.concatenate(values)))
 
 
+def _proposal_limit(
+    *,
+    planned_proposals: int,
+    minimum_unique_valid_molecules: int,
+    max_total_proposals: int | None,
+) -> int:
+    if max_total_proposals is not None:
+        if max_total_proposals < 0:
+            raise ValueError("max_total_proposals must be non-negative")
+        return max_total_proposals
+    if minimum_unique_valid_molecules <= 0:
+        return planned_proposals
+    minimum_budget = minimum_unique_valid_molecules * MAX_PROPOSALS_PER_REQUIRED_MOLECULE
+    return max(planned_proposals, minimum_budget)
+
+
+def _print_generation_progress(
+    stream: TextIO | None,
+    *,
+    generated_count: int,
+    target_count: int,
+    elapsed_seconds: float,
+) -> None:
+    if stream is None:
+        return
+    average_seconds = elapsed_seconds / max(1, generated_count)
+    if target_count > 0:
+        print(
+            "Generated unique valid candidates: "
+            f"{generated_count}/{target_count} "
+            f"(elapsed {elapsed_seconds:.2f}s, avg {average_seconds:.3f}s/candidate)",
+            file=stream,
+            flush=True,
+        )
+    else:
+        print(
+            "Generated unique valid candidates: "
+            f"{generated_count} "
+            f"(elapsed {elapsed_seconds:.2f}s, avg {average_seconds:.3f}s/candidate)",
+            file=stream,
+            flush=True,
+        )
+
+
 def propose_molecule(molecule: Molecule, rng: random.Random) -> Molecule | None:
-    move_name = _weighted_choice(MOVE_WEIGHTS, rng)
-    move = _MOVE_FUNCTIONS[move_name]
-    return move(molecule, rng)
+    move_names = [name for name, _ in MOVE_WEIGHTS]
+    move_weights = dict(MOVE_WEIGHTS)
+    while move_names:
+        available_weights = tuple((name, move_weights[name]) for name in move_names)
+        move_name = _weighted_choice(available_weights, rng)
+        proposal = _MOVE_FUNCTIONS[move_name](molecule, rng)
+        if proposal is not None:
+            return proposal
+        move_names.remove(move_name)
+    return None
 
 
 def add_terminal_atom(molecule: Molecule, rng: random.Random) -> Molecule | None:
@@ -411,7 +521,7 @@ def add_terminal_atom(molecule: Molecule, rng: random.Random) -> Molecule | None
         atom_id
         for atom_id, atom in molecule.atoms.items()
         if atom.attributes.symbol is not AtomicSymbol.H
-        and (_available_valence(molecule, atom_id) >= 1.0 - 1e-9 or _terminal_hydrogens_attached_to(molecule, atom_id))
+        and _can_accept_extra_sigma(molecule, atom_id)
     ]
     if not parents:
         return None
@@ -439,7 +549,7 @@ def add_sigma_edge(molecule: Molecule, rng: random.Random) -> Molecule | None:
         atom_id
         for atom_id, atom in molecule.atoms.items()
         if atom.attributes.symbol is not AtomicSymbol.H
-        and (_available_valence(molecule, atom_id) >= 1.0 - 1e-9 or _terminal_hydrogens_attached_to(molecule, atom_id))
+        and _can_accept_extra_sigma(molecule, atom_id)
     )
     for left_index, left in enumerate(atom_ids):
         for right in atom_ids[left_index + 1 :]:
@@ -466,18 +576,17 @@ def add_sigma_edge(molecule: Molecule, rng: random.Random) -> Molecule | None:
 
 def mutate_atom(molecule: Molecule, rng: random.Random) -> Molecule | None:
     candidates = [
-        atom_id
+        (atom_id, symbols)
         for atom_id, atom in molecule.atoms.items()
         if atom.attributes.symbol is not AtomicSymbol.H
+        for symbols in (_legal_mutation_symbols(molecule, atom_id),)
+        if symbols
     ]
     if not candidates:
         return None
 
-    atom_id = rng.choice(sorted(candidates))
+    atom_id, symbols = rng.choice(sorted(candidates, key=lambda item: item[0].value))
     atom = molecule.atoms[atom_id]
-    symbols = [symbol for symbol in MUTATION_SYMBOLS if symbol is not atom.attributes.symbol]
-    if not symbols:
-        return None
     new_symbol = rng.choice(symbols)
     mutable = MutableMolecule.from_molecule(molecule)
     mutable.atoms[atom_id] = replace(
@@ -500,6 +609,7 @@ def add_pi_ring_system(molecule: Molecule, rng: random.Random) -> Molecule | Non
         ring
         for ring in _detect_carbon_six_rings(molecule)
         if not _has_pi_system(molecule, ring)
+        and _can_add_pi_ring_system(molecule, ring)
     ]
     if not rings:
         return None
@@ -523,6 +633,8 @@ def print_report(result: SearchResult, *, stream: TextIO) -> None:
         print(f"  FreeSolv posterior draws: {result.model_draw_source.relative_to(PROJECT_ROOT)}", file=stream)
     print(f"  seed molecule: {result.seed_molecule}", file=stream)
     print(f"  deterministic seed: {RANDOM_SEED}", file=stream)
+    if result.minimum_unique_valid_molecules:
+        print(f"  minimum unique valid molecules: {result.minimum_unique_valid_molecules}", file=stream)
     print(f"  total proposals: {result.diagnostics.total_proposals}", file=stream)
     print(f"  valid proposals: {result.diagnostics.valid_proposals}", file=stream)
     print(f"  invalid proposals: {result.diagnostics.invalid_proposals}", file=stream)
@@ -530,6 +642,7 @@ def print_report(result: SearchResult, *, stream: TextIO) -> None:
     print(f"  acceptance rate: {_safe_rate(result.diagnostics.accepted_proposals, result.diagnostics.total_proposals):.3f}", file=stream)
     print(f"  invalid proposal rate: {_safe_rate(result.diagnostics.invalid_proposals, result.diagnostics.total_proposals):.3f}", file=stream)
     print(f"  unique valid molecules seen: {result.diagnostics.unique_valid_molecules_seen}", file=stream)
+    print(f"  unique generated molecules: {len(result.generated_candidates)}", file=stream)
     if result.molecule_file_paths:
         print("  molecule files:", file=stream)
         for path in result.molecule_file_paths:
@@ -538,8 +651,12 @@ def print_report(result: SearchResult, *, stream: TextIO) -> None:
         print("  Dietz molecule files:", file=stream)
         for path in result.dietz_file_paths:
             print(f"    {path.relative_to(PROJECT_ROOT)}", file=stream)
+    if result.generated_candidate_file_paths:
+        print("  generated molecule bundle files:", file=stream)
+        for path in result.generated_candidate_file_paths:
+            print(f"    {path.relative_to(PROJECT_ROOT)}", file=stream)
     print("", file=stream)
-    print("Top generated molecules", file=stream)
+    print("Top generated molecules by Bayesian credible score", file=stream)
     for rank, candidate in enumerate(result.top_candidates, start=1):
         print_candidate(rank, candidate, result.target, stream=stream)
     if result.dietz_candidates:
@@ -554,6 +671,7 @@ def print_candidate(rank: int, candidate: Candidate, target: float, *, stream: T
     print(f"  predicted FreeSolv: {candidate.predicted_mean:.3f}", file=stream)
     print(f"  predictive sd: {candidate.predictive_sd:.3f}", file=stream)
     print(f"  target error: {abs(candidate.predicted_mean - target):.3f}", file=stream)
+    print(f"  Bayesian credible score: {candidate.bayesian_credible_score_percent:.2f}%", file=stream)
     print(f"  score: {candidate.score:.3f}", file=stream)
     print(f"  atoms: {len(molecule.atoms)}", file=stream)
     print(f"  heavy atoms: {heavy_atom_count(molecule)}", file=stream)
@@ -618,15 +736,24 @@ def write_result_molecule_files(result: SearchResult, output_dir: Path) -> Searc
         _write_candidate_python_file(target_dir, "dietz", rank, candidate, result.target, result.seed_molecule)
         for rank, candidate in enumerate(result.dietz_candidates[:TOP_DIETZ_K], start=1)
     )
+    generated_paths = _write_generated_candidate_bundle(
+        target_dir,
+        result.generated_candidates or result.top_candidates,
+        result.target,
+        result.seed_molecule,
+    )
     return SearchResult(
         target=result.target,
         used_default_target=result.used_default_target,
         seed_molecule=result.seed_molecule,
         top_candidates=result.top_candidates,
+        generated_candidates=result.generated_candidates,
         dietz_candidates=result.dietz_candidates,
         diagnostics=result.diagnostics,
+        minimum_unique_valid_molecules=result.minimum_unique_valid_molecules,
         molecule_file_paths=written_paths,
         dietz_file_paths=dietz_paths,
+        generated_candidate_file_paths=generated_paths,
         model_parameter_source=result.model_parameter_source,
         model_draw_source=result.model_draw_source,
     )
@@ -638,10 +765,78 @@ def _remove_stale_candidate_files(output_dir: Path) -> None:
             path.unlink()
 
 
+def _write_generated_candidate_bundle(
+    output_dir: Path,
+    candidates: Sequence[Candidate],
+    target: float,
+    seed_molecule: str,
+) -> tuple[Path, ...]:
+    csv_path = output_dir / "generated_molecules.csv"
+    jsonl_path = output_dir / "generated_molecules.jsonl"
+    with csv_path.open("w", encoding="utf-8", newline="") as handle:
+        fieldnames = (
+            "rank",
+            "formula",
+            "predicted_freesolv",
+            "predictive_sd",
+            "target_error",
+            "bayesian_credible_score_percent",
+            "score",
+            "atoms",
+            "heavy_atoms",
+            "local_bonds",
+            "dietz_bonding_systems",
+            "seed_molecule",
+            "random_seed",
+            "target_freesolv",
+        )
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for rank, candidate in enumerate(candidates, start=1):
+            writer.writerow(_generated_candidate_metadata(rank, candidate, target, seed_molecule))
+
+    with jsonl_path.open("w", encoding="utf-8") as handle:
+        for rank, candidate in enumerate(candidates, start=1):
+            metadata = _generated_candidate_metadata(rank, candidate, target, seed_molecule)
+            record = {
+                **metadata,
+                "molecule": json.loads(molecule_to_json_bytes(candidate.molecule)),
+            }
+            handle.write(json.dumps(record, sort_keys=True, separators=(",", ":")))
+            handle.write("\n")
+    return (csv_path, jsonl_path)
+
+
+def _generated_candidate_metadata(
+    rank: int,
+    candidate: Candidate,
+    target: float,
+    seed_molecule: str,
+) -> dict[str, int | float | str]:
+    molecule = candidate.molecule
+    return {
+        "rank": rank,
+        "formula": molecular_formula(molecule),
+        "predicted_freesolv": candidate.predicted_mean,
+        "predictive_sd": candidate.predictive_sd,
+        "target_error": abs(candidate.predicted_mean - target),
+        "bayesian_credible_score_percent": candidate.bayesian_credible_score_percent,
+        "score": candidate.score,
+        "atoms": len(molecule.atoms),
+        "heavy_atoms": heavy_atom_count(molecule),
+        "local_bonds": len(molecule.local_bonds),
+        "dietz_bonding_systems": len(molecule.systems),
+        "seed_molecule": seed_molecule,
+        "random_seed": RANDOM_SEED,
+        "target_freesolv": target,
+    }
+
+
 def _score_molecule(predictor: FreeSolvPredictor, molecule: Molecule, target: float) -> Candidate:
     molecule = _validate_candidate(molecule)
     prediction = predictor.predict(molecule)
-    score = _confidence_adjusted_target_score(prediction, target)
+    score = _target_log_credible_score(prediction, target)
+    bayesian_credible_score_percent = _bayesian_credible_score_percent(score)
     heavy_atoms = heavy_atom_count(molecule)
     if heavy_atoms > MAX_HEAVY_ATOMS:
         score -= 0.1 * float(heavy_atoms - MAX_HEAVY_ATOMS)
@@ -649,18 +844,23 @@ def _score_molecule(predictor: FreeSolvPredictor, molecule: Molecule, target: fl
         molecule=molecule,
         predicted_mean=prediction.mean,
         predictive_sd=prediction.sd,
+        bayesian_credible_score_percent=bayesian_credible_score_percent,
         score=score,
     )
 
 
-def _confidence_adjusted_target_score(prediction: Prediction, target: float) -> float:
-    variance = prediction.sd**2 + CONFIDENCE_NOISE_FLOOR**2
+def _target_log_credible_score(prediction: Prediction, target: float) -> float:
+    variance = prediction.sd**2 + CREDIBLE_SCORE_NOISE_FLOOR**2
     target_error = prediction.mean - target
     return -0.5 * (target_error**2 / variance) - 0.5 * math.log(variance)
 
 
-def _load_gp_parameter_means() -> FreeSolvModelParameters:
-    coefficients_path = _find_model_dir() / "details" / "model_coefficients.csv"
+def _bayesian_credible_score_percent(score: float) -> float:
+    return max(0.0, min(100.0, 100.0 * math.exp(min(0.0, score))))
+
+
+def _load_gp_parameter_means(model_dir: Path) -> FreeSolvModelParameters:
+    coefficients_path = model_dir / "details" / "model_coefficients.csv"
     coefficients = pd.read_csv(coefficients_path)
     rows = coefficients.loc[
         (coefficients["dataset"] == "freesolv")
@@ -692,8 +892,8 @@ def _load_gp_parameter_means() -> FreeSolvModelParameters:
     )
 
 
-def _load_gp_posterior_draws() -> FreeSolvPosteriorDraws:
-    draws_path = _find_gp_draws_path()
+def _load_gp_posterior_draws(model_dir: Path) -> FreeSolvPosteriorDraws:
+    draws_path = _find_gp_draws_path(model_dir)
     draw_frame = pd.read_csv(draws_path, comment="#")
     required = ("alpha", "signal_scale", "lengthscale", "sigma")
     missing = [name for name in required if name not in draw_frame.columns]
@@ -723,9 +923,9 @@ def _load_gp_posterior_draws() -> FreeSolvPosteriorDraws:
     )
 
 
-def _find_gp_draws_path() -> Path:
+def _find_gp_draws_path(model_dir: Path) -> Path:
     draws_dir = (
-        _find_model_dir()
+        model_dir
         / "details"
         / "stan_output"
         / "freesolv"
@@ -735,17 +935,29 @@ def _find_gp_draws_path() -> Path:
     )
     draw_files = tuple(sorted(draws_dir.glob("*.csv")))
     if len(draw_files) != 1:
-        raise FileNotFoundError(f"Expected one committed FreeSolv GP posterior draw CSV in {draws_dir}; found {len(draw_files)}")
+        raise FileNotFoundError(f"Expected one latest FreeSolv GP posterior draw CSV in {draws_dir}; found {len(draw_files)}")
     return draw_files[0]
 
 
 def _find_model_dir() -> Path:
-    if (DEFAULT_MODEL_DIR / "details" / "model_coefficients.csv").exists():
-        return DEFAULT_MODEL_DIR
-    raise FileNotFoundError(
-        "Missing committed FreeSolv Bayesian GP artifact: "
-        f"{DEFAULT_MODEL_DIR / 'details' / 'model_coefficients.csv'}"
+    run_dirs = tuple(
+        sorted(
+            (path for path in FREESOLV_RESULTS_DIR.glob("run_*") if path.is_dir()),
+            key=lambda path: path.name,
+        )
     )
+    if not run_dirs:
+        raise FileNotFoundError(f"Missing FreeSolv result runs under {FREESOLV_RESULTS_DIR}")
+
+    model_dir = run_dirs[-1]
+    coefficients_path = model_dir / "details" / "model_coefficients.csv"
+    if not coefficients_path.exists():
+        raise FileNotFoundError(
+            "Latest FreeSolv run is missing the Bayesian GP coefficient artifact: "
+            f"{coefficients_path}"
+        )
+    _find_gp_draws_path(model_dir)
+    return model_dir
 
 
 def _validate_freesolv_metadata(metadata: pd.Series, metadata_path: Path) -> None:
@@ -824,13 +1036,13 @@ def _rbf_kernel(X_left: np.ndarray, X_right: np.ndarray, *, lengthscale: float, 
     return (signal_scale**2) * np.exp(-0.5 * sqdist / max(lengthscale**2, 1e-9))
 
 
-def _candidate_sort_key(target: float) -> Callable[[Candidate], tuple[float, float, int, float, int]]:
-    def sort_key(candidate: Candidate) -> tuple[float, float, int, float, int]:
+def _candidate_sort_key(target: float) -> Callable[[Candidate], tuple[float, float, float, int, int]]:
+    def sort_key(candidate: Candidate) -> tuple[float, float, float, int, int]:
         return (
-            candidate.score,
+            candidate.bayesian_credible_score_percent,
             -candidate.predictive_sd,
-            1 if candidate.molecule.systems else 0,
             -abs(candidate.predicted_mean - target),
+            1 if candidate.molecule.systems else 0,
             -len(candidate.molecule.atoms),
         )
 
@@ -874,6 +1086,7 @@ def _candidate_python_source(rank: int, candidate: Candidate, target: float, see
             f"predicted_freesolv = {candidate.predicted_mean:.12g}",
             f"predictive_sd = {candidate.predictive_sd:.12g}",
             f"target_error = {abs(candidate.predicted_mean - target):.12g}",
+            f"bayesian_credible_score_percent = {candidate.bayesian_credible_score_percent:.12g}",
             f"score = {candidate.score:.12g}",
             f"formula = {molecular_formula(molecule)!r}",
             "",
@@ -905,6 +1118,7 @@ def _candidate_python_source(rank: int, candidate: Candidate, target: float, see
             "    'predicted_freesolv',",
             "    'predictive_sd',",
             "    'target_error',",
+            "    'bayesian_credible_score_percent',",
             "    'score',",
             "    'formula',",
             "    'molecule',",
@@ -1069,6 +1283,89 @@ def _growth_max_valence(symbol: AtomicSymbol) -> float:
     return GROWTH_MAX_VALENCE[symbol]
 
 
+def _can_accept_extra_sigma(molecule: Molecule, atom_id: AtomId) -> bool:
+    atom = molecule.atoms[atom_id]
+    if atom.attributes.symbol in TERMINAL_FREE_SOLV_SYMBOLS:
+        return False
+    return _hydrogen_slots_after(
+        molecule,
+        atom_id,
+        atom.attributes.symbol,
+        extra_used=1.0,
+    ) is not None
+
+
+def _legal_mutation_symbols(molecule: Molecule, atom_id: AtomId) -> tuple[AtomicSymbol, ...]:
+    atom = molecule.atoms[atom_id]
+    if atom.attributes.symbol is AtomicSymbol.H or _atom_participates_in_system(molecule, atom_id):
+        return ()
+    symbols: list[AtomicSymbol] = []
+    for symbol in MUTATION_SYMBOLS:
+        if symbol is atom.attributes.symbol:
+            continue
+        hydrogen_slots = _hydrogen_slots_after(molecule, atom_id, symbol)
+        if hydrogen_slots is None:
+            continue
+        if symbol in TERMINAL_FREE_SOLV_SYMBOLS and not _can_be_terminal_after_completion(
+            molecule,
+            atom_id,
+            hydrogen_slots=hydrogen_slots,
+        ):
+            continue
+        symbols.append(symbol)
+    return tuple(symbols)
+
+
+def _can_add_pi_ring_system(molecule: Molecule, ring: frozenset[Edge]) -> bool:
+    system = mk_bonding_system(NonNegative(6), ring, "pi_ring")
+    if not _is_valid_pi_ring(molecule, system):
+        return False
+    if any(_has_localized_singleton_system(molecule, edge) for edge in ring):
+        return False
+    ring_atoms = {atom_id for edge in ring for atom_id in (edge.a, edge.b)}
+    return all(
+        _hydrogen_slots_after(molecule, atom_id, AtomicSymbol.C, extra_used=1.0) is not None
+        for atom_id in ring_atoms
+    )
+
+
+def _hydrogen_slots_after(
+    molecule: Molecule,
+    atom_id: AtomId,
+    symbol: AtomicSymbol,
+    *,
+    extra_used: float = 0.0,
+) -> int | None:
+    base_used = _used_electrons_without_terminal_hydrogens(molecule, atom_id) + extra_used
+    available = _growth_max_valence(symbol) - base_used
+    if available < -VALENCE_TOLERANCE:
+        return None
+    rounded = round(available)
+    if abs(available - rounded) > VALENCE_TOLERANCE:
+        return None
+    return max(0, int(rounded))
+
+
+def _used_electrons_without_terminal_hydrogens(molecule: Molecule, atom_id: AtomId) -> float:
+    return used_electrons_at(molecule, atom_id) - float(len(_terminal_hydrogens_attached_to(molecule, atom_id)))
+
+
+def _can_be_terminal_after_completion(molecule: Molecule, atom_id: AtomId, *, hydrogen_slots: int) -> bool:
+    return (
+        not _atom_participates_in_system(molecule, atom_id)
+        and _sigma_degree_without_terminal_hydrogens(molecule, atom_id) + hydrogen_slots == 1
+    )
+
+
+def _sigma_degree_without_terminal_hydrogens(molecule: Molecule, atom_id: AtomId) -> int:
+    removable_hydrogens = set(_terminal_hydrogens_attached_to(molecule, atom_id))
+    return sum(1 for neighbor in neighbors_sigma(molecule, atom_id) if neighbor not in removable_hydrogens)
+
+
+def _atom_participates_in_system(molecule: Molecule, atom_id: AtomId) -> bool:
+    return any(atom_id in system.member_atoms for _, system in molecule.systems)
+
+
 def _terminal_hydrogens_attached_to(molecule: Molecule, atom_id: AtomId) -> tuple[AtomId, ...]:
     hydrogens: list[AtomId] = []
     system_atoms = {member for _, system in molecule.systems for member in system.member_atoms}
@@ -1223,8 +1520,11 @@ def _validate_candidate(molecule: Molecule) -> Molecule:
     if not _is_connected(molecule):
         raise ValidationError("Molecule is disconnected")
     _ensure_supported_symbols(molecule)
+    _ensure_neutral_formal_charges(molecule)
     _ensure_no_hydrogen_hydrogen_local_bonds(molecule)
+    _ensure_terminal_atom_rules(molecule)
     _ensure_conservative_generator_valence(molecule)
+    _ensure_closed_valence_shells(molecule)
     _ensure_sound_bonding_systems(molecule)
     for edge in molecule.local_bonds:
         effective_order(molecule, edge)
@@ -1248,6 +1548,17 @@ def _ensure_supported_symbols(molecule: Molecule) -> None:
         raise ValidationError(f"Unsupported generated elements: {', '.join(sorted(set(unsupported)))}")
 
 
+def _ensure_neutral_formal_charges(molecule: Molecule) -> None:
+    charged_atoms = [
+        atom_id.value
+        for atom_id, atom in molecule.atoms.items()
+        if atom.formal_charge != 0
+    ]
+    if charged_atoms:
+        formatted = ", ".join(str(atom_id) for atom_id in charged_atoms)
+        raise ValidationError(f"FreeSolv generated candidates must be neutral; charged atoms: {formatted}")
+
+
 def _ensure_no_hydrogen_hydrogen_local_bonds(molecule: Molecule) -> None:
     for edge in molecule.local_bonds:
         if (
@@ -1257,11 +1568,39 @@ def _ensure_no_hydrogen_hydrogen_local_bonds(molecule: Molecule) -> None:
             raise ValidationError("Generated molecules may not contain H-H local bonds")
 
 
+def _ensure_terminal_atom_rules(molecule: Molecule) -> None:
+    system_atoms = {atom_id for _, system in molecule.systems for atom_id in system.member_atoms}
+    for atom_id, atom in molecule.atoms.items():
+        symbol = atom.attributes.symbol
+        if symbol not in TERMINAL_FREE_SOLV_SYMBOLS:
+            continue
+        sigma_neighbors = tuple(neighbors_sigma(molecule, atom_id))
+        if atom_id in system_atoms:
+            raise ValidationError(f"Terminal element {symbol.value} may not participate in Dietz systems")
+        if len(sigma_neighbors) != 1:
+            raise ValidationError(f"Terminal element {symbol.value}#{atom_id.value} must have exactly one sigma bond")
+        if symbol is AtomicSymbol.H:
+            neighbor = molecule.atoms[sigma_neighbors[0]]
+            if neighbor.attributes.symbol is AtomicSymbol.H:
+                raise ValidationError("Generated molecules may not contain H-H local bonds")
+
+
 def _ensure_conservative_generator_valence(molecule: Molecule) -> None:
     for atom_id, atom in molecule.atoms.items():
         used = used_electrons_at(molecule, atom_id)
-        if used > _growth_max_valence(atom.attributes.symbol) + 1e-9:
+        if used > _growth_max_valence(atom.attributes.symbol) + VALENCE_TOLERANCE:
             raise ValidationError(f"Atom {atom_id.value} exceeds generator valence cap")
+
+
+def _ensure_closed_valence_shells(molecule: Molecule) -> None:
+    for atom_id, atom in molecule.atoms.items():
+        expected = _growth_max_valence(atom.attributes.symbol)
+        used = used_electrons_at(molecule, atom_id)
+        if not math.isclose(used, expected, abs_tol=VALENCE_TOLERANCE):
+            raise ValidationError(
+                f"Atom {atom_id.value} has incomplete generated valence shell "
+                f"({used:.3g} used, {expected:.3g} expected)"
+            )
 
 
 def _ensure_sound_bonding_systems(molecule: Molecule) -> None:
@@ -1300,7 +1639,7 @@ def _complete_terminal_hydrogens(molecule: Molecule) -> Molecule:
             continue
         current = mutable.freeze()
         available = _growth_max_valence(atom.attributes.symbol) - used_electrons_at(current, atom_id)
-        hydrogen_count = max(0, int(math.floor(available + 1e-9)))
+        hydrogen_count = max(0, int(math.floor(available + VALENCE_TOLERANCE)))
         for _ in range(hydrogen_count):
             hydrogen_id = AtomId(next_atom_id)
             next_atom_id += 1
@@ -1383,7 +1722,40 @@ def _safe_rate(numerator: int, denominator: int) -> float:
 
 
 def _molecule_key(molecule: Molecule) -> bytes:
-    return molecule_to_json_bytes(molecule)
+    chemistry_key = {
+        "atoms": [
+            (atom_id.value, atom.attributes.symbol.value, atom.formal_charge)
+            for atom_id, atom in sorted(molecule.atoms.items(), key=lambda item: item[0].value)
+        ],
+        "local_bonds": [(edge.a.value, edge.b.value) for edge in sorted(molecule.local_bonds)],
+        "systems": [
+            (
+                system_id.value,
+                system.shared_electrons.value,
+                [(edge.a.value, edge.b.value) for edge in sorted(system.member_edges)],
+                system.tag,
+            )
+            for system_id, system in molecule.systems
+        ],
+        "smiles_atom_stereo": [
+            (
+                stereo.center.value,
+                stereo.stereo_class.value,
+                stereo.configuration,
+                stereo.token,
+            )
+            for stereo in molecule.smiles_stereochemistry.atom_stereo
+        ],
+        "smiles_bond_stereo": [
+            (
+                stereo.start_atom.value,
+                stereo.end_atom.value,
+                stereo.direction.value,
+            )
+            for stereo in molecule.smiles_stereochemistry.bond_stereo
+        ],
+    }
+    return json.dumps(chemistry_key, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
 def _ring_sort_key(ring: frozenset[Edge]) -> tuple[tuple[int, int], ...]:

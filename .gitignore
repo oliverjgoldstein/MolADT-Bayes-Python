@@ -56,6 +56,8 @@ results/**
 !results/**/
 !results/README.md
 !results/inverse_design/reference/*.py
+!results/inverse_design/reference/*.csv
+!results/inverse_design/reference/*.jsonl
 !results/inverse_design/reference/README.md
 !results/freesolv/**/*.csv
 !results/freesolv/**/*.json

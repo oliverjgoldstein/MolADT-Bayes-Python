@@ -1,7 +1,11 @@
 # Porting Notes
 
-- The Python core keeps the Haskell ADT layering, but `Molecule.atoms` is stored as a read-only `mappingproxy` and `systems` as a tuple to keep the public structure immutable.
-- The Stan model follows the Haskell prior scales, but Stan's `gamma(alpha, beta)` uses a rate parameter. The Python port therefore converts the Haskell shape/scale priors into Stan shape/rate form.
-- The SDF parser intentionally stays lightweight. It parses V2000 atoms, bonds, `M  CHG` formal charges, and the same six-member alternating-bond aromatic-ring heuristic used by the Haskell code.
-- Orbital/electronic annotations are preserved as typed dataclasses and enums. The Python port keeps them declarative and does not attach quantum-chemistry behavior to them.
-- The example acceptance criteria require `diborane` and `ferrocene` to validate. To keep those multicenter and organometallic examples usable under the same validator structure, the Python valence table allows boron up to four bonds and carbon up to five in the conservative heuristic.
+Short notes for keeping the Python and Haskell repos aligned.
+
+- Python keeps the Haskell ADT layering: `atoms`, `local_bonds`, `systems`, and stereo annotations.
+- `Molecule.atoms` is read-only and `systems` is a tuple, so the public object behaves like an immutable record.
+- Use `MutableMolecule` only as an edit scratchpad.
+- Stan uses rate parameters for `gamma(alpha, beta)`, so Haskell shape/scale priors are converted before fitting.
+- The SDF parser stays lightweight: atoms, bonds, charges, coordinates, and property blocks.
+- Orbital data is declarative. It is not a quantum chemistry engine.
+- Diborane and ferrocene are validation examples for multicenter and organometallic bonding systems.

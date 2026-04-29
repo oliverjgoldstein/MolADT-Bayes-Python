@@ -1,82 +1,59 @@
 # Quickstart
 
-This is the shortest path from a fresh clone to a working Python CLI and a first benchmark run.
+Use these commands from the repo root.
 
-## 1. Install
-
-From the repo root:
+## Install
 
 ```bash
 make python-setup
 ```
 
-That creates `.venv` and installs the package plus benchmark dependencies locally inside this repo. Use Python 3.11+.
+This creates `./.venv` and installs the package locally. It does not touch your system Python.
 
-- `make python-setup` writes only to `./.venv`.
-- `make python-cmdstan-install` writes only to `./.cmdstan`.
-- Deleting those directories removes the local install and does not interfere with your system Python, global packages, or other virtual environments.
-- On a fresh machine, the first local setup can take a few minutes and up to about 30 minutes if the larger dependencies still need to be downloaded or built.
-
-- macOS, Linux, WSL: use the command as-is.
-- Windows: if your shell creates `.venv/Scripts/python.exe`, the Make targets use it automatically. WSL2 is still the safest route for the full benchmark stack.
-
-If your shell cannot find the venv Python later, run commands with `./.venv/bin/python ...` on macOS/Linux/WSL or `./.venv/Scripts/python.exe ...` in a Windows-style venv, or print the activation command with:
-
-```bash
-make python-activate
-```
-
-## 2. First Successful CLI Run
-
-```bash
-make python-parse
-./.venv/bin/python -m moladt.cli to-json molecules/benzene.sdf > benzene.moladt.json
-./.venv/bin/python -m moladt.cli from-json benzene.moladt.json
-make python-pretty-example EXAMPLE=morphine
-make python-to-smiles
-```
-
-If those commands work, the local install is in good shape, the checked-in SDF files are readable, and the shared MolADT JSON boundary path is working end to end.
-
-## 3. First Benchmark Run
-
-If CmdStan is not installed yet, do this once first:
+For Stan-backed FreeSolv runs, install CmdStan once:
 
 ```bash
 make python-cmdstan-install
 ```
 
-Then start with the faster benchmark:
+This creates `./.cmdstan`.
+
+## Check The CLI
+
+```bash
+make python-parse
+make python-pretty-example EXAMPLE=morphine
+make molecule-viewer VIEWER_INPUT=molecules/benzene.sdf
+```
+
+Those commands check SDF parsing, built-in examples, validation, and the standalone molecule viewer.
+
+## Run Benchmarks
 
 ```bash
 make freesolv
-```
-
-Then, when that works:
-
-```bash
+make inverse-design TARGET=-5.0
 make qm9long
 make timing
 ```
 
-- `make freesolv` runs the long FreeSolv comparison and writes `freesolv_rmse_vs_moleculenet.svg`.
-- `make qm9long` runs the full-data QM9 path over all aligned local QM9 molecules, using `visnet_ensemble` only on the SDF-backed `moladt_featurized_geom` export. The geometry path caps at `25` epochs and logs every epoch with validation RMSE and MAE.
-- `make timing` runs the eight-stage ZINC SMILES-vs-MolADT timing comparison: source SMILES reads, cached `MolADT CSV -> MolADT`, `SMILES -> JSON`, cached `SDF -> MolADT`, cached `SDF -> SMILES`, `MolADT -> JSON`, `JSON -> MolADT`, and `JSON -> SMILES`.
+- `make freesolv` runs the FreeSolv Bayesian GP benchmark.
+- `make inverse-design TARGET=-5.0` generates 1,000 valid FreeSolv candidates and writes the top 10 by the model's Bayesian credible score.
+- `make qm9long` runs the full local QM9 `mu` path.
+- `make timing` runs the ZINC representation timing comparison.
 
-If a required raw dataset file is too large for GitHub, the repo fetches it on demand. Large downloads and archive extractions show live byte counts, entry counts, throughput, and elapsed time.
+Run `make freesolv` before inverse design when you want inverse design paired with the latest FreeSolv benchmark artifact.
 
-## 4. Optional
-
-Run these when you want extra confidence:
+## Optional Checks
 
 ```bash
 make python-test
 make python-typecheck
 ```
 
-## 5. If Setup Fails
+## Common Fixes
 
-- Missing `ensurepip` on Ubuntu, Debian, or WSL:
+If Ubuntu, Debian, or WSL is missing `ensurepip`:
 
 ```bash
 sudo apt update
@@ -84,15 +61,14 @@ sudo apt install -y python3-venv
 make python-setup
 ```
 
-- Wrong Python or missing activation:
-  use `./.venv/bin/python ...` or `./.venv/Scripts/python.exe ...` directly.
-- Unsupported SMILES:
-  see [SMILES scope and validation](smiles-scope-and-validation.md).
-
-For deeper details, use the local benchmark runner directly:
+If the shell cannot find the venv Python, call it directly:
 
 ```bash
-./.venv/bin/python -m scripts.run_all --help
-# or, if your environment created a Windows-style venv:
-./.venv/Scripts/python.exe -m scripts.run_all --help
+./.venv/bin/python -m moladt.cli --help
+```
+
+On Windows-style venvs, use:
+
+```bash
+./.venv/Scripts/python.exe -m moladt.cli --help
 ```
