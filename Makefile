@@ -144,7 +144,7 @@ help:
 		"  make python-to-smiles       Render molecules/benzene.sdf to SMILES" \
 		"  make python-pretty-example  Render EXAMPLE=ferrocene or EXAMPLE=diborane; add OPEN_VIEWER=1 to open HTML" \
 		"  make molecule-viewer        Export a standalone 3D molecule viewer HTML file; add OPEN_VIEWER=1 to open it" \
-		"  make test-molecule-viewer   Run the molecule viewer tests" \
+		"  make test-molecule-viewer   Run the molecule viewer tests, then open the viewer" \
 		"  make freesolv              Run the long FreeSolv MolADT-vs-MoleculeNet comparison" \
 		"  make inverse-design        Run the FreeSolv MolADT inverse-design proof of concept" \
 		"  make qm9long               Run the full-data QM9 ViSNet benchmark on rich SDF-backed MolADT geometry" \
@@ -413,8 +413,12 @@ test-molecule-viewer:
 	"  repo: MolADT-Bayes-Python" \
 	"  command: tests/test_molecule_viewer.py" \
 	"  export smoke target: molecule-viewer" \
-	"  example: make molecule-viewer VIEWER_INPUT=molecules/benzene.sdf"
+	"  viewer input: $(VIEWER_INPUT)" \
+	"  viewer output: $(VIEWER_OUTPUT)" \
+	"  auto_open: yes" \
+	"  example: make test-molecule-viewer VIEWER_INPUT=molecules/benzene.sdf"
 	$(PYTHON_CMD) -m pytest -q tests/test_molecule_viewer.py
+	$(PYTHON_CMD) -m moladt.cli view-html "$(VIEWER_INPUT)" --output "$(VIEWER_OUTPUT)" $(VIEWER_FORMAT_ARG) $(VIEWER_TITLE_ARG) --open-viewer
 
 python-benchmark-qm9:
 	@printf "%s\n" \

@@ -28,6 +28,8 @@ make molecule-viewer VIEWER_INPUT=molecules/benzene.sdf
 
 Those commands check SDF parsing, built-in examples, validation, and the standalone molecule viewer.
 
+`make test-molecule-viewer` runs the viewer tests and then opens the configured viewer HTML in the default browser.
+
 Use `OPEN_VIEWER=1` when you want the generated viewer HTML to open in the default browser:
 
 ```bash

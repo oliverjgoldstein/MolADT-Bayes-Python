@@ -68,6 +68,8 @@ make test-molecule-viewer
 
 The viewer exports a standalone HTML file under `results/viewer/` by default. Use `VIEWER_OUTPUT`, `VIEWER_FORMAT`, and `VIEWER_TITLE` when you need a custom export.
 
+`make test-molecule-viewer` now runs the viewer tests, writes the configured viewer HTML, and opens it in your default browser automatically.
+
 Turn on browser auto-open with `OPEN_VIEWER=1`:
 
 ```bash

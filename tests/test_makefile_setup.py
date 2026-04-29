@@ -250,7 +250,9 @@ def test_makefile_test_molecule_viewer_target_runs_viewer_tests(tmp_path: Path) 
     )
 
     assert "Running MolADT molecule viewer tests." in result.stdout
+    assert "auto_open: yes" in result.stdout
     assert "./.venv/bin/python -m pytest -q tests/test_molecule_viewer.py" in result.stdout
+    assert './.venv/bin/python -m moladt.cli view-html "molecules/benzene.sdf" --output "results/viewer/benzene.viewer.html"   --open-viewer' in result.stdout
 
 
 def test_makefile_qm9_target_prints_recovered_predictive_path(tmp_path: Path) -> None:
