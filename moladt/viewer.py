@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import webbrowser
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -110,6 +111,13 @@ def write_molecule_viewer_html(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(molecule_viewer_html(molecule, title=title), encoding="utf-8")
     return output_path
+
+
+def open_molecule_viewer(path: str | Path) -> bool:
+    """Open a written molecule viewer HTML file in the default browser."""
+
+    output_path = Path(path).resolve()
+    return webbrowser.open(output_path.as_uri())
 
 
 def _edge_payload(edge: Edge) -> dict[str, int]:
@@ -983,5 +991,6 @@ _HTML_TEMPLATE = """<!doctype html>
 __all__ = [
     "molecule_viewer_html",
     "molecule_viewer_payload",
+    "open_molecule_viewer",
     "write_molecule_viewer_html",
 ]

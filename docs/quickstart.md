@@ -28,6 +28,13 @@ make molecule-viewer VIEWER_INPUT=molecules/benzene.sdf
 
 Those commands check SDF parsing, built-in examples, validation, and the standalone molecule viewer.
 
+Use `OPEN_VIEWER=1` when you want the generated viewer HTML to open in the default browser:
+
+```bash
+OPEN_VIEWER=1 make python-pretty-example EXAMPLE=morphine
+OPEN_VIEWER=1 make molecule-viewer VIEWER_INPUT=molecules/benzene.sdf
+```
+
 ## Run Benchmarks
 
 ```bash

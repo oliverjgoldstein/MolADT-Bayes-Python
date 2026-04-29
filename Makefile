@@ -25,8 +25,14 @@ BENCHMARK_VERBOSE ?= 1
 EXAMPLE ?= ferrocene
 VIEWER_INPUT ?= molecules/benzene.sdf
 VIEWER_OUTPUT ?= results/viewer/$(basename $(notdir $(VIEWER_INPUT))).viewer.html
+OPEN_VIEWER ?= 0
+VIEWER_COUNT ?= 1
+PRETTY_VIEWER_OUTPUT ?=
 VIEWER_FORMAT_ARG := $(if $(VIEWER_FORMAT),--format $(VIEWER_FORMAT),)
 VIEWER_TITLE_ARG := $(if $(VIEWER_TITLE),--title "$(VIEWER_TITLE)",)
+OPEN_VIEWER_ARG := $(if $(filter 1 true yes TRUE YES,$(OPEN_VIEWER)),--open-viewer,)
+PRETTY_VIEWER_OUTPUT_ARG := $(if $(PRETTY_VIEWER_OUTPUT),--viewer-output "$(PRETTY_VIEWER_OUTPUT)",)
+INVERSE_VIEWER_COUNT_ARG := $(if $(filter 1 true yes TRUE YES,$(OPEN_VIEWER)),--viewer-count $(VIEWER_COUNT),)
 MODELS ?= bayes_linear_student_t,bayes_hierarchical_shrinkage
 FREESOLV_MODELS ?= bayes_gp_rbf_screened
 QM9_MODELS ?= bayes_linear_student_t
@@ -135,9 +141,9 @@ help:
 	"  make python-activate        Print the command that activates the local venv" \
 	"  make python-parse           Parse molecules/benzene.sdf" \
 	"  make python-parse-smiles    Parse c1ccccc1" \
-	"  make python-to-smiles       Render molecules/benzene.sdf to SMILES" \
-		"  make python-pretty-example  Render EXAMPLE=ferrocene or EXAMPLE=diborane" \
-		"  make molecule-viewer        Export a standalone 3D molecule viewer HTML file" \
+		"  make python-to-smiles       Render molecules/benzene.sdf to SMILES" \
+		"  make python-pretty-example  Render EXAMPLE=ferrocene or EXAMPLE=diborane; add OPEN_VIEWER=1 to open HTML" \
+		"  make molecule-viewer        Export a standalone 3D molecule viewer HTML file; add OPEN_VIEWER=1 to open it" \
 		"  make test-molecule-viewer   Run the molecule viewer tests" \
 		"  make freesolv              Run the long FreeSolv MolADT-vs-MoleculeNet comparison" \
 		"  make inverse-design        Run the FreeSolv MolADT inverse-design proof of concept" \
@@ -156,6 +162,7 @@ help:
 		"  qm9_limit=$(if $(QM9_LIMIT),$(QM9_LIMIT),full-local-download)" \
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
 	"  python_extras=$(PYTHON_EXTRAS)" \
+	"  open_viewer=$(OPEN_VIEWER)" \
 	"  toolchain_env=$(if $(DARWIN_SDKROOT),apple-xcrun,default)" \
 	"  methods=$(METHODS)" \
 	"  models=$(MODELS)" \
@@ -385,7 +392,7 @@ python-to-smiles:
 	$(PYTHON_CMD) -m moladt.cli to-smiles molecules/benzene.sdf
 
 python-pretty-example:
-	$(PYTHON_CMD) -m moladt.cli pretty-example $(EXAMPLE)
+	$(PYTHON_CMD) -m moladt.cli pretty-example $(EXAMPLE) $(PRETTY_VIEWER_OUTPUT_ARG) $(OPEN_VIEWER_ARG)
 
 molecule-viewer:
 	@printf "%s\n" \
@@ -396,8 +403,9 @@ molecule-viewer:
 	"  output: $(VIEWER_OUTPUT)" \
 	"  format: $(if $(VIEWER_FORMAT),$(VIEWER_FORMAT),auto)" \
 	"  title: $(if $(VIEWER_TITLE),$(VIEWER_TITLE),input title or filename)" \
+	"  open_viewer: $(OPEN_VIEWER)" \
 	"  usage: make molecule-viewer VIEWER_INPUT=molecules/morphine.sdf"
-	$(PYTHON_CMD) -m moladt.cli view-html "$(VIEWER_INPUT)" --output "$(VIEWER_OUTPUT)" $(VIEWER_FORMAT_ARG) $(VIEWER_TITLE_ARG)
+	$(PYTHON_CMD) -m moladt.cli view-html "$(VIEWER_INPUT)" --output "$(VIEWER_OUTPUT)" $(VIEWER_FORMAT_ARG) $(VIEWER_TITLE_ARG) $(OPEN_VIEWER_ARG)
 
 test-molecule-viewer:
 	@printf "%s\n" \
@@ -468,15 +476,17 @@ inverse-design:
 	"  repo: MolADT-Bayes-Python" \
 	"  command: experiments.freesolv_inverse_design" \
 	"  model: latest results/freesolv/run_* moladt_featurized Bayesian GP artifact" \
-	"  cli_flags: --target and --seed-molecule only" \
+	"  cli_flags: --target, --seed-molecule, --open-viewer, --viewer-count" \
 	"  target: $(if $(TARGET),$(TARGET),median experimental FreeSolv value)" \
 	"  seed_molecule: $(if $(SEED_MOLECULE),$(SEED_MOLECULE),water)" \
 	"  minimum_unique_valid_molecules: 1000" \
 	"  chemistry_rules: connected neutral CHONFCl closed-valence candidates only" \
 	"  results_dir: results/$(INVERSE_DESIGN_RESULTS_SUBDIR)" \
 	"  reference_dir: results/inverse_design/reference" \
+	"  open_viewer: $(OPEN_VIEWER)" \
+	"  viewer_count: $(VIEWER_COUNT)" \
 	"  output: generated MolADT/Dietz molecules on stdout plus top_*.py and dietz_*.py files"
-	MOLADT_RESULTS_DIR=results/$(INVERSE_DESIGN_RESULTS_SUBDIR) MOLADT_REFERENCE_RESULTS_DIR=results/inverse_design/reference $(PYTHON_CMD) -m experiments.freesolv_inverse_design $(INVERSE_DESIGN_TARGET_ARG) $(INVERSE_DESIGN_SEED_ARG)
+	MOLADT_RESULTS_DIR=results/$(INVERSE_DESIGN_RESULTS_SUBDIR) MOLADT_REFERENCE_RESULTS_DIR=results/inverse_design/reference $(PYTHON_CMD) -m experiments.freesolv_inverse_design $(INVERSE_DESIGN_TARGET_ARG) $(INVERSE_DESIGN_SEED_ARG) $(OPEN_VIEWER_ARG) $(INVERSE_VIEWER_COUNT_ARG)
 
 qm9long:
 	@printf "%s\n" \

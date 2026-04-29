@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from io import StringIO
 import json
+from pathlib import Path
 import random
 import runpy
 
@@ -22,6 +23,7 @@ from experiments.freesolv_inverse_design import (
     _seed_molecule,
     load_seed_molecules,
     molecular_formula,
+    write_result_viewer_files,
     add_pi_ring_system,
     build_parser,
     main,
@@ -55,7 +57,7 @@ class FixedPredictor:
         return self.prediction
 
 
-def test_cli_exposes_only_target_seed_molecule_plus_default_help() -> None:
+def test_cli_exposes_target_seed_and_optional_viewer_flags_plus_default_help() -> None:
     parser = build_parser()
 
     options = {
@@ -64,7 +66,7 @@ def test_cli_exposes_only_target_seed_molecule_plus_default_help() -> None:
         for option in action.option_strings
     }
 
-    assert options == {"-h", "--help", "--target", "--seed-molecule"}
+    assert options == {"-h", "--help", "--target", "--seed-molecule", "--open-viewer", "--viewer-count"}
 
 
 def test_default_seed_molecule_is_water_and_seed_option_accepts_methane() -> None:
@@ -272,13 +274,13 @@ def test_charged_freesolv_candidate_is_rejected_before_scoring() -> None:
         _score_molecule(ExplodingPredictor(), mutable.freeze(), -5.0)
 
 
-def test_score_prefers_more_confident_prediction_at_same_target_error() -> None:
-    confident = _score_molecule(FixedPredictor(Prediction(mean=-5.0, sd=1.0)), water, -5.0)
+def test_score_prefers_more_credible_prediction_at_same_target_error() -> None:
+    high_credibility = _score_molecule(FixedPredictor(Prediction(mean=-5.0, sd=1.0)), water, -5.0)
     uncertain = _score_molecule(FixedPredictor(Prediction(mean=-5.0, sd=6.0)), water, -5.0)
 
-    assert confident.score > uncertain.score
-    assert confident.bayesian_credible_score_percent > uncertain.bayesian_credible_score_percent
-    assert confident.predictive_sd < uncertain.predictive_sd
+    assert high_credibility.score > uncertain.score
+    assert high_credibility.bayesian_credible_score_percent > uncertain.bayesian_credible_score_percent
+    assert high_credibility.predictive_sd < uncertain.predictive_sd
 
 
 def test_add_pi_ring_system_never_duplicates_same_ring() -> None:
@@ -325,7 +327,9 @@ def test_result_writer_exports_importable_top_molecule_files(tmp_path) -> None:
 
 def test_result_writer_removes_stale_candidate_files(tmp_path) -> None:
     stale = tmp_path / "dietz_01_molecule.py"
+    stale_viewer = tmp_path / "top_01_molecule.viewer.html"
     stale.write_text("stale = True\n", encoding="utf-8")
+    stale_viewer.write_text("stale", encoding="utf-8")
     result = run_inverse_design(
         target=-5.0,
         n_steps=0,
@@ -337,7 +341,26 @@ def test_result_writer_removes_stale_candidate_files(tmp_path) -> None:
     write_result_molecule_files(result, tmp_path)
 
     assert not stale.exists()
+    assert not stale_viewer.exists()
     assert (tmp_path / "top_01_molecule.py").exists()
+
+
+def test_result_writer_can_export_top_candidate_viewers(tmp_path: Path) -> None:
+    result = run_inverse_design(
+        target=-5.0,
+        n_steps=4,
+        n_seeds=1,
+        top_k=2,
+        predictor=FakePredictor(),
+    )
+
+    written = write_result_viewer_files(result, tmp_path, count=2)
+
+    assert len(written.viewer_file_paths) == 2
+    assert written.viewer_file_paths[0].name == "top_01_molecule.viewer.html"
+    html = written.viewer_file_paths[0].read_text(encoding="utf-8")
+    assert "moladt-viewer-v1" in html
+    assert "FreeSolv top #1" in html
 
 
 def test_freesolv_model_dir_uses_latest_run_directory(tmp_path, monkeypatch) -> None:

@@ -25,6 +25,7 @@ from moladt.chem.mutable import MutableMolecule
 from moladt.chem.validate import ValidationError, used_electrons_at, validate_molecule
 from moladt.examples.sample_molecules import methane, water
 from moladt.io import molecule_to_json_bytes
+from moladt.viewer import open_molecule_viewer, write_molecule_viewer_html
 from scripts.common import PROCESSED_DATA_DIR, PROJECT_ROOT, configured_results_dir, ensure_directory
 from scripts.features import compute_moladt_featurized_descriptors
 from scripts.stan_runner import GP_SCREENED_FEATURE_COUNT
@@ -131,6 +132,7 @@ class SearchResult:
     molecule_file_paths: tuple[Path, ...] = ()
     dietz_file_paths: tuple[Path, ...] = ()
     generated_candidate_file_paths: tuple[Path, ...] = ()
+    viewer_file_paths: tuple[Path, ...] = ()
     model_parameter_source: Path | None = None
     model_draw_source: Path | None = None
 
@@ -265,6 +267,17 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_SEED_MOLECULE,
         help="Starting molecule for all deterministic search chains. Defaults to water.",
     )
+    parser.add_argument(
+        "--open-viewer",
+        action="store_true",
+        help="Write viewer HTML for top generated molecules and open it in the default browser.",
+    )
+    parser.add_argument(
+        "--viewer-count",
+        type=int,
+        default=1,
+        help="Number of top generated molecule viewers to write/open when --open-viewer is set. Defaults to 1.",
+    )
     return parser
 
 
@@ -291,7 +304,11 @@ def main(
         progress_stream=output_stream,
     )
     if predictor is None:
-        result = write_result_molecule_files(result, configured_results_dir())
+        results_dir = configured_results_dir()
+        result = write_result_molecule_files(result, results_dir)
+        if args.open_viewer:
+            result = write_result_viewer_files(result, results_dir, count=args.viewer_count)
+            open_result_viewers(result.viewer_file_paths, stream=output_stream)
         reference_results_dir = os.environ.get(REFERENCE_RESULTS_ENV)
         if reference_results_dir:
             write_result_molecule_files(result, _resolve_output_dir(reference_results_dir))
@@ -655,6 +672,10 @@ def print_report(result: SearchResult, *, stream: TextIO) -> None:
         print("  generated molecule bundle files:", file=stream)
         for path in result.generated_candidate_file_paths:
             print(f"    {path.relative_to(PROJECT_ROOT)}", file=stream)
+    if result.viewer_file_paths:
+        print("  viewer files:", file=stream)
+        for path in result.viewer_file_paths:
+            print(f"    {path.relative_to(PROJECT_ROOT)}", file=stream)
     print("", file=stream)
     print("Top generated molecules by Bayesian credible score", file=stream)
     for rank, candidate in enumerate(result.top_candidates, start=1):
@@ -754,15 +775,34 @@ def write_result_molecule_files(result: SearchResult, output_dir: Path) -> Searc
         molecule_file_paths=written_paths,
         dietz_file_paths=dietz_paths,
         generated_candidate_file_paths=generated_paths,
+        viewer_file_paths=result.viewer_file_paths,
         model_parameter_source=result.model_parameter_source,
         model_draw_source=result.model_draw_source,
     )
+
+
+def write_result_viewer_files(result: SearchResult, output_dir: Path, *, count: int = 1) -> SearchResult:
+    target_dir = ensure_directory(output_dir)
+    viewer_count = max(0, min(int(count), len(result.top_candidates)))
+    viewer_paths = tuple(
+        _write_candidate_viewer_file(target_dir, "top", rank, candidate)
+        for rank, candidate in enumerate(result.top_candidates[:viewer_count], start=1)
+    )
+    return replace(result, viewer_file_paths=viewer_paths)
+
+
+def open_result_viewers(paths: Sequence[Path], *, stream: TextIO) -> None:
+    for path in paths:
+        open_molecule_viewer(path)
+        print(f"Opened viewer: {path.resolve().as_uri()}", file=stream)
 
 
 def _remove_stale_candidate_files(output_dir: Path) -> None:
     for prefix in ("top", "dietz"):
         for path in output_dir.glob(f"{prefix}_*_molecule.py"):
             path.unlink()
+    for path in output_dir.glob("top_*_molecule.viewer.html"):
+        path.unlink()
 
 
 def _write_generated_candidate_bundle(
@@ -1060,6 +1100,12 @@ def _write_candidate_python_file(
     path = output_dir / f"{prefix}_{rank:02d}_molecule.py"
     path.write_text(_candidate_python_source(rank, candidate, target, seed_molecule), encoding="utf-8")
     return path
+
+
+def _write_candidate_viewer_file(output_dir: Path, prefix: str, rank: int, candidate: Candidate) -> Path:
+    path = output_dir / f"{prefix}_{rank:02d}_molecule.viewer.html"
+    title = f"FreeSolv {prefix} #{rank}: {molecular_formula(candidate.molecule)}"
+    return write_molecule_viewer_html(candidate.molecule, path, title=title)
 
 
 def _resolve_output_dir(raw_path: str) -> Path:

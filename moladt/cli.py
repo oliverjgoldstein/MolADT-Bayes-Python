@@ -9,7 +9,7 @@ from .examples import MANUSCRIPT_EXAMPLES, get_manuscript_example
 from .io.molecule_json import molecule_from_json, molecule_to_json
 from .io.sdf import read_sdf_record
 from .io.smiles import molecule_to_smiles, parse_smiles
-from .viewer import write_molecule_viewer_html
+from .viewer import open_molecule_viewer, write_molecule_viewer_html
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -41,6 +41,11 @@ def build_parser() -> argparse.ArgumentParser:
     viewer_parser.add_argument("-o", "--output", help="Output HTML path")
     viewer_parser.add_argument("--title", help="Viewer title")
     viewer_parser.add_argument(
+        "--open-viewer",
+        action="store_true",
+        help="Open the written viewer HTML in the default browser.",
+    )
+    viewer_parser.add_argument(
         "--format",
         choices=("sdf", "json"),
         help="Input format; inferred from the file suffix when omitted",
@@ -51,6 +56,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Render a manuscript-facing built-in example molecule",
     )
     pretty_example_parser.add_argument("name", choices=tuple(sorted(MANUSCRIPT_EXAMPLES)))
+    pretty_example_parser.add_argument(
+        "--viewer-output",
+        help="Optional HTML viewer output path for this example.",
+    )
+    pretty_example_parser.add_argument(
+        "--open-viewer",
+        action="store_true",
+        help="Also write and open this example in the default browser.",
+    )
 
     return parser
 
@@ -73,9 +87,14 @@ def main(argv: list[str] | None = None) -> int:
             output_path=None if args.output is None else Path(args.output),
             title=args.title,
             input_format=args.format,
+            open_viewer=args.open_viewer,
         )
     if args.command == "pretty-example":
-        return _handle_pretty_example(args.name)
+        return _handle_pretty_example(
+            args.name,
+            viewer_output=None if args.viewer_output is None else Path(args.viewer_output),
+            open_viewer=args.open_viewer,
+        )
     raise RuntimeError(f"Unsupported command: {args.command}")
 
 
@@ -125,6 +144,7 @@ def _handle_view_html(
     output_path: Path | None,
     title: str | None,
     input_format: str | None,
+    open_viewer: bool = False,
 ) -> int:
     resolved_format = input_format or ("json" if path.suffix.lower() == ".json" else "sdf")
     if resolved_format == "json":
@@ -138,13 +158,23 @@ def _handle_view_html(
     resolved_output = output_path or path.with_suffix(".viewer.html")
     written = write_molecule_viewer_html(molecule, resolved_output, title=title or default_title)
     print(written)
+    if open_viewer:
+        open_molecule_viewer(written)
+        print(f"Opened viewer: {written.resolve().as_uri()}")
     return 0
 
 
-def _handle_pretty_example(name: str) -> int:
+def _handle_pretty_example(name: str, *, viewer_output: Path | None = None, open_viewer: bool = False) -> int:
     example = get_manuscript_example(name)
     validate_molecule(example.molecule)
     print(example.render())
+    if open_viewer or viewer_output is not None:
+        output_path = viewer_output or Path("results") / "viewer" / f"{example.slug}.viewer.html"
+        written = write_molecule_viewer_html(example.molecule, output_path, title=example.title)
+        print(f"Viewer: {written}")
+        if open_viewer:
+            open_molecule_viewer(written)
+            print(f"Opened viewer: {written.resolve().as_uri()}")
     return 0
 
 

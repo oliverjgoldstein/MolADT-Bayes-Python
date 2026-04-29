@@ -102,8 +102,9 @@ def test_makefile_inverse_design_target_uses_target_and_seed_flags(tmp_path: Pat
 
     assert "Running reviewer-facing FreeSolv inverse design." in result.stdout
     assert "model: latest results/freesolv/run_* moladt_featurized Bayesian GP artifact" in result.stdout
-    assert "cli_flags: --target and --seed-molecule only" in result.stdout
+    assert "cli_flags: --target, --seed-molecule, --open-viewer, --viewer-count" in result.stdout
     assert "seed_molecule: water" in result.stdout
+    assert "open_viewer: 0" in result.stdout
     assert "results_dir: results/inverse_design/run_" in result.stdout
     assert "reference_dir: results/inverse_design/reference" in result.stdout
     assert "MOLADT_RESULTS_DIR=results/inverse_design/run_" in result.stdout
@@ -135,6 +136,59 @@ def test_makefile_inverse_design_accepts_seed_molecule(tmp_path: Path) -> None:
     assert "--target -5.0 --seed-molecule methane" in result.stdout
 
 
+def test_makefile_inverse_design_can_open_generated_viewers(tmp_path: Path) -> None:
+    _copy_makefile(tmp_path)
+    _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
+
+    result = subprocess.run(
+        [
+            "make",
+            "-C",
+            str(tmp_path),
+            "-n",
+            "inverse-design",
+            "SYSTEM_PYTHON=python3",
+            "TARGET=-5.0",
+            "OPEN_VIEWER=1",
+            "VIEWER_COUNT=3",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "open_viewer: 1" in result.stdout
+    assert "viewer_count: 3" in result.stdout
+    assert "--open-viewer --viewer-count 3" in result.stdout
+
+
+def test_makefile_pretty_example_can_open_viewer(tmp_path: Path) -> None:
+    _copy_makefile(tmp_path)
+    _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
+
+    result = subprocess.run(
+        [
+            "make",
+            "-C",
+            str(tmp_path),
+            "-n",
+            "python-pretty-example",
+            "SYSTEM_PYTHON=python3",
+            "EXAMPLE=diborane",
+            "OPEN_VIEWER=1",
+            "PRETTY_VIEWER_OUTPUT=results/viewer/diborane.viewer.html",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert (
+        './.venv/bin/python -m moladt.cli pretty-example diborane --viewer-output "results/viewer/diborane.viewer.html" --open-viewer'
+        in result.stdout
+    )
+
+
 def test_makefile_molecule_viewer_target_exports_html(tmp_path: Path) -> None:
     _copy_makefile(tmp_path)
     _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
@@ -158,6 +212,30 @@ def test_makefile_molecule_viewer_target_exports_html(tmp_path: Path) -> None:
     assert "input: molecules/morphine.sdf" in result.stdout
     assert "output: results/viewer/morphine.viewer.html" in result.stdout
     assert './.venv/bin/python -m moladt.cli view-html "molecules/morphine.sdf" --output "results/viewer/morphine.viewer.html"' in result.stdout
+
+
+def test_makefile_molecule_viewer_can_open_browser(tmp_path: Path) -> None:
+    _copy_makefile(tmp_path)
+    _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
+
+    result = subprocess.run(
+        [
+            "make",
+            "-C",
+            str(tmp_path),
+            "-n",
+            "molecule-viewer",
+            "SYSTEM_PYTHON=python3",
+            "VIEWER_INPUT=molecules/morphine.sdf",
+            "OPEN_VIEWER=1",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "open_viewer: 1" in result.stdout
+    assert "--open-viewer" in result.stdout
 
 
 def test_makefile_test_molecule_viewer_target_runs_viewer_tests(tmp_path: Path) -> None:

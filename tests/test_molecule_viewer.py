@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from moladt.cli import main
+import moladt.cli as cli
 from moladt.examples import diborane_pretty
 from moladt.io import molecule_to_json
 from moladt.viewer import molecule_viewer_html, molecule_viewer_payload, write_molecule_viewer_html
@@ -53,3 +54,49 @@ def test_view_html_cli_accepts_moladt_json(tmp_path: Path, capsys) -> None:
     assert result == 0
     assert str(html_path) in output
     assert "bridge_h4_3c2e" in html_path.read_text(encoding="utf-8")
+
+
+def test_view_html_cli_can_open_written_viewer(tmp_path: Path, capsys, monkeypatch) -> None:
+    opened: list[Path] = []
+    html_path = tmp_path / "diborane.viewer.html"
+
+    monkeypatch.setattr(cli, "open_molecule_viewer", lambda path: opened.append(Path(path)) or True)
+
+    result = main(
+        [
+            "view-html",
+            "molecules/diborane.sdf",
+            "--output",
+            str(html_path),
+            "--open-viewer",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert result == 0
+    assert opened == [html_path]
+    assert "Opened viewer:" in output
+
+
+def test_pretty_example_cli_can_write_and_open_viewer(tmp_path: Path, capsys, monkeypatch) -> None:
+    opened: list[Path] = []
+    html_path = tmp_path / "ferrocene.viewer.html"
+
+    monkeypatch.setattr(cli, "open_molecule_viewer", lambda path: opened.append(Path(path)) or True)
+
+    result = main(
+        [
+            "pretty-example",
+            "ferrocene",
+            "--viewer-output",
+            str(html_path),
+            "--open-viewer",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert result == 0
+    assert "Ferrocene (Fe(C5H5)2)" in output
+    assert "Viewer:" in output
+    assert opened == [html_path]
+    assert "fe_backdonation" in html_path.read_text(encoding="utf-8")
