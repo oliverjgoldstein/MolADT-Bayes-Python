@@ -74,11 +74,12 @@ This branch is exported from the aligned SDF-backed MolADT molecules. It keeps a
 
 ## Model Families
 
-The repo contains these predictive model families:
+The repo currently registers these predictive model families:
 
 - `bayes_linear_student_t`
 - `bayes_hierarchical_shrinkage`
 - `bayes_gp_rbf_screened`
+- `catboost_uncertainty`
 - `visnet_ensemble`
 - `dimenetpp_ensemble`
 

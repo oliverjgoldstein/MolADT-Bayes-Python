@@ -49,10 +49,22 @@ data/raw/qm9/extracted/
 !data/raw/zinc/
 data/raw/zinc/*
 !data/raw/zinc/zinc15_250K_2D.csv
-data/processed/
+data/processed/*
+!data/processed/freesolv_moladt_featurized_*.csv
+!data/processed/freesolv_moladt_featurized_*.json
 results/**
 !results/**/
 !results/README.md
+!results/inverse_design/reference/*.py
+!results/inverse_design/reference/README.md
+!results/freesolv/**/*.csv
+!results/freesolv/**/*.json
+!results/freesolv/**/*.svg
+!results/freesolv/**/*.txt
+!results/qm9/**/*.svg
+!results/qm9/**/caption.txt
+!results/timing/**/*.svg
+!results/timing/**/caption.txt
 results2/
 *.part
 

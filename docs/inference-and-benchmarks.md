@@ -7,14 +7,19 @@ This repo prepares the benchmark datasets, exports aligned MolADT matrices, fits
 ```bash
 make python-cmdstan-install
 make freesolv
+make inverse-design TARGET=-5.0
+make inverse-design TARGET=-5.0 SEED_MOLECULE=methane
 make qm9long
 make timing
+python -m experiments.freesolv_inverse_design --target -5.0
+python -m experiments.freesolv_inverse_design --target -5.0 --seed-molecule methane
 ./.venv/bin/python -m scripts.run_all freesolv --verbose
 ./.venv/bin/python -m scripts.run_all qm9 --split-mode long --include-moladt-predictive --models "" --extra-models visnet_ensemble --preferred-qm9-geometry-representation moladt_featurized_geom --verbose
 ./.venv/bin/python -m scripts.run_all benchmark --paper-mode --verbose
 ```
 
 - `make freesolv` runs the long FreeSolv benchmark path, imports all `642` vendored SDF structures as the molecule source, and compares the fixed local Stan run against MoleculeNet Table 3 on RMSE
+- `make inverse-design TARGET=-5.0` runs the deterministic FreeSolv MolADT inverse-design proof of concept from water by default and prints generated molecules to stdout
 - `make qm9long` runs the full-data QM9 `mu` predictive path with `visnet_ensemble` on the SDF-backed `moladt_featurized_geom` export
 - `make timing` runs the separate ZINC SDF timing/interoperability pass
 - `make python-cmdstan-install` is the one-time local CmdStan install step required before the Stan benchmark targets
@@ -76,6 +81,34 @@ Source links:
 - MolFCL: https://academic.oup.com/bioinformatics/article/41/2/btaf061/8005854
 - SCAGE: https://pmc.ncbi.nlm.nih.gov/articles/PMC12069555/
 - MolProphecy: https://www.sciencedirect.com/science/article/pii/S2090123225008306?dgcid=rss_sd_all
+
+## FreeSolv Inverse Design
+
+The inverse-design runner is deliberately small:
+
+```bash
+python -m experiments.freesolv_inverse_design --target -5.0
+```
+
+`--target` and `--seed-molecule` are the only command-line flags. If `--target` is omitted, the runner uses the median experimental FreeSolv value from the processed dataset and prints that choice. The default `--seed-molecule` is `water`; all five deterministic search chains start from that same seed molecule with fixed RNG offsets. The number of steps, retained candidates, molecule-size limits, temperature, random seed, and confidence noise floor are fixed constants in `experiments/freesolv_inverse_design.py` so the run is reproducible.
+
+The search reuses the checked-in FreeSolv `moladt_featurized + bayes_gp_rbf_screened + laplace` artifact. It loads the GP parameter summary from `results/freesolv/run_20260417_162536/details/model_coefficients.csv` and the matching Laplace posterior draw CSV from `results/freesolv/run_20260417_162536/details/stan_output/freesolv/moladt_featurized/bayes_gp_rbf_screened/laplace/`, filtered to `freesolv / moladt_featurized / expt / bayes_gp_rbf_screened / laplace`, and fails fast if those rows, draws, or matching processed metadata are not present. It proposes local MolADT edits, conservatively completes terminal hydrogens, validates the candidate, scores candidates with a confidence-aware Gaussian log score for the target hydration free energy, and accepts by a compact Metropolis rule. This means low predictive standard deviation improves a candidate only when it remains target-compatible.
+
+The implemented moves are:
+
+- add a terminal atom to an atom with available valence
+- add a local sigma edge for ring closure
+- mutate a non-hydrogen atom while preserving its ID and incident structure
+- remove a terminal atom that is not part of a multi-edge Dietz bonding system
+- add a six-electron pi bonding system over an existing carbon six-ring
+
+Every accepted candidate is checked with the repo validator, which accounts for local sigma edges plus Dietz bonding systems. The output prints diagnostics and a readable MolADT/Dietz listing for the top candidates, including atoms, local bonds, bonding systems, formula, predicted FreeSolv value, target error, and score.
+
+The generator also applies conservative chemistry constraints before scoring: generated atoms are limited to CHONFCl, H-H local bonds are rejected, generated valence is capped at `H=1`, `C=4`, `N=3`, `O=2`, `F=1`, and `Cl=1`, duplicate bonding systems are rejected, and a `pi_ring` must be a simple carbon six-ring over existing local bonds. Candidate IDs are canonicalized after terminal-hydrogen completion so the printed and exported molecules are stable and readable.
+
+`make inverse-design` sets `MOLADT_RESULTS_DIR=results/inverse_design/run_<timestamp>` and writes `top_01_molecule.py` through `top_10_molecule.py` for the best target-matching candidates. It also refreshes the Git-tracked reference copies in `results/inverse_design/reference/`. When valid candidates with Dietz bonding systems were seen, it writes `dietz_01_molecule.py` through `dietz_05_molecule.py`, making the representation-specific part of the experiment visible in the artifact. Each file defines an importable, validated `molecule` object plus the seed molecule, fixed random seed, candidate rank, and prediction metadata.
+
+This is a manuscript-supporting proof of concept for property-conditioned growth, not a synthesizability claim and not a state-of-the-art generator.
 
 ## Timing
 

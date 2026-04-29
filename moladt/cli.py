@@ -9,6 +9,7 @@ from .examples import MANUSCRIPT_EXAMPLES, get_manuscript_example
 from .io.molecule_json import molecule_from_json, molecule_to_json
 from .io.sdf import read_sdf_record
 from .io.smiles import molecule_to_smiles, parse_smiles
+from .viewer import write_molecule_viewer_html
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -35,6 +36,16 @@ def build_parser() -> argparse.ArgumentParser:
     from_json_parser = subparsers.add_parser("from-json", help="Load MolADT JSON and pretty-print the typed molecule")
     from_json_parser.add_argument("path")
 
+    viewer_parser = subparsers.add_parser("view-html", help="Export an interactive 3D molecule viewer HTML file")
+    viewer_parser.add_argument("path", help="Input SDF or MolADT JSON file")
+    viewer_parser.add_argument("-o", "--output", help="Output HTML path")
+    viewer_parser.add_argument("--title", help="Viewer title")
+    viewer_parser.add_argument(
+        "--format",
+        choices=("sdf", "json"),
+        help="Input format; inferred from the file suffix when omitted",
+    )
+
     pretty_example_parser = subparsers.add_parser(
         "pretty-example",
         help="Render a manuscript-facing built-in example molecule",
@@ -56,6 +67,13 @@ def main(argv: list[str] | None = None) -> int:
         return _handle_to_json(Path(args.path))
     if args.command == "from-json":
         return _handle_from_json(Path(args.path))
+    if args.command == "view-html":
+        return _handle_view_html(
+            Path(args.path),
+            output_path=None if args.output is None else Path(args.output),
+            title=args.title,
+            input_format=args.format,
+        )
     if args.command == "pretty-example":
         return _handle_pretty_example(args.name)
     raise RuntimeError(f"Unsupported command: {args.command}")
@@ -98,6 +116,28 @@ def _handle_from_json(path: Path) -> int:
     molecule = molecule_from_json(path.read_bytes())
     validate_molecule(molecule)
     print(pretty_print_molecule(molecule))
+    return 0
+
+
+def _handle_view_html(
+    path: Path,
+    *,
+    output_path: Path | None,
+    title: str | None,
+    input_format: str | None,
+) -> int:
+    resolved_format = input_format or ("json" if path.suffix.lower() == ".json" else "sdf")
+    if resolved_format == "json":
+        molecule = molecule_from_json(path.read_bytes())
+        default_title = path.stem
+    else:
+        record = read_sdf_record(path)
+        molecule = record.molecule
+        default_title = record.title or path.stem
+    validate_molecule(molecule)
+    resolved_output = output_path or path.with_suffix(".viewer.html")
+    written = write_molecule_viewer_html(molecule, resolved_output, title=title or default_title)
+    print(written)
     return 0
 
 

@@ -6,7 +6,7 @@ The Python CLI entrypoint is:
 ./.venv/bin/python -m moladt.cli --help
 ```
 
-It currently exposes six subcommands.
+It currently exposes seven subcommands.
 
 ## `parse`
 
@@ -109,6 +109,25 @@ What it does:
 
 Use `from-json` when a JSON file is already your boundary format and you want the typed object back.
 
+## `view-html`
+
+```bash
+./.venv/bin/python -m moladt.cli view-html molecules/benzene.sdf --output benzene.viewer.html
+./.venv/bin/python -m moladt.cli view-html benzene.moladt.json --format json --output benzene.viewer.html
+```
+
+What it does:
+
+- reads one SDF record or one MolADT JSON payload
+- validates the resulting typed molecule
+- writes a standalone beta HTML viewer with a 3D molecule canvas
+- keeps local sigma bonds and Dietz bonding systems visually separate
+- includes colored annotations for bonding-system edges, labels, shared-electron counts, and atom membership
+
+The generated viewer supports mouse or touch rotation, wheel zoom, atom picking, bonding-system toggles, and dropping another MolADT JSON file into the window.
+
+Use `view-html` when you want to inspect an ADT molecule visually instead of reading the text report.
+
 ## `pretty-example`
 
 ```bash
@@ -124,6 +143,7 @@ This command loads named built-in examples from [`moladt/examples/manuscript.py`
 - `parse` starts from an SDF file, prints the title plus MolADT structure, and adds raw SDF metadata only with `--properties`.
 - `to-json` starts from an SDF file and emits the shared MolADT JSON boundary payload.
 - `from-json` starts from a MolADT JSON file and prints the validated typed structure.
+- `view-html` starts from SDF or MolADT JSON and writes an interactive standalone HTML viewer.
 - `parse-smiles` starts from a SMILES string and only prints the validated MolADT structure.
 - `to-smiles` starts from an SDF file and emits only the rendered SMILES string.
 - `pretty-example` starts from a built-in example object written as an explicit typed molecule with orbital shells intact.
@@ -135,3 +155,4 @@ This command loads named built-in examples from [`moladt/examples/manuscript.py`
 - [`moladt/io/molecule_json.py`](../moladt/io/molecule_json.py)
 - [`moladt/io/smiles.py`](../moladt/io/smiles.py)
 - [`moladt/chem/validate.py`](../moladt/chem/validate.py)
+- [`moladt/viewer.py`](../moladt/viewer.py)

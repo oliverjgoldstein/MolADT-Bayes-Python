@@ -9,6 +9,7 @@ from .dietz import AtomId, BondingSystem, Edge
 from .dietz import SystemId
 from .molecule import Atom, Molecule, SmilesAtomStereo, SmilesBondStereo
 from .molecule_ops import effective_order, neighbors_sigma
+from .validate import used_electrons_at
 from .orbital import (
     Orbital,
     PureDOrbital,
@@ -69,8 +70,15 @@ def _(molecule: Molecule) -> PrettyBlock:
 
     lines.extend(_section_header("Atoms"))
     if atom_items:
-        for index, (atom_id, atom) in enumerate(atom_items, start=1):
-            lines.extend(_format_atom_block(molecule, atom_id, atom))
+        lines.extend(_format_atom_table(molecule, atom_items, system_items))
+    else:
+        lines.append("none")
+    lines.append("")
+
+    lines.extend(_section_header("Electron Shells"))
+    if atom_items:
+        for index, (_, atom) in enumerate(atom_items, start=1):
+            lines.extend(_format_atom_shell_block(atom))
             if index != len(atom_items):
                 lines.append("")
     else:
@@ -172,6 +180,7 @@ def _summary_section(
     stereo_summary = ", ".join(stereo_bits) if stereo_bits else "none"
     return [
         _summary_line("atoms", str(len(atom_items))),
+        _summary_line("heavy atoms", str(sum(1 for _, atom in atom_items if atom.attributes.symbol.value != "H"))),
         _summary_line("sigma bonds", str(len(sigma_edges))),
         _summary_line("bonding systems", str(len(system_items))),
         _summary_line("net charge", f"{total_charge:+d}"),
@@ -211,10 +220,48 @@ def _indent(lines: Iterable[str], spaces: int) -> list[str]:
     return [prefix + line if line else line for line in lines]
 
 
-def _format_atom_block(molecule: Molecule, atom_id: AtomId, atom: Atom) -> list[str]:
-    neighbor_ids = neighbors_sigma(molecule, atom_id)
-    neighbor_refs = ", ".join(_render_atom_ref(molecule.atoms[neighbor_id]) for neighbor_id in neighbor_ids) or "none"
-    return _atom_lines(atom, extra_lines=(f"{_detail_label('sigma')} {neighbor_refs}",))
+def _format_atom_table(
+    molecule: Molecule,
+    atom_items: list[tuple[AtomId, Atom]],
+    system_items: list[tuple[SystemId, BondingSystem]],
+) -> list[str]:
+    rows = []
+    for atom_id, atom in atom_items:
+        neighbor_refs = ", ".join(
+            _render_atom_ref(molecule.atoms[neighbor_id])
+            for neighbor_id in neighbors_sigma(molecule, atom_id)
+        ) or "-"
+        system_refs = ", ".join(_system_labels_for_atom(system_items, atom_id)) or "-"
+        rows.append(
+            (
+                _render_atom_ref_bracketed(atom),
+                str(atom.attributes.atomic_number),
+                f"{atom.formal_charge:+d}",
+                str(len(neighbors_sigma(molecule, atom_id))),
+                f"{used_electrons_at(molecule, atom_id):.2f}",
+                _format_coord(atom.coordinate),
+                neighbor_refs,
+                system_refs,
+            )
+        )
+
+    headers = ("atom", "Z", "chg", "sigma", "used", "xyz (Angstrom)", "sigma neighbors", "systems")
+    widths = [
+        max(len(headers[column]), *(len(row[column]) for row in rows))
+        for column in range(len(headers))
+    ]
+    return [
+        _format_table_row(headers, widths),
+        _format_table_separator(widths),
+        *(_format_table_row(row, widths) for row in rows),
+    ]
+
+
+def _format_atom_shell_block(atom: Atom) -> list[str]:
+    shell_lines = _pretty_shell_lines(atom.shells)
+    if not shell_lines:
+        return [f"{_render_atom_ref_bracketed(atom)} shells: none"]
+    return [f"{_render_atom_ref_bracketed(atom)} shells:", *_indent(shell_lines, 2)]
 
 
 def _atom_lines(atom: Atom, *, extra_lines: Iterable[str] = ()) -> list[str]:
@@ -229,6 +276,14 @@ def _atom_lines(atom: Atom, *, extra_lines: Iterable[str] = ()) -> list[str]:
         lines.append("shells:")
         lines.extend(_indent(shell_lines, 2))
     return lines
+
+
+def _format_table_row(values: Iterable[str], widths: list[int]) -> str:
+    return "  ".join(value.ljust(width) for value, width in zip(values, widths, strict=True)).rstrip()
+
+
+def _format_table_separator(widths: list[int]) -> str:
+    return "  ".join("-" * width for width in widths)
 
 
 def _format_atom_header(atom: Atom) -> str:
@@ -258,22 +313,30 @@ def _format_bond_line(molecule: Molecule, edge: Edge) -> str:
 
 def _format_system_block(molecule: Molecule, system_id: SystemId, system: BondingSystem) -> list[str]:
     title = f"[#{system_id.value}] {system.tag}" if system.tag else f"[#{system_id.value}]"
-    lines = [title, f"  shared electrons: {system.shared_electrons.value}"]
+    lines = [
+        title,
+        f"  shared electrons: {system.shared_electrons.value}",
+        f"  member edges:     {len(system.member_edges)}",
+    ]
     atom_refs = ", ".join(_render_atom_ref(molecule.atoms[atom_id]) for atom_id in sorted(system.member_atoms))
     if atom_refs:
         lines.append(f"  member atoms:     {atom_refs}")
     if system.member_edges:
         per_edge = system.shared_electrons.value / (2.0 * len(system.member_edges))
         lines.append(f"  edge bonus:       +{per_edge:.2f} to each listed edge")
-        lines.append("  member edges:")
+        lines.append("  edge list:")
         lines.extend(f"    - {_format_edge_short(molecule, edge)}" for edge in sorted(system.member_edges))
     else:
-        lines.append("  member edges:     none")
+        lines.append("  edge list:        none")
     return lines
 
 
 def _render_atom_ref(atom: Atom) -> str:
     return f"{atom.attributes.symbol.value}#{atom.atom_id.value}"
+
+
+def _render_atom_ref_bracketed(atom: Atom) -> str:
+    return f"[{_render_atom_ref(atom)}]"
 
 
 def _format_edge_short(molecule: Molecule, edge: Edge) -> str:
@@ -284,6 +347,14 @@ def _format_edge_short(molecule: Molecule, edge: Edge) -> str:
 
 def _format_system_label(system_id: int, tag: str | None) -> str:
     return f"#{system_id}[{tag}]" if tag else f"#{system_id}"
+
+
+def _system_labels_for_atom(system_items: list[tuple[SystemId, BondingSystem]], atom_id: AtomId) -> list[str]:
+    return [
+        _format_system_label(system_id.value, system.tag)
+        for system_id, system in system_items
+        if atom_id in system.member_atoms
+    ]
 
 
 def _format_atom_stereo(stereo: SmilesAtomStereo) -> str:

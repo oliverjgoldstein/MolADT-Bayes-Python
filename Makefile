@@ -98,6 +98,8 @@ ZINC_LIMIT_BENCHMARK_ARG := $(if $(ZINC_LIMIT),--zinc-limit $(ZINC_LIMIT),)
 ZINC_LIMIT_TIMING_ARG := $(if $(ZINC_LIMIT),--limit $(ZINC_LIMIT),)
 INCLUDE_MOLADT_ARG := $(if $(filter 1 true yes TRUE YES,$(INCLUDE_MOLADT)),--include-moladt,)
 VERBOSE_ARG := $(if $(filter 1 true yes TRUE YES,$(BENCHMARK_VERBOSE)),--verbose,)
+INVERSE_DESIGN_TARGET_ARG := $(if $(TARGET),--target $(TARGET),)
+INVERSE_DESIGN_SEED_ARG := $(if $(SEED_MOLECULE),--seed-molecule $(SEED_MOLECULE),)
 
 ifeq ($(OS_NAME),Darwin)
 ifneq ($(XCRUN),)
@@ -112,11 +114,12 @@ TOOLCHAIN_ENV := $(if $(DARWIN_SDKROOT),env CC="$(DARWIN_CLANG)" CXX="$(DARWIN_C
 MODEL_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),models/paper/run_$(RUN_TIMESTAMP),models/run_$(RUN_TIMESTAMP))
 TIMING_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),timing/paper/run_$(RUN_TIMESTAMP),timing/run_$(RUN_TIMESTAMP))
 FREESOLV_RESULTS_SUBDIR := freesolv/run_$(RUN_TIMESTAMP)
+INVERSE_DESIGN_RESULTS_SUBDIR := inverse_design/run_$(RUN_TIMESTAMP)
 BEST_QM9_EXTRA_MODELS := visnet_ensemble
 QM9_LONG_RESULTS_SUBDIR := qm9/long/run_$(RUN_TIMESTAMP)
 QM9_LONG_SEED := 102
 
-.PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-activate python-parse python-parse-smiles python-to-smiles python-pretty-example python-benchmark-qm9 python-benchmark-zinc freesolv qm9long benchmark benchmark-bg timing catboost-geom-model catboost-geom-model-paper model
+.PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-activate python-parse python-parse-smiles python-to-smiles python-pretty-example python-benchmark-qm9 python-benchmark-zinc freesolv inverse-design qm9long benchmark benchmark-bg timing catboost-geom-model catboost-geom-model-paper model
 
 help:
 	@printf "%s\n" \
@@ -131,6 +134,7 @@ help:
 	"  make python-to-smiles       Render molecules/benzene.sdf to SMILES" \
 		"  make python-pretty-example  Render EXAMPLE=ferrocene or EXAMPLE=diborane" \
 		"  make freesolv              Run the long FreeSolv MolADT-vs-MoleculeNet comparison" \
+		"  make inverse-design        Run the FreeSolv MolADT inverse-design proof of concept" \
 		"  make qm9long               Run the full-data QM9 ViSNet benchmark on rich SDF-backed MolADT geometry" \
 		"  make benchmark              Run the combined FreeSolv + QM9 comparison bundle" \
 		"  make benchmark-bg           Run the benchmark in the foreground and mirror output to the active results directory" \
@@ -430,6 +434,20 @@ freesolv:
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
 	"  expected figure: results/$(FREESOLV_RESULTS_SUBDIR)/freesolv_rmse_vs_moleculenet.svg"
 	MOLADT_RESULTS_DIR=results/$(FREESOLV_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all freesolv $(VERBOSE_ARG) $(FREESOLV_BENCHMARK_ARGS)
+
+inverse-design:
+	@printf "%s\n" \
+	"Running reviewer-facing FreeSolv inverse design." \
+	"  repo: MolADT-Bayes-Python" \
+	"  command: experiments.freesolv_inverse_design" \
+	"  model: fixed FreeSolv moladt_featurized Bayesian GP artifact" \
+	"  cli_flags: --target and --seed-molecule only" \
+	"  target: $(if $(TARGET),$(TARGET),median experimental FreeSolv value)" \
+	"  seed_molecule: $(if $(SEED_MOLECULE),$(SEED_MOLECULE),water)" \
+	"  results_dir: results/$(INVERSE_DESIGN_RESULTS_SUBDIR)" \
+	"  reference_dir: results/inverse_design/reference" \
+	"  output: generated MolADT/Dietz molecules on stdout plus top_*.py and dietz_*.py files"
+	MOLADT_RESULTS_DIR=results/$(INVERSE_DESIGN_RESULTS_SUBDIR) MOLADT_REFERENCE_RESULTS_DIR=results/inverse_design/reference $(PYTHON_CMD) -m experiments.freesolv_inverse_design $(INVERSE_DESIGN_TARGET_ARG) $(INVERSE_DESIGN_SEED_ARG)
 
 qm9long:
 	@printf "%s\n" \

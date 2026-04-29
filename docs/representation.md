@@ -48,8 +48,21 @@ Dietz-style ADT with two explicit 3c-2e bridging hydrogen bonding systems.
 Molecule Report
 ===============
 atoms            8
+heavy atoms      2
 sigma bonds      5
 bonding systems  2
+net charge       +0
+composition      B2 H6
+stereo flags     none
+
+Atoms
+-----
+atom   Z  chg  sigma  used  xyz (Angstrom)  sigma neighbors  systems
+...
+
+Electron Shells
+---------------
+...
 
 Bonding Systems
 ---------------
@@ -65,6 +78,14 @@ Bonding Systems
 ```
 
 That is the point of the representation. The unusual bonding is not an edge case bolted onto a string format later; it is part of the molecule object itself.
+
+For visual inspection, the same ADT can be exported to a standalone beta 3D viewer:
+
+```bash
+./.venv/bin/python -m moladt.cli view-html molecules/benzene.sdf --output benzene.viewer.html
+```
+
+The viewer keeps the ordinary sigma graph and the Dietz bonding-system layer separate. Local bonds are drawn as the base molecule, while bonding systems are colored and annotated with their tags, edge membership, atom membership, and shared-electron counts.
 
 Ferrocene makes the same point even more strongly. Standard SMILES can write it as:
 

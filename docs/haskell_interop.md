@@ -8,17 +8,16 @@ The shared contract lives under `data/processed/`. The goal is to let Haskell co
 
 ## What Python Writes
 
-For each exported dataset prefix such as `freesolv_moladt_featurized` or `qm9_moladt_featurized`, Python writes:
+For the Haskell-facing export prefix `freesolv_moladt_featurized`, Python writes:
 
 - `*_X_train.csv`, `*_X_valid.csv`, `*_X_test.csv`
 - `*_y_train.csv`, `*_y_valid.csv`, `*_y_test.csv`
 - `*_metadata.json`
 - `*_features.csv`
 
-Examples already used by the Haskell side include:
+Example already used by the Haskell side:
 
 - `data/processed/freesolv_moladt_featurized_X_train.csv`
-- `data/processed/qm9_moladt_featurized_X_train.csv`
 
 ## Standardization Contract
 
@@ -51,17 +50,16 @@ Each `*_metadata.json` file includes:
 
 ## Relation to the Python Models
 
-Python still fits the export-compatible Stan baseline for FreeSolv, and it still writes the standardized QM9 tabular exports consumed by the Haskell side:
+Python still fits the export-compatible FreeSolv Stan benchmark path:
 
 - FreeSolv: `bayes_gp_rbf_screened`
 
-The Haskell baseline is aligned to the exported linear `X/y` format used by the Python export path for QM9. It does not re-derive the feature matrix locally, and it is separate from the Python `make qm9long` ViSNet path.
+The Haskell side consumes the same standardized `X/y` export but runs its own local exact GP implementation rather than the Python Stan path.
 
-Shared modeling assumptions that matter for interop:
+Shared assumptions that matter for interop:
 
 - the response stays on its original scale
 - the predictor matrices are standardized only from the training split
-- the likelihood family is Student-`t` with `nu = 4`
 
 ## Practical Workflow
 
@@ -69,7 +67,6 @@ Shared modeling assumptions that matter for interop:
 
    ```bash
    ./.venv/bin/python -m scripts.run_all freesolv
-   ./.venv/bin/python -m scripts.process_qm9 --split-mode long
    ```
 
 2. In the Haskell repo, point the consumer at the processed directory:
@@ -78,15 +75,8 @@ Shared modeling assumptions that matter for interop:
    MOLADT_PROCESSED_DATA_DIR=../MolADT-Bayes-Python/data/processed stack run moladtbayes -- infer-benchmark freesolv_moladt_featurized lwis
    ```
 
-3. For an ADT-backed structural benchmark:
-
-   ```bash
-   MOLADT_PROCESSED_DATA_DIR=../MolADT-Bayes-Python/data/processed stack run moladtbayes -- infer-benchmark qm9_moladt_featurized mh:0.9 256
-   ```
-
 ## Source Files
 
 - [`scripts/splits.py`](../scripts/splits.py)
 - [`scripts/process_freesolv.py`](../scripts/process_freesolv.py)
-- [`scripts/process_qm9.py`](../scripts/process_qm9.py)
 - [`scripts/run_all.py`](../scripts/run_all.py)
