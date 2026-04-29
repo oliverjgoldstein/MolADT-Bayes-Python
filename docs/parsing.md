@@ -50,7 +50,7 @@ The SMILES path is conservative. It covers the classical subset used by tests an
 make molecule-viewer VIEWER_INPUT=molecules/benzene.sdf
 ```
 
-This writes a standalone HTML viewer under `results/viewer/`.
+This writes a standalone HTML viewer under `results/viewer/`. Click an atom in the viewer to show its stored shell and orbital glyphs.
 
 ## Rule Of Thumb
 

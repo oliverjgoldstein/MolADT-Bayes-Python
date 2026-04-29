@@ -39,7 +39,7 @@ The reference folder is Git-trackable:
 
 The top files are the 10 generated molecules with the highest model-side Bayesian credible score percentage.
 
-When inverse design runs with `--open-viewer`, the timestamped run folder also gets `top_01_molecule.viewer.html`, `top_02_molecule.viewer.html`, and so on up to the requested viewer count.
+When inverse design runs with `--open-viewer`, the timestamped run folder also gets `top_molecules.viewer.html`: one page with the requested top molecules in a scrollable molecule list.
 
 Read the generated pool:
 

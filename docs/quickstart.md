@@ -23,10 +23,11 @@ This creates `./.cmdstan`.
 ```bash
 make python-parse
 make python-pretty-example EXAMPLE=morphine
+make view
 make molecule-viewer VIEWER_INPUT=molecules/benzene.sdf
 ```
 
-Those commands check SDF parsing, built-in examples, validation, and the standalone molecule viewer.
+Those commands check SDF parsing, built-in examples, validation, and the standalone molecule viewer. `make view` opens six example molecules in one browser page. In the viewer, clicking an atom shows the shell and orbital data stored on that atom.
 
 `make test-molecule-viewer` runs the viewer tests and then opens the configured viewer HTML in the default browser.
 

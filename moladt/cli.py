@@ -3,13 +3,14 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from .chem.molecule import Molecule
 from .chem.molecule_ops import pretty_print_molecule
 from .chem.validate import validate_molecule
 from .examples import MANUSCRIPT_EXAMPLES, get_manuscript_example
 from .io.molecule_json import molecule_from_json, molecule_to_json
 from .io.sdf import read_sdf_record
 from .io.smiles import molecule_to_smiles, parse_smiles
-from .viewer import open_molecule_viewer, write_molecule_viewer_html
+from .viewer import open_molecule_viewer, write_molecule_viewer_collection_html, write_molecule_viewer_html
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -37,7 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
     from_json_parser.add_argument("path")
 
     viewer_parser = subparsers.add_parser("view-html", help="Export an interactive 3D molecule viewer HTML file")
-    viewer_parser.add_argument("path", help="Input SDF or MolADT JSON file")
+    viewer_parser.add_argument("path", nargs="+", help="Input SDF or MolADT JSON file(s)")
     viewer_parser.add_argument("-o", "--output", help="Output HTML path")
     viewer_parser.add_argument("--title", help="Viewer title")
     viewer_parser.add_argument(
@@ -83,7 +84,7 @@ def main(argv: list[str] | None = None) -> int:
         return _handle_from_json(Path(args.path))
     if args.command == "view-html":
         return _handle_view_html(
-            Path(args.path),
+            [Path(path) for path in args.path],
             output_path=None if args.output is None else Path(args.output),
             title=args.title,
             input_format=args.format,
@@ -139,29 +140,40 @@ def _handle_from_json(path: Path) -> int:
 
 
 def _handle_view_html(
-    path: Path,
+    paths: list[Path],
     *,
     output_path: Path | None,
     title: str | None,
     input_format: str | None,
     open_viewer: bool = False,
 ) -> int:
-    resolved_format = input_format or ("json" if path.suffix.lower() == ".json" else "sdf")
-    if resolved_format == "json":
-        molecule = molecule_from_json(path.read_bytes())
-        default_title = path.stem
+    entries = [_read_viewer_entry(path, input_format=input_format) for path in paths]
+    for _, molecule in entries:
+        validate_molecule(molecule)
+    if len(entries) == 1:
+        default_title = entries[0][0]
+        resolved_output = output_path or paths[0].with_suffix(".viewer.html")
+        written = write_molecule_viewer_html(entries[0][1], resolved_output, title=title or default_title)
     else:
-        record = read_sdf_record(path)
-        molecule = record.molecule
-        default_title = record.title or path.stem
-    validate_molecule(molecule)
-    resolved_output = output_path or path.with_suffix(".viewer.html")
-    written = write_molecule_viewer_html(molecule, resolved_output, title=title or default_title)
+        resolved_output = output_path or Path("results") / "viewer" / "molecules.viewer.html"
+        written = write_molecule_viewer_collection_html(
+            entries,
+            resolved_output,
+            title=title or f"{len(entries)} MolADT molecules",
+        )
     print(written)
     if open_viewer:
         open_molecule_viewer(written)
         print(f"Opened viewer: {written.resolve().as_uri()}")
     return 0
+
+
+def _read_viewer_entry(path: Path, *, input_format: str | None) -> tuple[str, Molecule]:
+    resolved_format = input_format or ("json" if path.suffix.lower() == ".json" else "sdf")
+    if resolved_format == "json":
+        return path.stem, molecule_from_json(path.read_bytes())
+    record = read_sdf_record(path)
+    return record.title or path.stem, record.molecule
 
 
 def _handle_pretty_example(name: str, *, viewer_output: Path | None = None, open_viewer: bool = False) -> int:

@@ -46,7 +46,10 @@ See [Models and features](docs/models.md), [Inference and benchmarks](docs/infer
 ```bash
 make python-setup
 make python-parse
+make view
 ```
+
+`make view` opens six example molecules in one browser page with a scrollable molecule list. Click any atom to show its stored orbital glyphs.
 
 For Stan-backed FreeSolv runs:
 
@@ -66,7 +69,7 @@ make molecule-viewer VIEWER_INPUT=molecules/benzene.sdf
 make test-molecule-viewer
 ```
 
-The viewer exports a standalone HTML file under `results/viewer/` by default. Use `VIEWER_OUTPUT`, `VIEWER_FORMAT`, and `VIEWER_TITLE` when you need a custom export.
+The viewer exports a standalone HTML file under `results/viewer/` by default. Click an atom in the viewer to show the stored shell and orbital glyphs for that atom. `view-html` can take several files and put them in one page with a scrollable molecule list. Use `VIEWER_OUTPUT`, `VIEWER_FORMAT`, and `VIEWER_TITLE` when you need a custom export.
 
 `make test-molecule-viewer` now runs the viewer tests, writes the configured viewer HTML, and opens it in your default browser automatically.
 
@@ -78,13 +81,14 @@ OPEN_VIEWER=1 make molecule-viewer VIEWER_INPUT=molecules/diborane.sdf
 OPEN_VIEWER=1 VIEWER_COUNT=3 make inverse-design TARGET=-5.0
 ```
 
-The first command still prints the pretty molecule report, then writes and opens `results/viewer/ferrocene.viewer.html`. The inverse-design command writes viewer files for the top generated molecules under `results/inverse_design/run_.../` and opens the first `VIEWER_COUNT` of them.
+The first command still prints the pretty molecule report, then writes and opens `results/viewer/ferrocene.viewer.html`. The inverse-design command writes `top_molecules.viewer.html` under `results/inverse_design/run_.../` and opens one page containing the first `VIEWER_COUNT` top molecules.
 
 Direct CLI equivalents:
 
 ```bash
 ./.venv/bin/python -m moladt.cli pretty-example diborane --open-viewer
 ./.venv/bin/python -m moladt.cli view-html molecules/benzene.sdf --output results/viewer/benzene.viewer.html --open-viewer
+./.venv/bin/python -m moladt.cli view-html molecules/benzene.sdf molecules/diborane.sdf molecules/ferrocene.sdf --output results/viewer/examples.viewer.html --open-viewer
 ./.venv/bin/python -m experiments.freesolv_inverse_design --target -5.0 --open-viewer --viewer-count 3
 ```
 

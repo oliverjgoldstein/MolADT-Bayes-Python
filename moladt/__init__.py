@@ -14,7 +14,15 @@ from .chem.molecule import (
 )
 from .chem.mutable import MutableMolecule
 from .chem.pretty import PrettyBlock, pretty_text
-from .viewer import molecule_viewer_html, molecule_viewer_payload, open_molecule_viewer, write_molecule_viewer_html
+from .viewer import (
+    molecule_viewer_collection_html,
+    molecule_viewer_collection_payload,
+    molecule_viewer_html,
+    molecule_viewer_payload,
+    open_molecule_viewer,
+    write_molecule_viewer_collection_html,
+    write_molecule_viewer_html,
+)
 
 __all__ = [
     "Atom",
@@ -35,9 +43,12 @@ __all__ = [
     "SystemId",
     "mk_bonding_system",
     "mk_edge",
+    "molecule_viewer_collection_html",
+    "molecule_viewer_collection_payload",
     "molecule_viewer_html",
     "molecule_viewer_payload",
     "open_molecule_viewer",
     "pretty_text",
+    "write_molecule_viewer_collection_html",
     "write_molecule_viewer_html",
 ]

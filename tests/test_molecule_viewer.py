@@ -7,7 +7,13 @@ from moladt.cli import main
 import moladt.cli as cli
 from moladt.examples import diborane_pretty, ferrocene_pretty
 from moladt.io import molecule_to_json
-from moladt.viewer import molecule_viewer_html, molecule_viewer_payload, write_molecule_viewer_html
+from moladt.viewer import (
+    molecule_viewer_collection_html,
+    molecule_viewer_collection_payload,
+    molecule_viewer_html,
+    molecule_viewer_payload,
+    write_molecule_viewer_html,
+)
 
 
 def test_molecule_viewer_payload_includes_bonding_system_annotations() -> None:
@@ -34,12 +40,63 @@ def test_molecule_viewer_payload_keeps_overlapping_system_colours_distinct() -> 
     assert payload["systems"][1]["color"] != payload["systems"][2]["color"]
 
 
+def test_molecule_viewer_payload_includes_atom_orbitals() -> None:
+    payload = molecule_viewer_payload(ferrocene_pretty, title="Ferrocene")
+    carbon = next(atom for atom in payload["atoms"] if atom["symbol"] == "C")
+
+    assert carbon["shells"][1]["n"] == 2
+    p_orbitals = [orbital for orbital in carbon["shells"][1]["orbitals"] if orbital["kind"] == "p"]
+    assert [orbital["orbital"] for orbital in p_orbitals] == ["px", "py", "pz"]
+    assert [orbital["electrons"] for orbital in p_orbitals] == [1, 1, 0]
+    assert p_orbitals[0]["orientation"] == {"x": 1.0, "y": 0.0, "z": 0.0}
+
+
+def test_molecule_viewer_collection_payload_lists_multiple_molecules() -> None:
+    payload = molecule_viewer_collection_payload(
+        (
+            ("Diborane", diborane_pretty),
+            ("Ferrocene", ferrocene_pretty),
+        ),
+        title="Two molecules",
+    )
+
+    assert payload["format"] == "moladt-viewer-collection-v1"
+    assert payload["title"] == "Two molecules"
+    assert [item["title"] for item in payload["molecules"]] == ["Diborane", "Ferrocene"]
+
+
 def test_molecule_viewer_html_offsets_overlapping_system_edges() -> None:
     html = molecule_viewer_html(ferrocene_pretty, title="Ferrocene")
 
     assert "function systemEdgeLaneMap" in html
     assert "offset: laneOffset" in html
     assert "alpha: active ? 1 : 0.18" in html
+
+
+def test_molecule_viewer_html_can_draw_selected_atom_orbitals() -> None:
+    html = molecule_viewer_html(ferrocene_pretty, title="Ferrocene")
+
+    assert "function drawSelectedAtomOrbitals" in html
+    assert "function drawDirectionalOrbital" in html
+    assert "function drawOrbitalLobe" in html
+    assert "orbitalSummary(atom)" in html
+    assert "state.selectedAtom" in html
+
+
+def test_molecule_viewer_html_can_switch_between_multiple_molecules() -> None:
+    html = molecule_viewer_collection_html(
+        (
+            ("Diborane", diborane_pretty),
+            ("Ferrocene", ferrocene_pretty),
+        ),
+        title="Two molecules",
+    )
+
+    assert "moladt-viewer-collection-v1" in html
+    assert "function switchMolecule" in html
+    assert 'id="molecule-list"' in html
+    assert "Diborane" in html
+    assert "Ferrocene" in html
 
 
 def test_molecule_viewer_html_is_interactive_visual_document() -> None:
@@ -75,6 +132,28 @@ def test_view_html_cli_accepts_moladt_json(tmp_path: Path, capsys) -> None:
     assert result == 0
     assert str(html_path) in output
     assert "bridge_h4_3c2e" in html_path.read_text(encoding="utf-8")
+
+
+def test_view_html_cli_accepts_multiple_inputs_in_one_viewer(tmp_path: Path, capsys) -> None:
+    html_path = tmp_path / "collection.viewer.html"
+
+    result = main(
+        [
+            "view-html",
+            "molecules/diborane.sdf",
+            "molecules/ferrocene.sdf",
+            "--output",
+            str(html_path),
+        ]
+    )
+    output = capsys.readouterr().out
+    html = html_path.read_text(encoding="utf-8")
+
+    assert result == 0
+    assert str(html_path) in output
+    assert "moladt-viewer-collection-v1" in html
+    assert "diborane" in html
+    assert "ferrocene" in html
 
 
 def test_view_html_cli_can_open_written_viewer(tmp_path: Path, capsys, monkeypatch) -> None:

@@ -4,7 +4,7 @@ import json
 import webbrowser
 from html import escape
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from .chem.dietz import Edge
 from .chem.molecule import Molecule
@@ -54,6 +54,7 @@ def molecule_viewer_payload(molecule: Molecule, *, title: str = "MolADT 3D Viewe
             "y": atom.coordinate.y.value,
             "z": atom.coordinate.z.value,
             "charge": atom.formal_charge,
+            "shells": _shells_payload(atom.shells),
             **_element_style(atom.attributes.symbol.value),
         }
         for atom_id, atom in sorted(molecule.atoms.items(), key=lambda item: item[0].value)
@@ -92,6 +93,38 @@ def molecule_viewer_html(molecule: Molecule, *, title: str = "MolADT 3D Viewer")
     """Render a standalone interactive 3D HTML viewer for a MolADT molecule."""
 
     payload = molecule_viewer_payload(molecule, title=title)
+    return _viewer_html(payload, title=title)
+
+
+def molecule_viewer_collection_payload(
+    molecules: Sequence[tuple[str, Molecule]],
+    *,
+    title: str = "MolADT Molecule Viewer",
+) -> dict[str, Any]:
+    """Return a compact JSON payload for a single viewer containing many molecules."""
+
+    return {
+        "format": "moladt-viewer-collection-v1",
+        "title": title,
+        "molecules": [
+            molecule_viewer_payload(molecule, title=molecule_title)
+            for molecule_title, molecule in molecules
+        ],
+    }
+
+
+def molecule_viewer_collection_html(
+    molecules: Sequence[tuple[str, Molecule]],
+    *,
+    title: str = "MolADT Molecule Viewer",
+) -> str:
+    """Render a standalone viewer page that can switch between multiple molecules."""
+
+    payload = molecule_viewer_collection_payload(molecules, title=title)
+    return _viewer_html(payload, title=title)
+
+
+def _viewer_html(payload: dict[str, Any], *, title: str) -> str:
     payload_json = json.dumps(payload, sort_keys=True, separators=(",", ":")).replace("</", "<\\/")
     return (
         _HTML_TEMPLATE.replace("__DOCUMENT_TITLE__", escape(title))
@@ -113,6 +146,20 @@ def write_molecule_viewer_html(
     return output_path
 
 
+def write_molecule_viewer_collection_html(
+    molecules: Sequence[tuple[str, Molecule]],
+    path: str | Path,
+    *,
+    title: str = "MolADT Molecule Viewer",
+) -> Path:
+    """Write one standalone HTML viewer containing multiple molecules."""
+
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(molecule_viewer_collection_html(molecules, title=title), encoding="utf-8")
+    return output_path
+
+
 def open_molecule_viewer(path: str | Path) -> bool:
     """Open a written molecule viewer HTML file in the default browser."""
 
@@ -122,6 +169,52 @@ def open_molecule_viewer(path: str | Path) -> bool:
 
 def _edge_payload(edge: Edge) -> dict[str, int]:
     return {"a": edge.a.value, "b": edge.b.value}
+
+
+def _shells_payload(shells: Any) -> list[dict[str, Any]]:
+    return [_shell_payload(shell) for shell in shells]
+
+
+def _shell_payload(shell: Any) -> dict[str, Any]:
+    orbitals: list[dict[str, Any]] = []
+    for kind, subshell in (
+        ("s", shell.s_subshell),
+        ("p", shell.p_subshell),
+        ("d", shell.d_subshell),
+        ("f", shell.f_subshell),
+    ):
+        if subshell is not None:
+            orbitals.extend(_orbital_payload(kind, orbital) for orbital in subshell.orbitals)
+    return {
+        "n": shell.principal_quantum_number,
+        "orbitals": orbitals,
+    }
+
+
+def _orbital_payload(kind: str, orbital: Any) -> dict[str, Any]:
+    return {
+        "kind": kind,
+        "orbital": orbital.orbital_type.value,
+        "electrons": orbital.electron_count,
+        "orientation": None if orbital.orientation is None else _coordinate_payload(orbital.orientation),
+        "hybridComponents": None
+        if orbital.hybrid_components is None
+        else [
+            {
+                "weight": weight,
+                "orbital": getattr(pure.orbital, "value", str(pure.orbital)),
+            }
+            for weight, pure in orbital.hybrid_components
+        ],
+    }
+
+
+def _coordinate_payload(coordinate: Any) -> dict[str, float]:
+    return {
+        "x": coordinate.x.value,
+        "y": coordinate.y.value,
+        "z": coordinate.z.value,
+    }
 
 
 def _element_style(symbol: str) -> dict[str, object]:
@@ -308,6 +401,7 @@ _HTML_TEMPLATE = """<!doctype html>
       font-size: 12px;
     }
 
+    .molecule-list,
     .system-list,
     .atom-list {
       display: grid;
@@ -315,6 +409,13 @@ _HTML_TEMPLATE = """<!doctype html>
       margin-top: 10px;
     }
 
+    .molecule-list {
+      max-height: 210px;
+      overflow-y: auto;
+      padding-right: 3px;
+    }
+
+    .molecule-row,
     .system-row {
       display: grid;
       grid-template-columns: 10px minmax(0, 1fr) auto;
@@ -328,9 +429,26 @@ _HTML_TEMPLATE = """<!doctype html>
       text-align: left;
     }
 
+    .molecule-row {
+      grid-template-columns: 24px minmax(0, 1fr) auto;
+    }
+
+    .molecule-row.active,
     .system-row.active {
       border-color: var(--accent);
       box-shadow: 0 0 0 3px rgba(0, 143, 135, 0.13);
+    }
+
+    .index-badge {
+      display: inline-grid;
+      place-items: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #eef6f4;
+      color: #006b65;
+      font-size: 12px;
+      font-weight: 900;
     }
 
     .swatch {
@@ -371,6 +489,11 @@ _HTML_TEMPLATE = """<!doctype html>
       border-bottom: 1px solid #edf0f0;
       padding: 7px 0;
       color: var(--muted);
+      cursor: pointer;
+    }
+
+    .atom-row.active {
+      color: var(--ink);
     }
 
     .atom-dot {
@@ -453,6 +576,10 @@ _HTML_TEMPLATE = """<!doctype html>
           <div class="metric"><strong id="bond-count">0</strong><span>sigma bonds</span></div>
           <div class="metric"><strong id="system-count">0</strong><span>systems</span></div>
         </section>
+        <section id="molecule-section">
+          <h2>Molecules</h2>
+          <div id="molecule-list" class="molecule-list"></div>
+        </section>
         <section>
           <h2>Bonding Systems</h2>
           <div id="system-list" class="system-list"></div>
@@ -500,14 +627,29 @@ _HTML_TEMPLATE = """<!doctype html>
       labels: true,
       systems: true,
       activeSystem: null,
+      selectedAtom: null,
       pointerDown: false,
+      pointerMoved: false,
       lastX: 0,
       lastY: 0,
+      pointerStartX: 0,
+      pointerStartY: 0,
       hoverAtom: null,
       screenAtoms: []
     };
 
-    let molecule = normalizePayload(JSON.parse(document.getElementById("moladt-payload").textContent));
+    let viewer = normalizeViewerPayload(JSON.parse(document.getElementById("moladt-payload").textContent));
+    let molecule = viewer.molecules[viewer.activeIndex] || emptyMolecule();
+
+    function emptyMolecule() {
+      return {
+        title: "No molecule",
+        atoms: [],
+        atomMap: new Map(),
+        bonds: [],
+        systems: []
+      };
+    }
 
     function edgeKey(edge) {
       return [Number(edge.a), Number(edge.b)].sort((a, b) => a - b).join("-");
@@ -519,6 +661,64 @@ _HTML_TEMPLATE = """<!doctype html>
 
     function edgeFromMoladt(edge) {
       return { a: atomIdValue(edge.a), b: atomIdValue(edge.b) };
+    }
+
+    function coordinateValue(value) {
+      return typeof value === "object" && value !== null ? Number(value.value) : Number(value || 0);
+    }
+
+    function coordinateFromMoladt(coordinate) {
+      if (!coordinate) {
+        return null;
+      }
+      return {
+        x: coordinateValue(coordinate.x),
+        y: coordinateValue(coordinate.y),
+        z: coordinateValue(coordinate.z)
+      };
+    }
+
+    function orbitalFromMoladt(kind, orbital) {
+      return {
+        kind,
+        orbital: String(orbital.orbital_type || orbital.orbital || kind),
+        electrons: Number(orbital.electron_count ?? orbital.electrons ?? 0),
+        orientation: coordinateFromMoladt(orbital.orientation),
+        hybridComponents: orbital.hybrid_components || orbital.hybridComponents || null
+      };
+    }
+
+    function shellsFromMoladt(shells) {
+      return (shells || []).map((shell) => {
+        const orbitals = [];
+        [
+          ["s", shell.s_subshell],
+          ["p", shell.p_subshell],
+          ["d", shell.d_subshell],
+          ["f", shell.f_subshell]
+        ].forEach(([kind, subshell]) => {
+          if (subshell && subshell.orbitals) {
+            subshell.orbitals.forEach((orbital) => orbitals.push(orbitalFromMoladt(kind, orbital)));
+          }
+        });
+        return {
+          n: Number(shell.principal_quantum_number || shell.n || 0),
+          orbitals
+        };
+      });
+    }
+
+    function normalizeShells(shells) {
+      return (shells || []).map((shell) => ({
+        n: Number(shell.n || shell.principal_quantum_number || 0),
+        orbitals: (shell.orbitals || []).map((orbital) => ({
+          kind: String(orbital.kind || "s"),
+          orbital: String(orbital.orbital || orbital.orbital_type || orbital.kind || "s"),
+          electrons: Number(orbital.electrons ?? orbital.electron_count ?? 0),
+          orientation: orbital.orientation ? coordinateFromMoladt(orbital.orientation) : null,
+          hybridComponents: orbital.hybridComponents || orbital.hybrid_components || null
+        }))
+      }));
     }
 
     function fromMoladtJson(raw) {
@@ -548,6 +748,7 @@ _HTML_TEMPLATE = """<!doctype html>
           y: Number(atom.coordinate.y.value),
           z: Number(atom.coordinate.z.value),
           charge: Number(atom.formal_charge || 0),
+          shells: shellsFromMoladt(atom.shells || []),
           color: style.color,
           edge: style.edge,
           radius: style.radius
@@ -574,6 +775,23 @@ _HTML_TEMPLATE = """<!doctype html>
       };
     }
 
+    function normalizeViewerPayload(raw) {
+      if (raw && raw.format === "moladt-viewer-collection-v1") {
+        const molecules = (raw.molecules || []).map(normalizePayload);
+        return {
+          title: raw.title || "MolADT Molecule Viewer",
+          activeIndex: 0,
+          molecules
+        };
+      }
+      const single = normalizePayload(raw);
+      return {
+        title: single.title,
+        activeIndex: 0,
+        molecules: [single]
+      };
+    }
+
     function normalizePayload(raw) {
       const payload = raw && raw.format === "moladt-viewer-v1" ? raw : fromMoladtJson(raw);
       const atoms = payload.atoms.map((atom) => {
@@ -585,6 +803,7 @@ _HTML_TEMPLATE = """<!doctype html>
           y: Number(atom.y),
           z: Number(atom.z),
           charge: Number(atom.charge || 0),
+          shells: normalizeShells(atom.shells || []),
           radius: Number(atom.radius || style.radius),
           color: atom.color || style.color,
           edge: atom.edge || style.edge
@@ -720,6 +939,198 @@ _HTML_TEMPLATE = """<!doctype html>
       return lanes;
     }
 
+    function hexToRgba(hex, alpha) {
+      const clean = String(hex || "#000000").replace("#", "");
+      const value = clean.length === 3
+        ? clean.split("").map((part) => part + part).join("")
+        : clean.padEnd(6, "0").slice(0, 6);
+      const r = parseInt(value.slice(0, 2), 16);
+      const g = parseInt(value.slice(2, 4), 16);
+      const b = parseInt(value.slice(4, 6), 16);
+      return "rgba(" + r + ", " + g + ", " + b + ", " + alpha + ")";
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function flattenOrbitals(atom) {
+      return (atom.shells || []).flatMap((shell) => (
+        (shell.orbitals || []).map((orbital, index) => ({
+          ...orbital,
+          n: shell.n,
+          index
+        }))
+      ));
+    }
+
+    function orbitalSummary(atom) {
+      const shells = atom.shells || [];
+      const orbitals = flattenOrbitals(atom);
+      const electrons = orbitals.reduce((total, orbital) => total + Number(orbital.electrons || 0), 0);
+      return shells.length + " shells, " + orbitals.length + " orbitals, " + electrons + " e";
+    }
+
+    function shellSummary(atom) {
+      return (atom.shells || []).map((shell) => {
+        const groups = new Map();
+        (shell.orbitals || []).forEach((orbital) => {
+          const items = groups.get(orbital.kind) || [];
+          items.push(Number(orbital.electrons || 0));
+          groups.set(orbital.kind, items);
+        });
+        const text = Array.from(groups.entries()).map(([kind, counts]) => kind + "(" + counts.join("/") + ")").join(" ");
+        return "n" + shell.n + ": " + text;
+      }).join("<br>");
+    }
+
+    function normalizeVector(vector, fallback) {
+      const candidate = vector || fallback || { x: 1, y: 0, z: 0 };
+      const x = Number(candidate.x || 0);
+      const y = Number(candidate.y || 0);
+      const z = Number(candidate.z || 0);
+      const length = Math.hypot(x, y, z);
+      if (length < 0.0001) {
+        return fallback || { x: 1, y: 0, z: 0 };
+      }
+      return { x: x / length, y: y / length, z: z / length };
+    }
+
+    function cross(a, b) {
+      return {
+        x: a.y * b.z - a.z * b.y,
+        y: a.z * b.x - a.x * b.z,
+        z: a.x * b.y - a.y * b.x
+      };
+    }
+
+    function fallbackAxis(orbital) {
+      const name = String(orbital.orbital || "");
+      if (name.includes("py")) return { x: 0, y: 1, z: 0 };
+      if (name.includes("pz")) return { x: 0, y: 0, z: 1 };
+      if (name.includes("xy")) return normalizeVector({ x: 1, y: 1, z: 0 });
+      if (name.includes("yz")) return normalizeVector({ x: 0, y: 1, z: 1 });
+      if (name.includes("xz")) return normalizeVector({ x: 1, y: 0, z: 1 });
+      if (name.includes("z")) return { x: 0, y: 0, z: 1 };
+      return { x: 1, y: 0, z: 0 };
+    }
+
+    function perpendicularAxis(axis) {
+      const seed = Math.abs(axis.z) < 0.82 ? { x: 0, y: 0, z: 1 } : { x: 0, y: 1, z: 0 };
+      return normalizeVector(cross(axis, seed), { x: 0, y: 1, z: 0 });
+    }
+
+    function projectLocal(atom, vector, distance) {
+      return project({
+        vx: atom.vx + vector.x * distance,
+        vy: atom.vy + vector.y * distance,
+        vz: atom.vz + vector.z * distance
+      });
+    }
+
+    function drawOrbitalLobe(center, guide, radius, color, alpha) {
+      const angle = Math.atan2(center.y - guide.y, center.x - guide.x);
+      ctx.save();
+      ctx.translate(center.x, center.y);
+      ctx.rotate(angle);
+      ctx.shadowColor = hexToRgba(color, Math.min(0.35, alpha));
+      ctx.shadowBlur = 18;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, radius * 1.22, radius * 0.72, 0, 0, Math.PI * 2);
+      ctx.fillStyle = hexToRgba(color, alpha);
+      ctx.fill();
+      ctx.shadowColor = "transparent";
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = hexToRgba(color, Math.min(0.92, alpha + 0.22));
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawSOrbital(point, orbital) {
+      const n = Number(orbital.n || 1);
+      const radius = Math.max(18, (17 + n * 6) * point.p * state.zoom);
+      const alpha = orbital.electrons > 0 ? 0.13 : 0.055;
+      const color = "#38bdf8";
+      const gradient = ctx.createRadialGradient(point.x, point.y, Math.max(2, radius * 0.12), point.x, point.y, radius);
+      gradient.addColorStop(0, hexToRgba(color, alpha * 1.8));
+      gradient.addColorStop(0.66, hexToRgba(color, alpha));
+      gradient.addColorStop(1, hexToRgba(color, 0));
+      ctx.save();
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = hexToRgba(color, alpha + 0.18);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function orbitalStyle(kind) {
+      if (kind === "d") return { color: "#f59e0b", lobes: 4 };
+      if (kind === "f") return { color: "#22a06b", lobes: 6 };
+      if (kind === "p") return { color: "#a855f7", lobes: 2 };
+      return { color: "#38bdf8", lobes: 1 };
+    }
+
+    function drawDirectionalOrbital(atom, point, orbital) {
+      const style = orbitalStyle(orbital.kind);
+      const axis = normalizeVector(orbital.orientation, fallbackAxis(orbital));
+      const perpendicular = perpendicularAxis(axis);
+      const third = normalizeVector(cross(axis, perpendicular), { x: 0, y: 0, z: 1 });
+      const axes = style.lobes === 6
+        ? [axis, { x: -axis.x, y: -axis.y, z: -axis.z }, perpendicular, { x: -perpendicular.x, y: -perpendicular.y, z: -perpendicular.z }, third, { x: -third.x, y: -third.y, z: -third.z }]
+        : style.lobes === 4
+          ? [axis, { x: -axis.x, y: -axis.y, z: -axis.z }, perpendicular, { x: -perpendicular.x, y: -perpendicular.y, z: -perpendicular.z }]
+          : [axis, { x: -axis.x, y: -axis.y, z: -axis.z }];
+      const n = Number(orbital.n || 1);
+      const shellDistance = 0.34 + Math.min(5, n) * 0.06;
+      const radius = Math.max(8, (10 + Math.min(5, n) * 1.5) * point.p * state.zoom);
+      const alpha = orbital.electrons > 0 ? Math.min(0.52, 0.22 + orbital.electrons * 0.09) : 0.08;
+      axes.forEach((localAxis) => {
+        const lobe = projectLocal(point.atom, localAxis, shellDistance);
+        drawOrbitalLobe(lobe, point, radius, style.color, alpha);
+      });
+      const forward = projectLocal(point.atom, axis, shellDistance);
+      const backward = projectLocal(point.atom, { x: -axis.x, y: -axis.y, z: -axis.z }, shellDistance);
+      drawLine(forward, backward, {
+        width: 1.2,
+        color: style.color,
+        alpha: Math.min(0.36, alpha)
+      });
+    }
+
+    function drawSelectedAtomOrbitals(points) {
+      const atom = state.selectedAtom;
+      if (!atom) {
+        return;
+      }
+      const point = points.get(atom.id);
+      if (!point) {
+        return;
+      }
+      const orbitals = flattenOrbitals(atom).sort((left, right) => Number(left.n || 0) - Number(right.n || 0));
+      ctx.save();
+      orbitals.forEach((orbital) => {
+        if (orbital.kind === "s") {
+          drawSOrbital(point, orbital);
+        } else {
+          drawDirectionalOrbital(atom, point, orbital);
+        }
+      });
+      ctx.lineWidth = 2.6;
+      ctx.strokeStyle = "rgba(0, 143, 135, 0.86)";
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, (point.radius || 12) + 7, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     function roundedRect(x, y, width, height, radius) {
       const r = Math.min(radius, width / 2, height / 2);
       ctx.beginPath();
@@ -767,7 +1178,8 @@ _HTML_TEMPLATE = """<!doctype html>
     function drawAtom(point) {
       const atom = point.atom;
       const radius = Math.max(8, atom.radius * 13 * point.p * state.zoom);
-      const active = state.hoverAtom && state.hoverAtom.id === atom.id;
+      const active = (state.hoverAtom && state.hoverAtom.id === atom.id)
+        || (state.selectedAtom && state.selectedAtom.id === atom.id);
       const gradient = ctx.createRadialGradient(point.x - radius * 0.32, point.y - radius * 0.36, radius * 0.1, point.x, point.y, radius);
       gradient.addColorStop(0, "#ffffff");
       gradient.addColorStop(0.18, atom.color);
@@ -838,12 +1250,23 @@ _HTML_TEMPLATE = """<!doctype html>
         });
       }
 
+      drawSelectedAtomOrbitals(points);
       const sortedAtoms = Array.from(points.values()).sort((a, b) => a.z - b.z);
       sortedAtoms.forEach(drawAtom);
       state.screenAtoms = sortedAtoms;
       if (state.systems) {
         molecule.systems.forEach((system) => drawSystemLabel(system, points));
       }
+    }
+
+    function switchMolecule(index) {
+      viewer.activeIndex = index;
+      molecule = viewer.molecules[viewer.activeIndex] || emptyMolecule();
+      state.activeSystem = null;
+      state.selectedAtom = null;
+      state.hoverAtom = null;
+      renderPanel();
+      draw();
     }
 
     function renderPanel() {
@@ -853,6 +1276,24 @@ _HTML_TEMPLATE = """<!doctype html>
       document.getElementById("system-count").textContent = String(molecule.systems.length);
       document.getElementById("toggle-labels").classList.toggle("active", state.labels);
       document.getElementById("toggle-systems").classList.toggle("active", state.systems);
+
+      const moleculeSection = document.getElementById("molecule-section");
+      const moleculeList = document.getElementById("molecule-list");
+      moleculeSection.style.display = viewer.molecules.length > 1 ? "block" : "none";
+      moleculeList.innerHTML = "";
+      viewer.molecules.forEach((item, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "molecule-row";
+        button.classList.toggle("active", index === viewer.activeIndex);
+        button.innerHTML = '<span class="index-badge"></span><span><span class="row-title"></span><span class="row-meta"></span></span><span class="pill"></span>';
+        button.querySelector(".index-badge").textContent = String(index + 1);
+        button.querySelector(".row-title").textContent = item.title;
+        button.querySelector(".row-meta").textContent = item.atoms.length + " atoms, " + item.systems.length + " systems";
+        button.querySelector(".pill").textContent = item.bonds.length + " bonds";
+        button.addEventListener("click", () => switchMolecule(index));
+        moleculeList.append(button);
+      });
 
       const systemList = document.getElementById("system-list");
       systemList.innerHTML = "";
@@ -885,13 +1326,21 @@ _HTML_TEMPLATE = """<!doctype html>
       molecule.atoms.forEach((atom) => {
         const row = document.createElement("div");
         row.className = "atom-row";
+        row.classList.toggle("active", state.selectedAtom && state.selectedAtom.id === atom.id);
         const charge = atom.charge ? (atom.charge > 0 ? "+" + atom.charge : String(atom.charge)) : "0";
         row.innerHTML = '<span class="atom-dot"></span><span class="row-title"></span><span class="row-meta"></span>';
         row.querySelector(".atom-dot").style.background = atom.color;
         row.querySelector(".row-title").textContent = atom.label;
-        row.querySelector(".row-meta").textContent = "charge " + charge;
+        row.querySelector(".row-meta").textContent = "charge " + charge + ", " + orbitalSummary(atom);
+        row.addEventListener("click", () => {
+          state.selectedAtom = state.selectedAtom && state.selectedAtom.id === atom.id ? null : atom;
+          setSelection(state.selectedAtom);
+          renderPanel();
+          draw();
+        });
         atomList.append(row);
       });
+      setSelection(state.selectedAtom);
     }
 
     function setSelection(atom) {
@@ -902,10 +1351,26 @@ _HTML_TEMPLATE = """<!doctype html>
       }
       const systems = molecule.systems.filter((system) => system.atoms.includes(atom.id)).map((system) => system.label);
       const charge = atom.charge ? (atom.charge > 0 ? "+" + atom.charge : String(atom.charge)) : "0";
-      selection.innerHTML = "<strong>" + atom.label + "</strong><br>charge " + charge + "<br>" + (systems.length ? systems.join("<br>") : "no bonding systems");
+      const shellText = shellSummary(atom);
+      selection.innerHTML = "<strong>" + escapeHtml(atom.label) + "</strong><br>charge " + escapeHtml(charge) + "<br>"
+        + escapeHtml(orbitalSummary(atom)) + (shellText ? "<br>" + shellText.split("<br>").map(escapeHtml).join("<br>") : "")
+        + "<br>" + (systems.length ? systems.map(escapeHtml).join("<br>") : "no bonding systems");
     }
 
     function updateHover(event) {
+      state.hoverAtom = pickAtom(event);
+      if (state.hoverAtom) {
+        tooltip.style.display = "block";
+        tooltip.style.left = event.clientX + 14 + "px";
+        tooltip.style.top = event.clientY + 14 + "px";
+        tooltip.textContent = state.hoverAtom.label;
+      } else {
+        tooltip.style.display = "none";
+      }
+      draw();
+    }
+
+    function pickAtom(event) {
       const rect = canvas.getBoundingClientRect();
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
@@ -916,23 +1381,16 @@ _HTML_TEMPLATE = """<!doctype html>
           best = { atom: point.atom, distance };
         }
       }
-      state.hoverAtom = best ? best.atom : null;
-      if (state.hoverAtom) {
-        tooltip.style.display = "block";
-        tooltip.style.left = event.clientX + 14 + "px";
-        tooltip.style.top = event.clientY + 14 + "px";
-        tooltip.textContent = state.hoverAtom.label;
-      } else {
-        tooltip.style.display = "none";
-      }
-      setSelection(state.hoverAtom);
-      draw();
+      return best ? best.atom : null;
     }
 
     canvas.addEventListener("pointerdown", (event) => {
       state.pointerDown = true;
+      state.pointerMoved = false;
       state.lastX = event.clientX;
       state.lastY = event.clientY;
+      state.pointerStartX = event.clientX;
+      state.pointerStartY = event.clientY;
       canvas.setPointerCapture(event.pointerId);
     });
 
@@ -942,6 +1400,9 @@ _HTML_TEMPLATE = """<!doctype html>
         const dy = event.clientY - state.lastY;
         state.lastX = event.clientX;
         state.lastY = event.clientY;
+        if (Math.hypot(event.clientX - state.pointerStartX, event.clientY - state.pointerStartY) > 4) {
+          state.pointerMoved = true;
+        }
         state.ry += dx * 0.009;
         state.rx += dy * 0.009;
         draw();
@@ -951,6 +1412,13 @@ _HTML_TEMPLATE = """<!doctype html>
     });
 
     canvas.addEventListener("pointerup", (event) => {
+      if (!state.pointerMoved) {
+        const atom = pickAtom(event);
+        state.selectedAtom = atom && (!state.selectedAtom || state.selectedAtom.id !== atom.id) ? atom : null;
+        setSelection(state.selectedAtom);
+        renderPanel();
+        draw();
+      }
       state.pointerDown = false;
       canvas.releasePointerCapture(event.pointerId);
     });
@@ -959,7 +1427,6 @@ _HTML_TEMPLATE = """<!doctype html>
       state.pointerDown = false;
       state.hoverAtom = null;
       tooltip.style.display = "none";
-      setSelection(null);
       draw();
     });
 
@@ -975,6 +1442,7 @@ _HTML_TEMPLATE = """<!doctype html>
       state.ry = 0.74;
       state.zoom = 1;
       state.activeSystem = null;
+      state.selectedAtom = null;
       renderPanel();
       draw();
     });
@@ -992,8 +1460,10 @@ _HTML_TEMPLATE = """<!doctype html>
     });
 
     window.loadMolADT = (payload) => {
-      molecule = normalizePayload(payload);
+      viewer = normalizeViewerPayload(payload);
+      molecule = viewer.molecules[viewer.activeIndex] || emptyMolecule();
       state.activeSystem = null;
+      state.selectedAtom = null;
       state.hoverAtom = null;
       renderPanel();
       draw();
@@ -1031,8 +1501,11 @@ _HTML_TEMPLATE = """<!doctype html>
 
 
 __all__ = [
+    "molecule_viewer_collection_html",
+    "molecule_viewer_collection_payload",
     "molecule_viewer_html",
     "molecule_viewer_payload",
     "open_molecule_viewer",
+    "write_molecule_viewer_collection_html",
     "write_molecule_viewer_html",
 ]

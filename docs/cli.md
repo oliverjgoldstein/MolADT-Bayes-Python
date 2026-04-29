@@ -29,6 +29,7 @@ Run:
 ./.venv/bin/python -m moladt.cli from-json benzene.moladt.json
 ./.venv/bin/python -m moladt.cli view-html molecules/benzene.sdf --output benzene.viewer.html
 ./.venv/bin/python -m moladt.cli view-html molecules/benzene.sdf --output benzene.viewer.html --open-viewer
+./.venv/bin/python -m moladt.cli view-html molecules/benzene.sdf molecules/diborane.sdf molecules/ferrocene.sdf --output examples.viewer.html --open-viewer
 ./.venv/bin/python -m moladt.cli pretty-example ferrocene
 ./.venv/bin/python -m moladt.cli pretty-example ferrocene --open-viewer
 ```
@@ -36,7 +37,7 @@ Run:
 ## Notes
 
 - `parse` accepts SDF V2000 and the core V3000 CTAB subset.
-- `view-html` accepts SDF or MolADT JSON.
+- `view-html` accepts SDF or MolADT JSON. Pass multiple files to write one HTML page with a scrollable molecule list.
 - `--open-viewer` opens the written HTML viewer in the default browser.
 - `pretty-example --open-viewer` still prints the report, then writes and opens `results/viewer/<example>.viewer.html`.
 - `to-smiles` is intentionally conservative. It does not cover non-classical multicenter examples such as diborane or ferrocene.

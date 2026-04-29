@@ -24,7 +24,10 @@ INCLUDE_MOLADT ?= 0
 BENCHMARK_VERBOSE ?= 1
 EXAMPLE ?= ferrocene
 VIEWER_INPUT ?= molecules/benzene.sdf
+VIEWER_INPUTS ?= "$(VIEWER_INPUT)"
 VIEWER_OUTPUT ?= results/viewer/$(basename $(notdir $(VIEWER_INPUT))).viewer.html
+VIEW_EXAMPLES ?= molecules/benzene.sdf molecules/diborane.sdf molecules/ferrocene.sdf molecules/morphine.sdf molecules/methane.sdf molecules/water.sdf
+VIEW_OUTPUT ?= results/viewer/examples.viewer.html
 OPEN_VIEWER ?= 0
 VIEWER_COUNT ?= 1
 PRETTY_VIEWER_OUTPUT ?=
@@ -129,7 +132,7 @@ BEST_QM9_EXTRA_MODELS := visnet_ensemble
 QM9_LONG_RESULTS_SUBDIR := qm9/long/run_$(RUN_TIMESTAMP)
 QM9_LONG_SEED := 102
 
-.PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-activate python-parse python-parse-smiles python-to-smiles python-pretty-example molecule-viewer test-molecule-viewer python-benchmark-qm9 python-benchmark-zinc freesolv inverse-design qm9long benchmark benchmark-bg timing catboost-geom-model catboost-geom-model-paper model
+.PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-activate python-parse python-parse-smiles python-to-smiles python-pretty-example view molecule-viewer test-molecule-viewer python-benchmark-qm9 python-benchmark-zinc freesolv inverse-design qm9long benchmark benchmark-bg timing catboost-geom-model catboost-geom-model-paper model
 
 help:
 	@printf "%s\n" \
@@ -143,6 +146,7 @@ help:
 	"  make python-parse-smiles    Parse c1ccccc1" \
 		"  make python-to-smiles       Render molecules/benzene.sdf to SMILES" \
 		"  make python-pretty-example  Render EXAMPLE=ferrocene or EXAMPLE=diborane; add OPEN_VIEWER=1 to open HTML" \
+		"  make view                   Open six example molecules in one browser viewer" \
 		"  make molecule-viewer        Export a standalone 3D molecule viewer HTML file; add OPEN_VIEWER=1 to open it" \
 		"  make test-molecule-viewer   Run the molecule viewer tests, then open the viewer" \
 		"  make freesolv              Run the long FreeSolv MolADT-vs-MoleculeNet comparison" \
@@ -394,18 +398,29 @@ python-to-smiles:
 python-pretty-example:
 	$(PYTHON_CMD) -m moladt.cli pretty-example $(EXAMPLE) $(PRETTY_VIEWER_OUTPUT_ARG) $(OPEN_VIEWER_ARG)
 
+view:
+	@printf "%s\n" \
+	"Opening MolADT example molecule viewer." \
+	"  repo: MolADT-Bayes-Python" \
+	"  command: moladt.cli view-html" \
+	"  examples: $(VIEW_EXAMPLES)" \
+	"  output: $(VIEW_OUTPUT)" \
+	"  auto_open: yes"
+	$(PYTHON_CMD) -m moladt.cli view-html $(VIEW_EXAMPLES) --output "$(VIEW_OUTPUT)" --title "MolADT example molecules" --open-viewer
+
 molecule-viewer:
 	@printf "%s\n" \
 	"Exporting standalone MolADT molecule viewer." \
 	"  repo: MolADT-Bayes-Python" \
 	"  command: moladt.cli view-html" \
 	"  input: $(VIEWER_INPUT)" \
+	"  inputs: $(VIEWER_INPUTS)" \
 	"  output: $(VIEWER_OUTPUT)" \
 	"  format: $(if $(VIEWER_FORMAT),$(VIEWER_FORMAT),auto)" \
 	"  title: $(if $(VIEWER_TITLE),$(VIEWER_TITLE),input title or filename)" \
 	"  open_viewer: $(OPEN_VIEWER)" \
 	"  usage: make molecule-viewer VIEWER_INPUT=molecules/morphine.sdf"
-	$(PYTHON_CMD) -m moladt.cli view-html "$(VIEWER_INPUT)" --output "$(VIEWER_OUTPUT)" $(VIEWER_FORMAT_ARG) $(VIEWER_TITLE_ARG) $(OPEN_VIEWER_ARG)
+	$(PYTHON_CMD) -m moladt.cli view-html $(VIEWER_INPUTS) --output "$(VIEWER_OUTPUT)" $(VIEWER_FORMAT_ARG) $(VIEWER_TITLE_ARG) $(OPEN_VIEWER_ARG)
 
 test-molecule-viewer:
 	@printf "%s\n" \
@@ -414,11 +429,12 @@ test-molecule-viewer:
 	"  command: tests/test_molecule_viewer.py" \
 	"  export smoke target: molecule-viewer" \
 	"  viewer input: $(VIEWER_INPUT)" \
+	"  viewer inputs: $(VIEWER_INPUTS)" \
 	"  viewer output: $(VIEWER_OUTPUT)" \
 	"  auto_open: yes" \
 	"  example: make test-molecule-viewer VIEWER_INPUT=molecules/benzene.sdf"
 	$(PYTHON_CMD) -m pytest -q tests/test_molecule_viewer.py
-	$(PYTHON_CMD) -m moladt.cli view-html "$(VIEWER_INPUT)" --output "$(VIEWER_OUTPUT)" $(VIEWER_FORMAT_ARG) $(VIEWER_TITLE_ARG) --open-viewer
+	$(PYTHON_CMD) -m moladt.cli view-html $(VIEWER_INPUTS) --output "$(VIEWER_OUTPUT)" $(VIEWER_FORMAT_ARG) $(VIEWER_TITLE_ARG) --open-viewer
 
 python-benchmark-qm9:
 	@printf "%s\n" \

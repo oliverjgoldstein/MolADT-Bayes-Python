@@ -25,7 +25,7 @@ from moladt.chem.mutable import MutableMolecule
 from moladt.chem.validate import ValidationError, used_electrons_at, validate_molecule
 from moladt.examples.sample_molecules import methane, water
 from moladt.io import molecule_to_json_bytes
-from moladt.viewer import open_molecule_viewer, write_molecule_viewer_html
+from moladt.viewer import open_molecule_viewer, write_molecule_viewer_collection_html
 from scripts.common import PROCESSED_DATA_DIR, PROJECT_ROOT, configured_results_dir, ensure_directory
 from scripts.features import compute_moladt_featurized_descriptors
 from scripts.stan_runner import GP_SCREENED_FEATURE_COUNT
@@ -784,11 +784,22 @@ def write_result_molecule_files(result: SearchResult, output_dir: Path) -> Searc
 def write_result_viewer_files(result: SearchResult, output_dir: Path, *, count: int = 1) -> SearchResult:
     target_dir = ensure_directory(output_dir)
     viewer_count = max(0, min(int(count), len(result.top_candidates)))
-    viewer_paths = tuple(
-        _write_candidate_viewer_file(target_dir, "top", rank, candidate)
+    if viewer_count == 0:
+        return replace(result, viewer_file_paths=())
+    path = target_dir / "top_molecules.viewer.html"
+    entries = tuple(
+        (
+            f"FreeSolv top #{rank}: {molecular_formula(candidate.molecule)}",
+            candidate.molecule,
+        )
         for rank, candidate in enumerate(result.top_candidates[:viewer_count], start=1)
     )
-    return replace(result, viewer_file_paths=viewer_paths)
+    written = write_molecule_viewer_collection_html(
+        entries,
+        path,
+        title=f"Top {viewer_count} FreeSolv inverse-design molecules",
+    )
+    return replace(result, viewer_file_paths=(written,))
 
 
 def open_result_viewers(paths: Sequence[Path], *, stream: TextIO) -> None:
@@ -802,6 +813,8 @@ def _remove_stale_candidate_files(output_dir: Path) -> None:
         for path in output_dir.glob(f"{prefix}_*_molecule.py"):
             path.unlink()
     for path in output_dir.glob("top_*_molecule.viewer.html"):
+        path.unlink()
+    for path in output_dir.glob("top_molecules.viewer.html"):
         path.unlink()
 
 
@@ -1100,12 +1113,6 @@ def _write_candidate_python_file(
     path = output_dir / f"{prefix}_{rank:02d}_molecule.py"
     path.write_text(_candidate_python_source(rank, candidate, target, seed_molecule), encoding="utf-8")
     return path
-
-
-def _write_candidate_viewer_file(output_dir: Path, prefix: str, rank: int, candidate: Candidate) -> Path:
-    path = output_dir / f"{prefix}_{rank:02d}_molecule.viewer.html"
-    title = f"FreeSolv {prefix} #{rank}: {molecular_formula(candidate.molecule)}"
-    return write_molecule_viewer_html(candidate.molecule, path, title=title)
 
 
 def _resolve_output_dir(raw_path: str) -> Path:

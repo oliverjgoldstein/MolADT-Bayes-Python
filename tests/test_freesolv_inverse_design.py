@@ -328,8 +328,10 @@ def test_result_writer_exports_importable_top_molecule_files(tmp_path) -> None:
 def test_result_writer_removes_stale_candidate_files(tmp_path) -> None:
     stale = tmp_path / "dietz_01_molecule.py"
     stale_viewer = tmp_path / "top_01_molecule.viewer.html"
+    stale_collection_viewer = tmp_path / "top_molecules.viewer.html"
     stale.write_text("stale = True\n", encoding="utf-8")
     stale_viewer.write_text("stale", encoding="utf-8")
+    stale_collection_viewer.write_text("stale", encoding="utf-8")
     result = run_inverse_design(
         target=-5.0,
         n_steps=0,
@@ -342,6 +344,7 @@ def test_result_writer_removes_stale_candidate_files(tmp_path) -> None:
 
     assert not stale.exists()
     assert not stale_viewer.exists()
+    assert not stale_collection_viewer.exists()
     assert (tmp_path / "top_01_molecule.py").exists()
 
 
@@ -356,11 +359,12 @@ def test_result_writer_can_export_top_candidate_viewers(tmp_path: Path) -> None:
 
     written = write_result_viewer_files(result, tmp_path, count=2)
 
-    assert len(written.viewer_file_paths) == 2
-    assert written.viewer_file_paths[0].name == "top_01_molecule.viewer.html"
+    assert len(written.viewer_file_paths) == 1
+    assert written.viewer_file_paths[0].name == "top_molecules.viewer.html"
     html = written.viewer_file_paths[0].read_text(encoding="utf-8")
-    assert "moladt-viewer-v1" in html
+    assert "moladt-viewer-collection-v1" in html
     assert "FreeSolv top #1" in html
+    assert "FreeSolv top #2" in html
 
 
 def test_freesolv_model_dir_uses_latest_run_directory(tmp_path, monkeypatch) -> None:

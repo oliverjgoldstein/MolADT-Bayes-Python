@@ -214,6 +214,29 @@ def test_makefile_molecule_viewer_target_exports_html(tmp_path: Path) -> None:
     assert './.venv/bin/python -m moladt.cli view-html "molecules/morphine.sdf" --output "results/viewer/morphine.viewer.html"' in result.stdout
 
 
+def test_makefile_view_target_opens_example_collection(tmp_path: Path) -> None:
+    _copy_makefile(tmp_path)
+    _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
+
+    result = subprocess.run(
+        [
+            "make",
+            "-C",
+            str(tmp_path),
+            "-n",
+            "view",
+            "SYSTEM_PYTHON=python3",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "Opening MolADT example molecule viewer." in result.stdout
+    assert "molecules/benzene.sdf molecules/diborane.sdf molecules/ferrocene.sdf" in result.stdout
+    assert '--output "results/viewer/examples.viewer.html" --title "MolADT example molecules" --open-viewer' in result.stdout
+
+
 def test_makefile_molecule_viewer_can_open_browser(tmp_path: Path) -> None:
     _copy_makefile(tmp_path)
     _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
@@ -350,6 +373,7 @@ def test_makefile_help_only_advertises_qm9long(tmp_path: Path) -> None:
     )
 
     assert "make qm9long" in result.stdout
+    assert "make view" in result.stdout
     assert "make qm9small" not in result.stdout
     assert "make qm9paper" not in result.stdout
     assert "make benchmark-small" not in result.stdout

@@ -45,7 +45,7 @@ The comparison figure uses the MoleculeNet MPNN RMSE row `1.15` as the paper bar
 4. Prints one progress line per generated molecule with count and elapsed time.
 5. Sorts the 1,000 generated molecules by the model's Bayesian credible score percentage.
 6. Writes the top 10 as importable `top_*.py` files.
-7. With `--open-viewer`, writes viewer HTML for the top generated molecules and opens the first `--viewer-count`.
+7. With `--open-viewer`, writes one combined viewer HTML page for the first `--viewer-count` top molecules.
 
 The credible score is from the model's posterior predictive perspective. It is a bounded `0..100` value derived from the target log credible score. It is not a frequentist confidence or coverage statement.
 
