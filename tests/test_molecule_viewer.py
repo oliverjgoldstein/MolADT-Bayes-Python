@@ -5,7 +5,7 @@ from pathlib import Path
 
 from moladt.cli import main
 import moladt.cli as cli
-from moladt.examples import diborane_pretty
+from moladt.examples import diborane_pretty, ferrocene_pretty
 from moladt.io import molecule_to_json
 from moladt.viewer import molecule_viewer_html, molecule_viewer_payload, write_molecule_viewer_html
 
@@ -19,6 +19,27 @@ def test_molecule_viewer_payload_includes_bonding_system_annotations() -> None:
     assert len(payload["bonds"]) == 5
     assert [system["tag"] for system in payload["systems"]] == ["bridge_h3_3c2e", "bridge_h4_3c2e"]
     assert payload["systems"][0]["edges"] == [{"a": 1, "b": 3}, {"a": 2, "b": 3}]
+
+
+def test_molecule_viewer_payload_keeps_overlapping_system_colours_distinct() -> None:
+    payload = molecule_viewer_payload(ferrocene_pretty, title="Ferrocene")
+
+    edge_to_colours: dict[tuple[int, int], set[str]] = {}
+    for system in payload["systems"]:
+        for edge in system["edges"]:
+            key = tuple(sorted((edge["a"], edge["b"])))
+            edge_to_colours.setdefault(key, set()).add(system["color"])
+
+    assert edge_to_colours[(1, 7)] == {payload["systems"][1]["color"], payload["systems"][2]["color"]}
+    assert payload["systems"][1]["color"] != payload["systems"][2]["color"]
+
+
+def test_molecule_viewer_html_offsets_overlapping_system_edges() -> None:
+    html = molecule_viewer_html(ferrocene_pretty, title="Ferrocene")
+
+    assert "function systemEdgeLaneMap" in html
+    assert "offset: laneOffset" in html
+    assert "alpha: active ? 1 : 0.18" in html
 
 
 def test_molecule_viewer_html_is_interactive_visual_document() -> None:

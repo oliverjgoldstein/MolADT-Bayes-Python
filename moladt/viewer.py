@@ -672,15 +672,52 @@ _HTML_TEMPLATE = """<!doctype html>
       if (options.dash) {
         ctx.setLineDash(options.dash);
       }
-      const gradient = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+      const offset = Number(options.offset || 0);
+      let ax = a.x;
+      let ay = a.y;
+      let bx = b.x;
+      let by = b.y;
+      if (offset !== 0) {
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const length = Math.max(1, Math.hypot(dx, dy));
+        const nx = -dy / length;
+        const ny = dx / length;
+        ax += nx * offset;
+        ay += ny * offset;
+        bx += nx * offset;
+        by += ny * offset;
+      }
+      const gradient = ctx.createLinearGradient(ax, ay, bx, by);
       gradient.addColorStop(0, options.colorA || options.color);
       gradient.addColorStop(1, options.colorB || options.color);
       ctx.strokeStyle = gradient;
       ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx, by);
       ctx.stroke();
       ctx.restore();
+    }
+
+    function systemEdgeLaneMap(systems) {
+      const edgeSystems = new Map();
+      systems.forEach((system) => {
+        system.edges.forEach((edge) => {
+          const key = edgeKey(edge);
+          if (!edgeSystems.has(key)) {
+            edgeSystems.set(key, []);
+          }
+          edgeSystems.get(key).push(Number(system.id));
+        });
+      });
+      const lanes = new Map();
+      edgeSystems.forEach((ids, key) => {
+        const uniqueIds = Array.from(new Set(ids)).sort((a, b) => a - b);
+        uniqueIds.forEach((id, index) => {
+          lanes.set(key + ":" + id, { index, count: uniqueIds.length });
+        });
+      });
+      return lanes;
     }
 
     function roundedRect(x, y, width, height, radius) {
@@ -779,17 +816,22 @@ _HTML_TEMPLATE = """<!doctype html>
       });
 
       if (state.systems) {
+        const lanes = systemEdgeLaneMap(molecule.systems);
         molecule.systems.forEach((system) => {
           const active = state.activeSystem === null || state.activeSystem === system.id;
           system.edges.forEach((edge) => {
             const a = points.get(edge.a);
             const b = points.get(edge.b);
             if (a && b) {
+              const lane = lanes.get(edgeKey(edge) + ":" + Number(system.id)) || { index: 0, count: 1 };
+              const width = active ? 6.2 : 3.8;
+              const laneOffset = lane.count > 1 ? (lane.index - (lane.count - 1) / 2) * (width + 2.0) : 0;
               drawLine(a, b, {
-                width: active ? 7.5 : 4.5,
+                width,
                 color: system.color,
-                alpha: active ? 0.74 : 0.24,
-                dash: state.activeSystem === system.id ? [] : [10, 8]
+                alpha: active ? 1 : 0.18,
+                dash: state.activeSystem === system.id ? [] : [10, 8],
+                offset: laneOffset
               });
             }
           });
