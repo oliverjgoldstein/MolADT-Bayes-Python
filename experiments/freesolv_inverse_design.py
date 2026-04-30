@@ -631,7 +631,7 @@ def add_terminal_atom(molecule: Molecule, rng: random.Random) -> Molecule | None
     _free_one_valence_slot(mutable, parent_id)
     mutable.atoms[new_id] = _new_atom(new_id, new_symbol, parent_id, mutable.freeze())
     mutable.local_bonds.add(mk_edge(parent_id, new_id))
-    return _try_valid_candidate(mutable.freeze())
+    return _complete_and_validate_generated_candidate(mutable.freeze())
 
 
 def add_sigma_edge(molecule: Molecule, rng: random.Random) -> Molecule | None:
@@ -665,7 +665,7 @@ def add_sigma_edge(molecule: Molecule, rng: random.Random) -> Molecule | None:
     _free_one_valence_slot(mutable, left)
     _free_one_valence_slot(mutable, right)
     mutable.local_bonds.add(mk_edge(left, right))
-    return _try_valid_candidate(mutable.freeze())
+    return _complete_and_validate_generated_candidate(mutable.freeze())
 
 
 def mutate_atom(molecule: Molecule, rng: random.Random) -> Molecule | None:
@@ -688,7 +688,7 @@ def mutate_atom(molecule: Molecule, rng: random.Random) -> Molecule | None:
         attributes=element_attributes(new_symbol),
         shells=element_shells(new_symbol),
     )
-    return _try_valid_candidate(mutable.freeze())
+    return _complete_and_validate_generated_candidate(mutable.freeze())
 
 
 def remove_terminal_atom(molecule: Molecule, rng: random.Random) -> Molecule | None:
@@ -712,7 +712,7 @@ def add_pi_ring_system(molecule: Molecule, rng: random.Random) -> Molecule | Non
     next_system_id = SystemId(max((system_id.value for system_id, _ in molecule.systems), default=0) + 1)
     mutable = MutableMolecule.from_molecule(molecule)
     mutable.systems.append((next_system_id, mk_bonding_system(NonNegative(6), ring, "pi_ring")))
-    return _try_valid_candidate(mutable.freeze())
+    return _complete_and_validate_generated_candidate(mutable.freeze())
 
 
 def print_report(result: SearchResult, *, stream: TextIO) -> None:
@@ -1755,7 +1755,7 @@ def _remove_atom_if_terminal(molecule: Molecule, atom_id: AtomId) -> Molecule | 
         return None
     mutable = MutableMolecule.from_molecule(molecule)
     _remove_atom_from_mutable(mutable, atom_id)
-    return _try_valid_candidate(mutable.freeze())
+    return _complete_and_validate_generated_candidate(mutable.freeze())
 
 
 def _remove_atom_from_mutable(mutable: MutableMolecule, atom_id: AtomId) -> None:
@@ -1864,7 +1864,15 @@ def _validate_candidate(molecule: Molecule) -> Molecule:
     return molecule
 
 
-def _try_valid_candidate(molecule: Molecule) -> Molecule | None:
+def _complete_and_validate_generated_candidate(molecule: Molecule) -> Molecule | None:
+    """Complete terminal hydrogens and enforce the FreeSolv generation contract.
+
+    This is the generator boundary: a proposal only becomes a generated molecule
+    after it has closed valence shells, accepted terminal atoms, plausible
+    geometry, and valid Dietz systems. Invalid proposals are discarded before
+    scoring or insertion into the candidate set.
+    """
+
     try:
         return _validate_candidate(_canonicalize_atom_ids(_complete_terminal_hydrogens(molecule)))
     except (ValueError, ValidationError):
