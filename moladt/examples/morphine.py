@@ -8,101 +8,74 @@ from ..chem.molecule import (
     SmilesAtomStereoClass,
     SmilesStereochemistry,
 )
-from ._literal import atom, atom_map, sigma_bonds
+from ._literal import atom
 
 
 MORPHINE_RING_CLOSURE_SMILES = "CN1CC[C@]23C4=C5C=CC(O)=C4O[C@H]2[C@@H](O)C=C[C@H]3[C@H]1C5"
 
-# The atom numbering follows the non-cyclic morphine sketch in the classic
-# ring-closure figure. In that sketch, the five broken edges that later become
-# SMILES ring closures are ordinary sigma edges here:
-#   1 -> (1, 11)
-#   2 -> (2, 8)
-#   3 -> (7, 18)
-#   4 -> (9, 21)
-#   5 -> (10, 16)
-#
-# The standard stereochemical boundary string used in the docs is:
-#   CN1CC[C@]23C4=C5C=CC(O)=C4O[C@H]2[C@@H](O)C=C[C@H]3[C@H]1C5
-# Its five atom-centered stereochemistry flags are preserved below as SMILES
-# annotations on the explicit Dietz object.
-#
-_SIGMA_EDGES = (
-    (1, 2),
-    (1, 11),
-    (2, 3),
-    (2, 8),
-    (3, 4),
-    (3, 5),
-    (5, 6),
-    (6, 7),
-    (7, 8),
-    (7, 18),
-    (8, 9),
-    (8, 10),
-    (9, 21),
-    (10, 11),
-    (10, 16),
-    (11, 12),
-    (12, 13),
-    (12, 14),
-    (14, 15),
-    (15, 16),
-    (16, 17),
-    (17, 18),
-    (18, 19),
-    (19, 20),
-    (19, 21),
-)
-
-_ALKENE_EDGES = (
-    (5, 6),
-)
-
-_PHENYL_PI_RING_EDGES = (
-    (10, 11),
-    (11, 12),
-    (12, 14),
-    (14, 15),
-    (15, 16),
-    (10, 16),
-)
-
-
-def _edge_from_index_pair(atom_pair: tuple[int, int]) -> Edge:
-    return Edge(AtomId(atom_pair[0]), AtomId(atom_pair[1]))
-
 morphine_pretty = Molecule(
-    atoms=atom_map(
-        atom(1, AtomicSymbol.O, 0.000, 0.000, 0.100),
-        atom(2, AtomicSymbol.C, 1.000, 0.800, 0.450),
-        atom(3, AtomicSymbol.C, 2.000, 0.800, -0.100),
-        atom(4, AtomicSymbol.O, 2.000, -0.400, -0.550),
-        atom(5, AtomicSymbol.C, 3.000, 0.800, 0.350),
-        atom(6, AtomicSymbol.C, 4.000, 0.800, 0.750),
-        atom(7, AtomicSymbol.C, 5.000, 0.800, 0.200),
-        atom(8, AtomicSymbol.C, 1.800, 2.000, 0.800),
-        atom(9, AtomicSymbol.C, 2.800, 2.800, 1.100),
-        atom(10, AtomicSymbol.C, 3.800, 2.000, 0.600),
-        atom(11, AtomicSymbol.C, 0.800, 2.000, 0.150),
-        atom(12, AtomicSymbol.C, 1.200, 3.200, 0.550),
-        atom(13, AtomicSymbol.O, 0.400, 4.000, 0.300),
-        atom(14, AtomicSymbol.C, 2.400, 3.800, 0.950),
-        atom(15, AtomicSymbol.C, 3.600, 3.800, 0.700),
-        atom(16, AtomicSymbol.C, 4.200, 2.800, 0.200),
-        atom(17, AtomicSymbol.C, 5.400, 2.800, -0.200),
-        atom(18, AtomicSymbol.C, 6.200, 1.800, -0.550),
-        atom(19, AtomicSymbol.N, 7.200, 1.800, -0.850),
-        atom(20, AtomicSymbol.C, 8.200, 2.400, -1.100),
-        atom(21, AtomicSymbol.C, 6.000, 2.800, -0.350),
+    atoms={
+        AtomId(1): atom(1, AtomicSymbol.O, 0.000, 0.000, 0.100),
+        AtomId(2): atom(2, AtomicSymbol.C, 1.000, 0.800, 0.450),
+        AtomId(3): atom(3, AtomicSymbol.C, 2.000, 0.800, -0.100),
+        AtomId(4): atom(4, AtomicSymbol.O, 2.000, -0.400, -0.550),
+        AtomId(5): atom(5, AtomicSymbol.C, 3.000, 0.800, 0.350),
+        AtomId(6): atom(6, AtomicSymbol.C, 4.000, 0.800, 0.750),
+        AtomId(7): atom(7, AtomicSymbol.C, 5.000, 0.800, 0.200),
+        AtomId(8): atom(8, AtomicSymbol.C, 1.800, 2.000, 0.800),
+        AtomId(9): atom(9, AtomicSymbol.C, 2.800, 2.800, 1.100),
+        AtomId(10): atom(10, AtomicSymbol.C, 3.800, 2.000, 0.600),
+        AtomId(11): atom(11, AtomicSymbol.C, 0.800, 2.000, 0.150),
+        AtomId(12): atom(12, AtomicSymbol.C, 1.200, 3.200, 0.550),
+        AtomId(13): atom(13, AtomicSymbol.O, 0.400, 4.000, 0.300),
+        AtomId(14): atom(14, AtomicSymbol.C, 2.400, 3.800, 0.950),
+        AtomId(15): atom(15, AtomicSymbol.C, 3.600, 3.800, 0.700),
+        AtomId(16): atom(16, AtomicSymbol.C, 4.200, 2.800, 0.200),
+        AtomId(17): atom(17, AtomicSymbol.C, 5.400, 2.800, -0.200),
+        AtomId(18): atom(18, AtomicSymbol.C, 6.200, 1.800, -0.550),
+        AtomId(19): atom(19, AtomicSymbol.N, 7.200, 1.800, -0.850),
+        AtomId(20): atom(20, AtomicSymbol.C, 8.200, 2.400, -1.100),
+        AtomId(21): atom(21, AtomicSymbol.C, 6.000, 2.800, -0.350),
+    },
+    local_bonds=frozenset(
+        {
+            Edge(AtomId(1), AtomId(2)),
+            Edge(AtomId(1), AtomId(11)),
+            Edge(AtomId(2), AtomId(3)),
+            Edge(AtomId(2), AtomId(8)),
+            Edge(AtomId(3), AtomId(4)),
+            Edge(AtomId(3), AtomId(5)),
+            Edge(AtomId(5), AtomId(6)),
+            Edge(AtomId(6), AtomId(7)),
+            Edge(AtomId(7), AtomId(8)),
+            Edge(AtomId(7), AtomId(18)),
+            Edge(AtomId(8), AtomId(9)),
+            Edge(AtomId(8), AtomId(10)),
+            Edge(AtomId(9), AtomId(21)),
+            Edge(AtomId(10), AtomId(11)),
+            Edge(AtomId(10), AtomId(16)),
+            Edge(AtomId(11), AtomId(12)),
+            Edge(AtomId(12), AtomId(13)),
+            Edge(AtomId(12), AtomId(14)),
+            Edge(AtomId(14), AtomId(15)),
+            Edge(AtomId(15), AtomId(16)),
+            Edge(AtomId(16), AtomId(17)),
+            Edge(AtomId(17), AtomId(18)),
+            Edge(AtomId(18), AtomId(19)),
+            Edge(AtomId(19), AtomId(20)),
+            Edge(AtomId(19), AtomId(21)),
+        }
     ),
-    local_bonds=sigma_bonds(*_SIGMA_EDGES),
     systems=(
         (
             SystemId(1),
             mk_bonding_system(
                 NonNegative(2),
-                frozenset(_edge_from_index_pair(atom_pair) for atom_pair in _ALKENE_EDGES),
+                frozenset(
+                    {
+                        Edge(AtomId(5), AtomId(6)),
+                    }
+                ),
                 "alkene_bridge",
             ),
         ),
@@ -110,7 +83,16 @@ morphine_pretty = Molecule(
             SystemId(2),
             mk_bonding_system(
                 NonNegative(6),
-                frozenset(_edge_from_index_pair(atom_pair) for atom_pair in _PHENYL_PI_RING_EDGES),
+                frozenset(
+                    {
+                        Edge(AtomId(10), AtomId(11)),
+                        Edge(AtomId(10), AtomId(16)),
+                        Edge(AtomId(11), AtomId(12)),
+                        Edge(AtomId(12), AtomId(14)),
+                        Edge(AtomId(14), AtomId(15)),
+                        Edge(AtomId(15), AtomId(16)),
+                    }
+                ),
                 "phenyl_pi_ring",
             ),
         ),

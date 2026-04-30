@@ -20,6 +20,15 @@ The parser accepts SDF V2000 and a core V3000 CTAB subset: atom coordinates, bon
 
 MolADT JSON is the shared boundary format used by the Python and Haskell repos.
 
+## Explicit Python ADT
+
+```bash
+./.venv/bin/python -m moladt.cli to-python molecules/benzene.sdf --name benzene_generated > benzene_generated.py
+./.venv/bin/python -m moladt.cli to-example molecules/benzene.sdf --name benzene_generated --output moladt/examples/benzene_generated.py
+```
+
+`to-python` and its `to-example` alias convert parsed geometry into expanded `Molecule(...)` source with literal `AtomId(...)`, `Edge(...)`, and `mk_bonding_system(...)` entries. The output is meant for checked examples and reviewable fixtures, so it does not hide atoms or bonds behind generated loops.
+
 Python API:
 
 ```python
@@ -47,15 +56,17 @@ The SMILES path is conservative. It covers the classical subset used by tests an
 ## Viewer
 
 ```bash
-make molecule-viewer VIEWER_INPUT=molecules/benzene.sdf
+make molecule-viewer VIEWER_EXAMPLES=ferrocene
+./.venv/bin/python -m moladt.cli view-html benzene.moladt.json --output benzene.viewer.html
 ```
 
-This writes a standalone HTML viewer under `results/viewer/`. Click an atom in the viewer to show its stored shell and orbital glyphs.
+This writes a standalone HTML viewer under `results/viewer/`. The Make target uses built-in explicit ADT examples. The direct `view-html` command accepts MolADT JSON. Click an atom in the viewer to show its stored shell and orbital glyphs, coordinates, 3D edge lengths, and bond angles.
 
 ## Rule Of Thumb
 
-- Use SDF when geometry is the source of truth.
+- Use SDF only as an import boundary or parser fixture.
 - Use SMILES for compact classical boundary strings.
-- Use MolADT JSON when another tool needs the typed molecule.
+- Use explicit Python ADTs for checked examples.
+- Use MolADT JSON when another tool or the viewer needs the typed molecule as a file.
 
 See [SMILES scope](smiles-scope-and-validation.md) for parser limits.

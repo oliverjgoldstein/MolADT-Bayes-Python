@@ -83,6 +83,23 @@ def test_molecule_viewer_html_can_draw_selected_atom_orbitals() -> None:
     assert "state.selectedAtom" in html
 
 
+def test_molecule_viewer_html_draws_coordinate_axes() -> None:
+    html = molecule_viewer_html(ferrocene_pretty, title="Ferrocene")
+
+    assert 'id="toggle-axes"' in html
+    assert "function drawCoordinateAxes" in html
+    assert "axis.label + \" \" + tick.value + \"A\"" in html
+
+
+def test_molecule_viewer_html_displays_3d_lengths_and_angles() -> None:
+    html = molecule_viewer_html(ferrocene_pretty, title="Ferrocene")
+
+    assert "function geometryEdgesForAtom" in html
+    assert "function bondAnglesForAtom" in html
+    assert "Edge Lengths From 3D Coordinates" in html
+    assert "Bond Angles" in html
+
+
 def test_molecule_viewer_html_can_switch_between_multiple_molecules() -> None:
     html = molecule_viewer_collection_html(
         (
@@ -135,13 +152,17 @@ def test_view_html_cli_accepts_moladt_json(tmp_path: Path, capsys) -> None:
 
 
 def test_view_html_cli_accepts_multiple_inputs_in_one_viewer(tmp_path: Path, capsys) -> None:
+    diborane_json = tmp_path / "diborane.moladt.json"
+    ferrocene_json = tmp_path / "ferrocene.moladt.json"
     html_path = tmp_path / "collection.viewer.html"
+    diborane_json.write_text(molecule_to_json(diborane_pretty), encoding="utf-8")
+    ferrocene_json.write_text(molecule_to_json(ferrocene_pretty), encoding="utf-8")
 
     result = main(
         [
             "view-html",
-            "molecules/diborane.sdf",
-            "molecules/ferrocene.sdf",
+            str(diborane_json),
+            str(ferrocene_json),
             "--output",
             str(html_path),
         ]
@@ -156,16 +177,51 @@ def test_view_html_cli_accepts_multiple_inputs_in_one_viewer(tmp_path: Path, cap
     assert "ferrocene" in html
 
 
+def test_view_html_cli_rejects_sdf_format() -> None:
+    try:
+        main(["view-html", "molecules/diborane.sdf", "--format", "sdf"])
+    except SystemExit as error:
+        assert error.code != 0
+    else:
+        raise AssertionError("view-html should reject SDF input")
+
+
+def test_view_html_cli_rejects_sdf_path_without_format() -> None:
+    try:
+        main(["view-html", "molecules/diborane.sdf"])
+    except ValueError as error:
+        assert "MolADT JSON" in str(error)
+    else:
+        raise AssertionError("view-html should reject SDF input")
+
+
+def test_view_examples_cli_uses_builtin_adt_examples_with_bonding_systems(tmp_path: Path, capsys) -> None:
+    html_path = tmp_path / "examples.viewer.html"
+
+    result = main(["view-examples", "--output", str(html_path)])
+    output = capsys.readouterr().out
+    html = html_path.read_text(encoding="utf-8")
+
+    assert result == 0
+    assert str(html_path) in output
+    assert "moladt-viewer-collection-v1" in html
+    assert "bridge_h3_3c2e" in html
+    assert "fe_backdonation" in html
+    assert "phenyl_pi_ring" in html
+
+
 def test_view_html_cli_can_open_written_viewer(tmp_path: Path, capsys, monkeypatch) -> None:
     opened: list[Path] = []
+    json_path = tmp_path / "diborane.moladt.json"
     html_path = tmp_path / "diborane.viewer.html"
+    json_path.write_text(molecule_to_json(diborane_pretty), encoding="utf-8")
 
     monkeypatch.setattr(cli, "open_molecule_viewer", lambda path: opened.append(Path(path)) or True)
 
     result = main(
         [
             "view-html",
-            "molecules/diborane.sdf",
+            str(json_path),
             "--output",
             str(html_path),
             "--open-viewer",

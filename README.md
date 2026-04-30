@@ -49,7 +49,7 @@ make python-parse
 make view
 ```
 
-`make view` opens six example molecules in one browser page with a scrollable molecule list. Click any atom to show its stored orbital glyphs.
+`make view` opens six example molecules in one browser page with a scrollable molecule list. Click any atom to show its stored orbital glyphs, coordinates, 3D edge lengths, and bond angles.
 
 For Stan-backed FreeSolv runs:
 
@@ -65,11 +65,11 @@ Full setup notes live in [Quickstart](docs/quickstart.md).
 
 ```bash
 make python-pretty-example EXAMPLE=morphine
-make molecule-viewer VIEWER_INPUT=molecules/benzene.sdf
+make molecule-viewer VIEWER_EXAMPLES=ferrocene
 make test-molecule-viewer
 ```
 
-The viewer exports a standalone HTML file under `results/viewer/` by default. Click an atom in the viewer to show the stored shell and orbital glyphs for that atom. `view-html` can take several files and put them in one page with a scrollable molecule list. Use `VIEWER_OUTPUT`, `VIEWER_FORMAT`, and `VIEWER_TITLE` when you need a custom export.
+The viewer exports a standalone HTML file under `results/viewer/` by default. Click an atom in the viewer to show the stored shell and orbital glyphs for that atom, its coordinates, the 3D lengths of incident edges, and bond angles around that atom. The canvas includes coordinate axes with Angstrom tick labels and an `Axes` toggle. `make view` and `make molecule-viewer` use the built-in ADT examples, so diborane and ferrocene keep their explicit bonding systems. `view-html` takes MolADT JSON files when you need a file-backed viewer export. Use `VIEWER_EXAMPLES`, `VIEWER_OUTPUT`, and `VIEWER_TITLE` when you need a custom export.
 
 `make test-molecule-viewer` now runs the viewer tests, writes the configured viewer HTML, and opens it in your default browser automatically.
 
@@ -77,7 +77,7 @@ Turn on browser auto-open with `OPEN_VIEWER=1`:
 
 ```bash
 OPEN_VIEWER=1 make python-pretty-example EXAMPLE=ferrocene
-OPEN_VIEWER=1 make molecule-viewer VIEWER_INPUT=molecules/diborane.sdf
+OPEN_VIEWER=1 make molecule-viewer VIEWER_EXAMPLES=diborane
 OPEN_VIEWER=1 VIEWER_COUNT=3 make inverse-design TARGET=-5.0
 ```
 
@@ -87,8 +87,11 @@ Direct CLI equivalents:
 
 ```bash
 ./.venv/bin/python -m moladt.cli pretty-example diborane --open-viewer
-./.venv/bin/python -m moladt.cli view-html molecules/benzene.sdf --output results/viewer/benzene.viewer.html --open-viewer
-./.venv/bin/python -m moladt.cli view-html molecules/benzene.sdf molecules/diborane.sdf molecules/ferrocene.sdf --output results/viewer/examples.viewer.html --open-viewer
+./.venv/bin/python -m moladt.cli view-examples --output results/viewer/examples.viewer.html --open-viewer
+./.venv/bin/python -m moladt.cli to-python molecules/benzene.sdf --name benzene_generated
+./.venv/bin/python -m moladt.cli to-example molecules/benzene.sdf --name benzene_generated --output moladt/examples/benzene_generated.py
+./.venv/bin/python -m moladt.cli to-json molecules/benzene.sdf > benzene.moladt.json
+./.venv/bin/python -m moladt.cli view-html benzene.moladt.json --output results/viewer/benzene.viewer.html --open-viewer
 ./.venv/bin/python -m experiments.freesolv_inverse_design --target -5.0 --open-viewer --viewer-count 3
 ```
 
@@ -375,7 +378,7 @@ IODINE: Shells = (
 )
 ```
 
-See [Representation](docs/representation.md), [Orbitals](docs/orbitals.md), and [Examples](docs/examples.md) for how the same ADT covers diborane, ferrocene, morphine, benzene, and file-backed molecules.
+See [Representation](docs/representation.md), [Orbitals](docs/orbitals.md), and [Examples](docs/examples.md) for how the same ADT covers diborane, ferrocene, morphine, benzene, and molecules converted into MolADT JSON.
 
 ## Python And Haskell
 

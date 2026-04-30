@@ -2,44 +2,55 @@ from __future__ import annotations
 
 from ..chem.dietz import AtomId, Edge, NonNegative, SystemId, mk_bonding_system
 from ..chem.molecule import AtomicSymbol, Molecule
-from ._literal import atom, atom_map, sigma_bonds
-
-
-_RING_ATOMS = tuple(range(1, 7))
-_HYDROGEN_ATOMS = tuple(range(7, 13))
-_RING_EDGES = tuple(zip(_RING_ATOMS, _RING_ATOMS[1:] + _RING_ATOMS[:1]))
-_CARBON_HYDROGEN_EDGES = tuple(zip(_RING_ATOMS, _HYDROGEN_ATOMS))
-
-
-def _edge(atom_a: int, atom_b: int) -> Edge:
-    return Edge(AtomId(atom_a), AtomId(atom_b))
+from ._literal import atom
 
 
 benzene = Molecule(
-    atoms=atom_map(
-        atom(1, AtomicSymbol.C, 2.866, 1.000, 0.000),
-        atom(2, AtomicSymbol.C, 2.000, 0.500, 0.000),
-        atom(3, AtomicSymbol.C, 3.732, 0.500, 0.000),
-        atom(4, AtomicSymbol.C, 2.000, -0.500, 0.000),
-        atom(5, AtomicSymbol.C, 3.732, -0.500, 0.000),
-        atom(6, AtomicSymbol.C, 2.866, -1.000, 0.000),
-        atom(7, AtomicSymbol.H, 2.866, 1.620, 0.000),
-        atom(8, AtomicSymbol.H, 1.463, 0.810, 0.000),
-        atom(9, AtomicSymbol.H, 4.269, 0.810, 0.000),
-        atom(10, AtomicSymbol.H, 1.463, -0.810, 0.000),
-        atom(11, AtomicSymbol.H, 4.269, -0.810, 0.000),
-        atom(12, AtomicSymbol.H, 2.866, -1.620, 0.000),
-    ),
-    local_bonds=sigma_bonds(
-        *_RING_EDGES,
-        *_CARBON_HYDROGEN_EDGES,
+    atoms={
+        AtomId(1): atom(1, AtomicSymbol.C, 2.866, 1.000, 0.000),
+        AtomId(2): atom(2, AtomicSymbol.C, 2.000, 0.500, 0.000),
+        AtomId(3): atom(3, AtomicSymbol.C, 3.732, 0.500, 0.000),
+        AtomId(4): atom(4, AtomicSymbol.C, 2.000, -0.500, 0.000),
+        AtomId(5): atom(5, AtomicSymbol.C, 3.732, -0.500, 0.000),
+        AtomId(6): atom(6, AtomicSymbol.C, 2.866, -1.000, 0.000),
+        AtomId(7): atom(7, AtomicSymbol.H, 2.866, 1.620, 0.000),
+        AtomId(8): atom(8, AtomicSymbol.H, 1.463, 0.810, 0.000),
+        AtomId(9): atom(9, AtomicSymbol.H, 4.269, 0.810, 0.000),
+        AtomId(10): atom(10, AtomicSymbol.H, 1.463, -0.810, 0.000),
+        AtomId(11): atom(11, AtomicSymbol.H, 4.269, -0.810, 0.000),
+        AtomId(12): atom(12, AtomicSymbol.H, 2.866, -1.620, 0.000),
+    },
+    local_bonds=frozenset(
+        {
+            Edge(AtomId(1), AtomId(2)),
+            Edge(AtomId(1), AtomId(6)),
+            Edge(AtomId(1), AtomId(7)),
+            Edge(AtomId(2), AtomId(3)),
+            Edge(AtomId(2), AtomId(8)),
+            Edge(AtomId(3), AtomId(4)),
+            Edge(AtomId(3), AtomId(9)),
+            Edge(AtomId(4), AtomId(5)),
+            Edge(AtomId(4), AtomId(10)),
+            Edge(AtomId(5), AtomId(6)),
+            Edge(AtomId(5), AtomId(11)),
+            Edge(AtomId(6), AtomId(12)),
+        }
     ),
     systems=(
         (
             SystemId(1),
             mk_bonding_system(
-                NonNegative(len(_RING_ATOMS)),
-                frozenset(_edge(atom_a, atom_b) for atom_a, atom_b in _RING_EDGES),
+                NonNegative(6),
+                frozenset(
+                    {
+                        Edge(AtomId(1), AtomId(2)),
+                        Edge(AtomId(1), AtomId(6)),
+                        Edge(AtomId(2), AtomId(3)),
+                        Edge(AtomId(3), AtomId(4)),
+                        Edge(AtomId(4), AtomId(5)),
+                        Edge(AtomId(5), AtomId(6)),
+                    }
+                ),
                 "pi_ring",
             ),
         ),

@@ -24,10 +24,10 @@ This creates `./.cmdstan`.
 make python-parse
 make python-pretty-example EXAMPLE=morphine
 make view
-make molecule-viewer VIEWER_INPUT=molecules/benzene.sdf
+make molecule-viewer VIEWER_EXAMPLES=ferrocene
 ```
 
-Those commands check SDF parsing, built-in examples, validation, and the standalone molecule viewer. `make view` opens six example molecules in one browser page. In the viewer, clicking an atom shows the shell and orbital data stored on that atom.
+Those commands check SDF parsing, built-in examples, validation, and the standalone molecule viewer. `make view` opens six built-in ADT examples in one browser page, preserving explicit bonding systems such as diborane bridges and ferrocene back-donation. In the viewer, clicking an atom shows the shell data, orbital glyphs, coordinates, 3D edge lengths, and bond angles stored or calculated from that atom; the canvas also shows coordinate axes with Angstrom tick labels.
 
 `make test-molecule-viewer` runs the viewer tests and then opens the configured viewer HTML in the default browser.
 
@@ -35,7 +35,7 @@ Use `OPEN_VIEWER=1` when you want the generated viewer HTML to open in the defau
 
 ```bash
 OPEN_VIEWER=1 make python-pretty-example EXAMPLE=morphine
-OPEN_VIEWER=1 make molecule-viewer VIEWER_INPUT=molecules/benzene.sdf
+OPEN_VIEWER=1 make molecule-viewer VIEWER_EXAMPLES=diborane
 ```
 
 ## Run Benchmarks

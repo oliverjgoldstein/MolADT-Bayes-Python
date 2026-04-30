@@ -201,7 +201,7 @@ def test_makefile_molecule_viewer_target_exports_html(tmp_path: Path) -> None:
             "-n",
             "molecule-viewer",
             "SYSTEM_PYTHON=python3",
-            "VIEWER_INPUT=molecules/morphine.sdf",
+            "VIEWER_EXAMPLES=morphine",
         ],
         capture_output=True,
         text=True,
@@ -209,9 +209,10 @@ def test_makefile_molecule_viewer_target_exports_html(tmp_path: Path) -> None:
     )
 
     assert "Exporting standalone MolADT molecule viewer." in result.stdout
-    assert "input: molecules/morphine.sdf" in result.stdout
+    assert "command: moladt.cli view-examples" in result.stdout
+    assert "examples: morphine" in result.stdout
     assert "output: results/viewer/morphine.viewer.html" in result.stdout
-    assert './.venv/bin/python -m moladt.cli view-html "molecules/morphine.sdf" --output "results/viewer/morphine.viewer.html"' in result.stdout
+    assert './.venv/bin/python -m moladt.cli view-examples morphine --output "results/viewer/morphine.viewer.html"' in result.stdout
 
 
 def test_makefile_view_target_opens_example_collection(tmp_path: Path) -> None:
@@ -233,7 +234,9 @@ def test_makefile_view_target_opens_example_collection(tmp_path: Path) -> None:
     )
 
     assert "Opening MolADT example molecule viewer." in result.stdout
-    assert "molecules/benzene.sdf molecules/diborane.sdf molecules/ferrocene.sdf" in result.stdout
+    assert "command: moladt.cli view-examples" in result.stdout
+    assert "examples: benzene diborane ferrocene morphine methane water" in result.stdout
+    assert "./.venv/bin/python -m moladt.cli view-examples benzene diborane ferrocene morphine methane water" in result.stdout
     assert '--output "results/viewer/examples.viewer.html" --title "MolADT example molecules" --open-viewer' in result.stdout
 
 
@@ -249,7 +252,7 @@ def test_makefile_molecule_viewer_can_open_browser(tmp_path: Path) -> None:
             "-n",
             "molecule-viewer",
             "SYSTEM_PYTHON=python3",
-            "VIEWER_INPUT=molecules/morphine.sdf",
+            "VIEWER_EXAMPLES=morphine",
             "OPEN_VIEWER=1",
         ],
         capture_output=True,
@@ -275,7 +278,7 @@ def test_makefile_test_molecule_viewer_target_runs_viewer_tests(tmp_path: Path) 
     assert "Running MolADT molecule viewer tests." in result.stdout
     assert "auto_open: yes" in result.stdout
     assert "./.venv/bin/python -m pytest -q tests/test_molecule_viewer.py" in result.stdout
-    assert './.venv/bin/python -m moladt.cli view-html "molecules/benzene.sdf" --output "results/viewer/benzene.viewer.html"   --open-viewer' in result.stdout
+    assert './.venv/bin/python -m moladt.cli view-examples ferrocene --output "results/viewer/ferrocene.viewer.html"  --open-viewer' in result.stdout
 
 
 def test_makefile_qm9_target_prints_recovered_predictive_path(tmp_path: Path) -> None:

@@ -1,16 +1,43 @@
 from __future__ import annotations
 
 import argparse
+import keyword
 from pathlib import Path
 
 from .chem.molecule import Molecule
 from .chem.molecule_ops import pretty_print_molecule
 from .chem.validate import validate_molecule
-from .examples import MANUSCRIPT_EXAMPLES, get_manuscript_example
+from .examples import (
+    MANUSCRIPT_EXAMPLES,
+    benzene_pretty,
+    diborane_pretty,
+    ferrocene_pretty,
+    get_manuscript_example,
+    hydrogen,
+    methane,
+    morphine_pretty,
+    oxygen,
+    water,
+)
 from .io.molecule_json import molecule_from_json, molecule_to_json
+from .io.python_literal import molecule_to_python_literal
 from .io.sdf import read_sdf_record
 from .io.smiles import molecule_to_smiles, parse_smiles
 from .viewer import open_molecule_viewer, write_molecule_viewer_collection_html, write_molecule_viewer_html
+
+
+EXAMPLE_VIEWER_MOLECULES: dict[str, tuple[str, Molecule]] = {
+    "benzene": ("Benzene", benzene_pretty),
+    "diborane": ("Diborane (B2H6)", diborane_pretty),
+    "ferrocene": ("Ferrocene (Fe(C5H5)2)", ferrocene_pretty),
+    "hydrogen": ("Hydrogen", hydrogen),
+    "methane": ("Methane", methane),
+    "morphine": ("Morphine", morphine_pretty),
+    "oxygen": ("Oxygen", oxygen),
+    "water": ("Water", water),
+}
+
+DEFAULT_VIEW_EXAMPLES = ("benzene", "diborane", "ferrocene", "morphine", "methane", "water")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -34,11 +61,21 @@ def build_parser() -> argparse.ArgumentParser:
     to_json_parser = subparsers.add_parser("to-json", help="Convert an SDF molecule into MolADT JSON")
     to_json_parser.add_argument("path")
 
+    to_python_parser = subparsers.add_parser("to-python", help="Convert an SDF molecule into an explicit Python Molecule literal")
+    to_python_parser.add_argument("path")
+    to_python_parser.add_argument("--name", default="molecule", help="Variable name to assign in the generated Python code")
+    to_python_parser.add_argument("-o", "--output", help="Optional file to write instead of printing")
+
+    to_example_parser = subparsers.add_parser("to-example", help="Alias for to-python")
+    to_example_parser.add_argument("path")
+    to_example_parser.add_argument("--name", default="molecule", help="Variable name to assign in the generated Python code")
+    to_example_parser.add_argument("-o", "--output", help="Optional file to write instead of printing")
+
     from_json_parser = subparsers.add_parser("from-json", help="Load MolADT JSON and pretty-print the typed molecule")
     from_json_parser.add_argument("path")
 
     viewer_parser = subparsers.add_parser("view-html", help="Export an interactive 3D molecule viewer HTML file")
-    viewer_parser.add_argument("path", nargs="+", help="Input SDF or MolADT JSON file(s)")
+    viewer_parser.add_argument("path", nargs="+", help="Input MolADT JSON file(s)")
     viewer_parser.add_argument("-o", "--output", help="Output HTML path")
     viewer_parser.add_argument("--title", help="Viewer title")
     viewer_parser.add_argument(
@@ -48,8 +85,26 @@ def build_parser() -> argparse.ArgumentParser:
     )
     viewer_parser.add_argument(
         "--format",
-        choices=("sdf", "json"),
-        help="Input format; inferred from the file suffix when omitted",
+        choices=("json",),
+        help="Input format. The viewer path accepts MolADT JSON; convert SDF with to-json first.",
+    )
+
+    view_examples_parser = subparsers.add_parser(
+        "view-examples",
+        help="Export a multi-molecule viewer for built-in ADT examples",
+    )
+    view_examples_parser.add_argument(
+        "names",
+        nargs="*",
+        choices=tuple(sorted(EXAMPLE_VIEWER_MOLECULES)),
+        help="Built-in examples to include. Defaults to benzene, diborane, ferrocene, morphine, methane, water.",
+    )
+    view_examples_parser.add_argument("-o", "--output", help="Output HTML path")
+    view_examples_parser.add_argument("--title", help="Viewer title")
+    view_examples_parser.add_argument(
+        "--open-viewer",
+        action="store_true",
+        help="Open the written viewer HTML in the default browser.",
     )
 
     pretty_example_parser = subparsers.add_parser(
@@ -80,6 +135,12 @@ def main(argv: list[str] | None = None) -> int:
         return _handle_to_smiles(Path(args.path))
     if args.command == "to-json":
         return _handle_to_json(Path(args.path))
+    if args.command in {"to-python", "to-example"}:
+        return _handle_to_python(
+            Path(args.path),
+            variable_name=args.name,
+            output_path=None if args.output is None else Path(args.output),
+        )
     if args.command == "from-json":
         return _handle_from_json(Path(args.path))
     if args.command == "view-html":
@@ -88,6 +149,13 @@ def main(argv: list[str] | None = None) -> int:
             output_path=None if args.output is None else Path(args.output),
             title=args.title,
             input_format=args.format,
+            open_viewer=args.open_viewer,
+        )
+    if args.command == "view-examples":
+        return _handle_view_examples(
+            tuple(args.names or DEFAULT_VIEW_EXAMPLES),
+            output_path=None if args.output is None else Path(args.output),
+            title=args.title,
             open_viewer=args.open_viewer,
         )
     if args.command == "pretty-example":
@@ -132,6 +200,21 @@ def _handle_to_json(path: Path) -> int:
     return 0
 
 
+def _handle_to_python(path: Path, *, variable_name: str, output_path: Path | None = None) -> int:
+    if not variable_name.isidentifier() or keyword.iskeyword(variable_name):
+        raise ValueError("--name must be a valid Python identifier")
+    record = read_sdf_record(path)
+    validate_molecule(record.molecule)
+    source = molecule_to_python_literal(record.molecule, variable_name=variable_name)
+    if output_path is None:
+        print(source, end="")
+    else:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(source, encoding="utf-8")
+        print(output_path)
+    return 0
+
+
 def _handle_from_json(path: Path) -> int:
     molecule = molecule_from_json(path.read_bytes())
     validate_molecule(molecule)
@@ -168,12 +251,35 @@ def _handle_view_html(
     return 0
 
 
+def _handle_view_examples(
+    names: tuple[str, ...],
+    *,
+    output_path: Path | None,
+    title: str | None,
+    open_viewer: bool = False,
+) -> int:
+    entries = tuple(EXAMPLE_VIEWER_MOLECULES[name] for name in names)
+    for _, molecule in entries:
+        validate_molecule(molecule)
+    resolved_output = output_path or Path("results") / "viewer" / "examples.viewer.html"
+    written = write_molecule_viewer_collection_html(
+        entries,
+        resolved_output,
+        title=title or "MolADT example molecules",
+    )
+    print(written)
+    if open_viewer:
+        open_molecule_viewer(written)
+        print(f"Opened viewer: {written.resolve().as_uri()}")
+    return 0
+
+
 def _read_viewer_entry(path: Path, *, input_format: str | None) -> tuple[str, Molecule]:
-    resolved_format = input_format or ("json" if path.suffix.lower() == ".json" else "sdf")
-    if resolved_format == "json":
-        return path.stem, molecule_from_json(path.read_bytes())
-    record = read_sdf_record(path)
-    return record.title or path.stem, record.molecule
+    if input_format not in (None, "json"):
+        raise ValueError("view-html accepts MolADT JSON only; convert SDF with to-json first")
+    if path.suffix.lower() != ".json":
+        raise ValueError("view-html accepts MolADT JSON files only; convert SDF with to-json first")
+    return path.stem, molecule_from_json(path.read_bytes())
 
 
 def _handle_pretty_example(name: str, *, viewer_output: Path | None = None, open_viewer: bool = False) -> int:

@@ -512,6 +512,26 @@ _HTML_TEMPLATE = """<!doctype html>
       color: var(--muted);
     }
 
+    .selection strong,
+    .geometry-block strong {
+      color: var(--ink);
+    }
+
+    .geometry-block {
+      display: grid;
+      gap: 4px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #edf0f0;
+    }
+
+    .geometry-list {
+      display: grid;
+      gap: 2px;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
     .tooltip {
       position: fixed;
       z-index: 4;
@@ -563,6 +583,7 @@ _HTML_TEMPLATE = """<!doctype html>
         <button id="reset-view" type="button" title="Reset view">Reset</button>
         <button id="toggle-labels" type="button" title="Toggle atom labels">Labels</button>
         <button id="toggle-systems" type="button" title="Toggle bonding systems">Systems</button>
+        <button id="toggle-axes" type="button" title="Toggle coordinate axes">Axes</button>
       </div>
       <div class="drop-overlay">Drop MolADT JSON</div>
     </section>
@@ -626,6 +647,7 @@ _HTML_TEMPLATE = """<!doctype html>
       zoom: 1,
       labels: true,
       systems: true,
+      axes: true,
       activeSystem: null,
       selectedAtom: null,
       pointerDown: false,
@@ -647,7 +669,10 @@ _HTML_TEMPLATE = """<!doctype html>
         atoms: [],
         atomMap: new Map(),
         bonds: [],
-        systems: []
+        systems: [],
+        center: { x: 0, y: 0, z: 0 },
+        scale: 1,
+        axes: buildAxes({ x: 0, y: 0, z: 0 }, { minX: -1, maxX: 1, minY: -1, maxY: 1, minZ: -1, maxZ: 1 }, 1)
       };
     }
 
@@ -719,6 +744,67 @@ _HTML_TEMPLATE = """<!doctype html>
           hybridComponents: orbital.hybridComponents || orbital.hybrid_components || null
         }))
       }));
+    }
+
+    function roundedValue(value) {
+      return Math.round(Number(value) * 10) / 10;
+    }
+
+    function uniqueTicks(values) {
+      return Array.from(new Set(values.map(roundedValue))).sort((a, b) => a - b);
+    }
+
+    function axisTicks(min, max) {
+      const ticks = [min, max];
+      if (min < 0 && max > 0) {
+        ticks.push(0);
+      }
+      return uniqueTicks(ticks);
+    }
+
+    function axisRange(min, max, fallbackCenter, fallbackSpan) {
+      if (!Number.isFinite(min) || !Number.isFinite(max)) {
+        return { min: fallbackCenter - fallbackSpan, max: fallbackCenter + fallbackSpan };
+      }
+      const span = Math.max(0.6, max - min, fallbackSpan * 0.5);
+      const pad = Math.max(0.35, span * 0.16);
+      if (max - min < 0.6) {
+        return { min: fallbackCenter - span / 2 - pad, max: fallbackCenter + span / 2 + pad };
+      }
+      return { min: min - pad, max: max + pad };
+    }
+
+    function buildAxes(center, bounds, maxSpan) {
+      const span = Math.max(1, maxSpan);
+      const xRange = axisRange(bounds.minX, bounds.maxX, center.x, span);
+      const yRange = axisRange(bounds.minY, bounds.maxY, center.y, span);
+      const zRange = axisRange(bounds.minZ, bounds.maxZ, center.z, span);
+      return [
+        {
+          key: "x",
+          label: "x",
+          color: "#ef4444",
+          start: { x: xRange.min, y: center.y, z: center.z },
+          end: { x: xRange.max, y: center.y, z: center.z },
+          ticks: axisTicks(xRange.min, xRange.max).map((value) => ({ value, point: { x: value, y: center.y, z: center.z } }))
+        },
+        {
+          key: "y",
+          label: "y",
+          color: "#059669",
+          start: { x: center.x, y: yRange.min, z: center.z },
+          end: { x: center.x, y: yRange.max, z: center.z },
+          ticks: axisTicks(yRange.min, yRange.max).map((value) => ({ value, point: { x: center.x, y: value, z: center.z } }))
+        },
+        {
+          key: "z",
+          label: "z",
+          color: "#2563eb",
+          start: { x: center.x, y: center.y, z: zRange.min },
+          end: { x: center.x, y: center.y, z: zRange.max },
+          ticks: axisTicks(zRange.min, zRange.max).map((value) => ({ value, point: { x: center.x, y: center.y, z: value } }))
+        }
+      ];
     }
 
     function fromMoladtJson(raw) {
@@ -820,6 +906,14 @@ _HTML_TEMPLATE = """<!doctype html>
         center.y /= atoms.length;
         center.z /= atoms.length;
       }
+      const bounds = atoms.reduce((acc, atom) => ({
+        minX: Math.min(acc.minX, atom.x),
+        maxX: Math.max(acc.maxX, atom.x),
+        minY: Math.min(acc.minY, atom.y),
+        maxY: Math.max(acc.maxY, atom.y),
+        minZ: Math.min(acc.minZ, atom.z),
+        maxZ: Math.max(acc.maxZ, atom.z)
+      }), { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, minZ: Infinity, maxZ: -Infinity });
       const maxSpan = Math.max(1, ...atoms.map((atom) => Math.hypot(atom.x - center.x, atom.y - center.y, atom.z - center.z)));
       const scale = 2.9 / maxSpan;
       atoms.forEach((atom) => {
@@ -843,7 +937,16 @@ _HTML_TEMPLATE = """<!doctype html>
         atoms: (system.atoms || []).map(Number),
         edges: (system.edges || []).map((edge) => ({ a: Number(edge.a), b: Number(edge.b) }))
       }));
-      return { title: payload.title || "MolADT 3D Viewer", atoms, atomMap, bonds, systems };
+      return {
+        title: payload.title || "MolADT 3D Viewer",
+        atoms,
+        atomMap,
+        bonds,
+        systems,
+        center,
+        scale,
+        axes: buildAxes(center, bounds, maxSpan)
+      };
     }
 
     function resizeCanvas() {
@@ -880,6 +983,48 @@ _HTML_TEMPLATE = """<!doctype html>
         p: perspective,
         atom
       };
+    }
+
+    function projectWorld(point) {
+      return project({
+        vx: (point.x - molecule.center.x) * molecule.scale,
+        vy: (point.y - molecule.center.y) * molecule.scale,
+        vz: (point.z - molecule.center.z) * molecule.scale
+      });
+    }
+
+    function drawCoordinateAxes() {
+      if (!state.axes || !molecule.axes || !molecule.axes.length) {
+        return;
+      }
+      ctx.save();
+      ctx.font = "800 11px ui-sans-serif, system-ui, sans-serif";
+      ctx.textBaseline = "middle";
+      molecule.axes.forEach((axis) => {
+        const start = projectWorld(axis.start);
+        const end = projectWorld(axis.end);
+        drawLine(start, end, {
+          width: 1.8,
+          color: axis.color,
+          alpha: 0.66
+        });
+        ctx.fillStyle = axis.color;
+        ctx.textAlign = "center";
+        ctx.fillText(axis.label, end.x + 12, end.y - 12);
+        (axis.ticks || []).forEach((tick) => {
+          const point = projectWorld(tick.point);
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, 3.2, 0, Math.PI * 2);
+          ctx.fillStyle = axis.color;
+          ctx.globalAlpha = 0.72;
+          ctx.fill();
+          ctx.globalAlpha = 1;
+          ctx.textAlign = "left";
+          ctx.fillStyle = "rgba(31, 41, 51, 0.72)";
+          ctx.fillText(axis.label + " " + tick.value + "A", point.x + 6, point.y + 10);
+        });
+      });
+      ctx.restore();
     }
 
     function drawLine(a, b, options) {
@@ -957,6 +1102,110 @@ _HTML_TEMPLATE = """<!doctype html>
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
+    }
+
+    function formatMeasure(value, digits = 3) {
+      return Number(value).toFixed(digits).replace(/\\.?0+$/, "");
+    }
+
+    function distanceBetweenAtoms(left, right) {
+      return Math.hypot(left.x - right.x, left.y - right.y, left.z - right.z);
+    }
+
+    function angleBetweenAtoms(left, center, right) {
+      const ax = left.x - center.x;
+      const ay = left.y - center.y;
+      const az = left.z - center.z;
+      const bx = right.x - center.x;
+      const by = right.y - center.y;
+      const bz = right.z - center.z;
+      const alen = Math.hypot(ax, ay, az);
+      const blen = Math.hypot(bx, by, bz);
+      if (alen < 0.000001 || blen < 0.000001) {
+        return null;
+      }
+      const cosine = Math.max(-1, Math.min(1, (ax * bx + ay * by + az * bz) / (alen * blen)));
+      return Math.acos(cosine) * 180 / Math.PI;
+    }
+
+    function geometryEdgesForAtom(atom) {
+      const edges = new Map();
+      function addGeometryEdge(edge, label) {
+        if (Number(edge.a) !== atom.id && Number(edge.b) !== atom.id) {
+          return;
+        }
+        const otherId = Number(edge.a) === atom.id ? Number(edge.b) : Number(edge.a);
+        const other = molecule.atomMap.get(otherId);
+        if (!other) {
+          return;
+        }
+        const key = edgeKey(edge);
+        const existing = edges.get(key) || {
+          a: Number(edge.a),
+          b: Number(edge.b),
+          other,
+          labels: []
+        };
+        if (!existing.labels.includes(label)) {
+          existing.labels.push(label);
+        }
+        edges.set(key, existing);
+      }
+      molecule.bonds.forEach((bond) => {
+        addGeometryEdge(bond, "sigma order " + formatMeasure(bond.order || 1, 2));
+      });
+      molecule.systems.forEach((system) => {
+        system.edges.forEach((edge) => addGeometryEdge(edge, system.label));
+      });
+      return Array.from(edges.values()).sort((left, right) => left.other.id - right.other.id);
+    }
+
+    function bondAnglesForAtom(atom) {
+      const neighbors = geometryEdgesForAtom(atom).map((edge) => edge.other);
+      const angles = [];
+      for (let i = 0; i < neighbors.length; i += 1) {
+        for (let j = i + 1; j < neighbors.length; j += 1) {
+          const angle = angleBetweenAtoms(neighbors[i], atom, neighbors[j]);
+          if (angle !== null) {
+            angles.push({
+              left: neighbors[i],
+              right: neighbors[j],
+              angle
+            });
+          }
+        }
+      }
+      return angles.sort((left, right) => left.left.id - right.left.id || left.right.id - right.right.id);
+    }
+
+    function geometrySummary(atom) {
+      const coordinates = "("
+        + formatMeasure(atom.x) + ", "
+        + formatMeasure(atom.y) + ", "
+        + formatMeasure(atom.z) + ") A";
+      const edges = geometryEdgesForAtom(atom);
+      const edgeRows = edges.length
+        ? edges.map((edge) => {
+          const length = distanceBetweenAtoms(atom, edge.other);
+          return escapeHtml(atom.label + " - " + edge.other.label)
+            + ": " + escapeHtml(formatMeasure(length)) + " A"
+            + " (" + escapeHtml(edge.labels.join(", ")) + ")";
+        }).join("<br>")
+        : "no geometric edges";
+      const angles = bondAnglesForAtom(atom);
+      const angleRows = angles.length
+        ? angles.map((item) => (
+          escapeHtml(item.left.label + " - " + atom.label + " - " + item.right.label)
+          + ": " + escapeHtml(formatMeasure(item.angle, 1)) + " deg"
+        )).join("<br>")
+        : "no bond angles";
+      return '<div class="geometry-block"><strong>Coordinates (A)</strong><div class="geometry-list">'
+        + escapeHtml(coordinates)
+        + '</div></div><div class="geometry-block"><strong>Edge Lengths From 3D Coordinates</strong><div class="geometry-list">'
+        + edgeRows
+        + '</div></div><div class="geometry-block"><strong>Bond Angles</strong><div class="geometry-list">'
+        + angleRows
+        + "</div></div>";
     }
 
     function flattenOrbitals(atom) {
@@ -1217,6 +1466,7 @@ _HTML_TEMPLATE = """<!doctype html>
         b: points.get(bond.b)
       })).filter((item) => item.a && item.b).sort((left, right) => ((left.a.z + left.b.z) - (right.a.z + right.b.z)));
 
+      drawCoordinateAxes();
       bondDraws.forEach(({ bond, a, b }) => {
         const width = Math.max(3.5, 4.2 + Math.min(2.5, bond.order - 1) * 2.2) * ((a.p + b.p) / 2) * state.zoom;
         drawLine(a, b, {
@@ -1276,6 +1526,7 @@ _HTML_TEMPLATE = """<!doctype html>
       document.getElementById("system-count").textContent = String(molecule.systems.length);
       document.getElementById("toggle-labels").classList.toggle("active", state.labels);
       document.getElementById("toggle-systems").classList.toggle("active", state.systems);
+      document.getElementById("toggle-axes").classList.toggle("active", state.axes);
 
       const moleculeSection = document.getElementById("molecule-section");
       const moleculeList = document.getElementById("molecule-list");
@@ -1354,7 +1605,8 @@ _HTML_TEMPLATE = """<!doctype html>
       const shellText = shellSummary(atom);
       selection.innerHTML = "<strong>" + escapeHtml(atom.label) + "</strong><br>charge " + escapeHtml(charge) + "<br>"
         + escapeHtml(orbitalSummary(atom)) + (shellText ? "<br>" + shellText.split("<br>").map(escapeHtml).join("<br>") : "")
-        + "<br>" + (systems.length ? systems.map(escapeHtml).join("<br>") : "no bonding systems");
+        + "<br>" + (systems.length ? systems.map(escapeHtml).join("<br>") : "no bonding systems")
+        + geometrySummary(atom);
     }
 
     function updateHover(event) {
@@ -1455,6 +1707,12 @@ _HTML_TEMPLATE = """<!doctype html>
 
     document.getElementById("toggle-systems").addEventListener("click", () => {
       state.systems = !state.systems;
+      renderPanel();
+      draw();
+    });
+
+    document.getElementById("toggle-axes").addEventListener("click", () => {
+      state.axes = !state.axes;
       renderPanel();
       draw();
     });

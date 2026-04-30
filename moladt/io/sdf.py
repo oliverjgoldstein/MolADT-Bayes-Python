@@ -5,11 +5,11 @@ from pathlib import Path
 from re import search
 import shlex
 from types import MappingProxyType
-from typing import Any, Mapping
+from typing import Any, Iterator, Mapping
 
 from ..chem.constants import element_attributes, element_shells
 from ..chem.coordinate import Coordinate, mk_angstrom
-from ..chem.dietz import AtomId, Edge, NonNegative, SystemId, mk_bonding_system, mk_edge
+from ..chem.dietz import AtomId, BondingSystem, Edge, NonNegative, SystemId, mk_bonding_system, mk_edge
 from ..chem.molecule import Atom, AtomicSymbol, Molecule
 from .molecule_json import molecule_to_dict
 
@@ -58,7 +58,7 @@ def read_sdf_records(path: str | Path, *, limit: int | None = None) -> list[SDFR
     return parse_sdf_records(Path(path).read_text(encoding="latin-1"), limit=limit)
 
 
-def iter_sdf_records(path: str | Path, *, limit: int | None = None):
+def iter_sdf_records(path: str | Path, *, limit: int | None = None) -> Iterator[SDFRecord]:
     if limit is not None and limit <= 0:
         return
     count = 0

@@ -30,7 +30,7 @@ class _OrjsonModule(Protocol):
 
 
 try:
-    import orjson as _orjson  # type: ignore[import-not-found]
+    import orjson as _orjson
 except ModuleNotFoundError:  # pragma: no cover - exercised only when optional wheel is missing locally.
     orjson: _OrjsonModule | None = None
 else:

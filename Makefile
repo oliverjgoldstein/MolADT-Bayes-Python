@@ -23,15 +23,13 @@ ZINC_LIMIT ?=
 INCLUDE_MOLADT ?= 0
 BENCHMARK_VERBOSE ?= 1
 EXAMPLE ?= ferrocene
-VIEWER_INPUT ?= molecules/benzene.sdf
-VIEWER_INPUTS ?= "$(VIEWER_INPUT)"
-VIEWER_OUTPUT ?= results/viewer/$(basename $(notdir $(VIEWER_INPUT))).viewer.html
-VIEW_EXAMPLES ?= molecules/benzene.sdf molecules/diborane.sdf molecules/ferrocene.sdf molecules/morphine.sdf molecules/methane.sdf molecules/water.sdf
+VIEWER_EXAMPLES ?= ferrocene
+VIEWER_OUTPUT ?= results/viewer/$(firstword $(VIEWER_EXAMPLES)).viewer.html
+VIEW_EXAMPLES ?= benzene diborane ferrocene morphine methane water
 VIEW_OUTPUT ?= results/viewer/examples.viewer.html
 OPEN_VIEWER ?= 0
 VIEWER_COUNT ?= 1
 PRETTY_VIEWER_OUTPUT ?=
-VIEWER_FORMAT_ARG := $(if $(VIEWER_FORMAT),--format $(VIEWER_FORMAT),)
 VIEWER_TITLE_ARG := $(if $(VIEWER_TITLE),--title "$(VIEWER_TITLE)",)
 OPEN_VIEWER_ARG := $(if $(filter 1 true yes TRUE YES,$(OPEN_VIEWER)),--open-viewer,)
 PRETTY_VIEWER_OUTPUT_ARG := $(if $(PRETTY_VIEWER_OUTPUT),--viewer-output "$(PRETTY_VIEWER_OUTPUT)",)
@@ -400,27 +398,25 @@ python-pretty-example:
 
 view:
 	@printf "%s\n" \
-	"Opening MolADT example molecule viewer." \
-	"  repo: MolADT-Bayes-Python" \
-	"  command: moladt.cli view-html" \
-	"  examples: $(VIEW_EXAMPLES)" \
-	"  output: $(VIEW_OUTPUT)" \
-	"  auto_open: yes"
-	$(PYTHON_CMD) -m moladt.cli view-html $(VIEW_EXAMPLES) --output "$(VIEW_OUTPUT)" --title "MolADT example molecules" --open-viewer
+		"Opening MolADT example molecule viewer." \
+		"  repo: MolADT-Bayes-Python" \
+		"  command: moladt.cli view-examples" \
+		"  examples: $(VIEW_EXAMPLES)" \
+		"  output: $(VIEW_OUTPUT)" \
+		"  auto_open: yes"
+	$(PYTHON_CMD) -m moladt.cli view-examples $(VIEW_EXAMPLES) --output "$(VIEW_OUTPUT)" --title "MolADT example molecules" --open-viewer
 
 molecule-viewer:
 	@printf "%s\n" \
 	"Exporting standalone MolADT molecule viewer." \
 	"  repo: MolADT-Bayes-Python" \
-	"  command: moladt.cli view-html" \
-	"  input: $(VIEWER_INPUT)" \
-	"  inputs: $(VIEWER_INPUTS)" \
+	"  command: moladt.cli view-examples" \
+	"  examples: $(VIEWER_EXAMPLES)" \
 	"  output: $(VIEWER_OUTPUT)" \
-	"  format: $(if $(VIEWER_FORMAT),$(VIEWER_FORMAT),auto)" \
-	"  title: $(if $(VIEWER_TITLE),$(VIEWER_TITLE),input title or filename)" \
+	"  title: $(if $(VIEWER_TITLE),$(VIEWER_TITLE),example title)" \
 	"  open_viewer: $(OPEN_VIEWER)" \
-	"  usage: make molecule-viewer VIEWER_INPUT=molecules/morphine.sdf"
-	$(PYTHON_CMD) -m moladt.cli view-html $(VIEWER_INPUTS) --output "$(VIEWER_OUTPUT)" $(VIEWER_FORMAT_ARG) $(VIEWER_TITLE_ARG) $(OPEN_VIEWER_ARG)
+	"  usage: make molecule-viewer VIEWER_EXAMPLES=\"diborane ferrocene\""
+	$(PYTHON_CMD) -m moladt.cli view-examples $(VIEWER_EXAMPLES) --output "$(VIEWER_OUTPUT)" $(VIEWER_TITLE_ARG) $(OPEN_VIEWER_ARG)
 
 test-molecule-viewer:
 	@printf "%s\n" \
@@ -428,13 +424,12 @@ test-molecule-viewer:
 	"  repo: MolADT-Bayes-Python" \
 	"  command: tests/test_molecule_viewer.py" \
 	"  export smoke target: molecule-viewer" \
-	"  viewer input: $(VIEWER_INPUT)" \
-	"  viewer inputs: $(VIEWER_INPUTS)" \
+	"  viewer examples: $(VIEWER_EXAMPLES)" \
 	"  viewer output: $(VIEWER_OUTPUT)" \
 	"  auto_open: yes" \
-	"  example: make test-molecule-viewer VIEWER_INPUT=molecules/benzene.sdf"
+	"  example: make test-molecule-viewer VIEWER_EXAMPLES=\"diborane ferrocene\""
 	$(PYTHON_CMD) -m pytest -q tests/test_molecule_viewer.py
-	$(PYTHON_CMD) -m moladt.cli view-html $(VIEWER_INPUTS) --output "$(VIEWER_OUTPUT)" $(VIEWER_FORMAT_ARG) $(VIEWER_TITLE_ARG) --open-viewer
+	$(PYTHON_CMD) -m moladt.cli view-examples $(VIEWER_EXAMPLES) --output "$(VIEWER_OUTPUT)" $(VIEWER_TITLE_ARG) --open-viewer
 
 python-benchmark-qm9:
 	@printf "%s\n" \
