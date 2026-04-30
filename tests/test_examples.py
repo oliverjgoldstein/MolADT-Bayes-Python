@@ -7,11 +7,14 @@ import pytest
 
 from scripts.features import compute_moladt_featurized_descriptors
 
-from moladt.chem.dietz import AtomId
+from moladt.chem.dietz import AtomId, Edge, NonNegative, SystemId, mk_bonding_system
+from moladt.chem.molecule import AtomicSymbol, Molecule
 from moladt.chem.validate import validate_molecule
 from moladt.cli import DEFAULT_VIEW_EXAMPLES, EXAMPLE_VIEWER_MOLECULES
 from moladt.examples import benzene_pretty, diborane_pretty, ferrocene_pretty, morphine_pretty
+from moladt.examples._literal import atom
 from moladt.examples.sample_molecules import hydrogen, methane, oxygen, water
+from moladt.io import molecule_to_python_literal
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -132,7 +135,72 @@ def test_example_sources_are_explicit_literals_without_generation_loops() -> Non
             assert pattern not in source, f"{path.name} contains generated example pattern {pattern!r}"
 
 
+def test_checked_examples_are_canonical_expanded_molecules() -> None:
+    examples = (
+        benzene_pretty,
+        diborane_pretty,
+        ferrocene_pretty,
+        morphine_pretty,
+        hydrogen,
+        oxygen,
+        water,
+        methane,
+    )
+
+    for molecule in examples:
+        assert [atom_id.value for atom_id in molecule.atoms] == sorted(
+            atom_id.value for atom_id in molecule.atoms
+        )
+        assert all(edge.a.value < edge.b.value for edge in molecule.local_bonds)
+        assert [system_id.value for system_id, _ in molecule.systems] == sorted(
+            system_id.value for system_id, _ in molecule.systems
+        )
+        for _, system in molecule.systems:
+            assert all(edge.a.value < edge.b.value for edge in system.member_edges)
+
+
+def test_python_literal_export_is_the_canonical_normal_form() -> None:
+    molecule = Molecule(
+        atoms={
+            AtomId(2): atom(2, AtomicSymbol.H, 0.0, 0.0, 0.9),
+            AtomId(1): atom(1, AtomicSymbol.O, 0.0, 0.0, 0.0),
+        },
+        local_bonds=frozenset({Edge(AtomId(2), AtomId(1))}),
+        systems=(
+            (
+                SystemId(2),
+                mk_bonding_system(NonNegative(2), frozenset({Edge(AtomId(2), AtomId(1))}), "later"),
+            ),
+            (
+                SystemId(1),
+                mk_bonding_system(NonNegative(2), frozenset({Edge(AtomId(2), AtomId(1))}), "earlier"),
+            ),
+        ),
+    )
+
+    source = molecule_to_python_literal(molecule, variable_name="canonical")
+
+    assert source.index("AtomId(1): atom") < source.index("AtomId(2): atom")
+    assert "Edge(AtomId(1), AtomId(2))" in source
+    assert "Edge(AtomId(2), AtomId(1))" not in source
+    assert source.index("SystemId(1)") < source.index("SystemId(2)")
+
+
 def test_explicit_examples_keep_expected_sigma_edges() -> None:
+    assert _edge_pairs(benzene_pretty) == [
+        (1, 2),
+        (1, 6),
+        (1, 7),
+        (2, 3),
+        (2, 8),
+        (3, 4),
+        (3, 9),
+        (4, 5),
+        (4, 10),
+        (5, 6),
+        (5, 11),
+        (6, 12),
+    ]
     assert _edge_pairs(diborane_pretty) == [(1, 2), (1, 5), (1, 6), (2, 7), (2, 8)]
     assert _edge_pairs(ferrocene_pretty) == [
         (2, 3),

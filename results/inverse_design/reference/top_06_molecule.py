@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from moladt.chem.constants import element_attributes, element_shells
-from moladt.chem.coordinate import Coordinate, mk_angstrom
-from moladt.chem.dietz import AtomId, NonNegative, SystemId, mk_bonding_system, mk_edge
-from moladt.chem.molecule import Atom, AtomicSymbol, Molecule
+from moladt.chem.dietz import AtomId, Edge, NonNegative, SystemId, mk_bonding_system
+from moladt.chem.molecule import AtomicSymbol, Molecule
 from moladt.chem.validate import validate_molecule
+from moladt.examples._literal import atom
 
 rank = 6
 target_freesolv = -5
@@ -12,96 +11,32 @@ seed_molecule = 'water'
 random_seed = 0
 predicted_freesolv = -4.73877650207
 predictive_sd = 1.64938300643
-target_error = 0.261223497927
+target_error = 0.26122349793
 bayesian_credible_score_percent = 51.3710794846
 score = -0.666094827818
 formula = 'HCl2NO2'
 
-atoms = {
-    AtomId(1): Atom(
-        atom_id=AtomId(1),
-        attributes=element_attributes(AtomicSymbol.Cl),
-        coordinate=Coordinate(
-            mk_angstrom(-0.011),
-            mk_angstrom(0.963),
-            mk_angstrom(0.007),
-        ),
-        shells=element_shells(AtomicSymbol.Cl),
-        formal_charge=0,
-    ),
-    AtomId(2): Atom(
-        atom_id=AtomId(2),
-        attributes=element_attributes(AtomicSymbol.O),
-        coordinate=Coordinate(
-            mk_angstrom(-0.711),
-            mk_angstrom(-0.249435565298),
-            mk_angstrom(0.107),
-        ),
-        shells=element_shells(AtomicSymbol.O),
-        formal_charge=0,
-    ),
-    AtomId(3): Atom(
-        atom_id=AtomId(3),
-        attributes=element_attributes(AtomicSymbol.O),
-        coordinate=Coordinate(
-            mk_angstrom(-1.411),
-            mk_angstrom(-1.4618711306),
-            mk_angstrom(0.207),
-        ),
-        shells=element_shells(AtomicSymbol.O),
-        formal_charge=0,
-    ),
-    AtomId(4): Atom(
-        atom_id=AtomId(4),
-        attributes=element_attributes(AtomicSymbol.N),
-        coordinate=Coordinate(
-            mk_angstrom(-0.811),
-            mk_angstrom(-2.50110161514),
-            mk_angstrom(0.407),
-        ),
-        shells=element_shells(AtomicSymbol.N),
-        formal_charge=0,
-    ),
-    AtomId(5): Atom(
-        atom_id=AtomId(5),
-        attributes=element_attributes(AtomicSymbol.Cl),
-        coordinate=Coordinate(
-            mk_angstrom(-0.161),
-            mk_angstrom(-1.37526859022),
-            mk_angstrom(0.507),
-        ),
-        shells=element_shells(AtomicSymbol.Cl),
-        formal_charge=0,
-    ),
-    AtomId(6): Atom(
-        atom_id=AtomId(6),
-        attributes=element_attributes(AtomicSymbol.H),
-        coordinate=Coordinate(
-            mk_angstrom(-1.486),
-            mk_angstrom(-1.33196732003),
-            mk_angstrom(0.607),
-        ),
-        shells=element_shells(AtomicSymbol.H),
-        formal_charge=0,
-    ),
-}
-
-local_bonds = frozenset({
-    mk_edge(AtomId(1), AtomId(2)),
-    mk_edge(AtomId(2), AtomId(3)),
-    mk_edge(AtomId(3), AtomId(4)),
-    mk_edge(AtomId(4), AtomId(5)),
-    mk_edge(AtomId(4), AtomId(6)),
-})
-
-systems = (
-)
-
 molecule = validate_molecule(
     Molecule(
-        atoms=atoms,
-        local_bonds=local_bonds,
-        systems=systems,
+        atoms={
+            AtomId(1): atom(1, AtomicSymbol.Cl, -0.011, 0.963, 0.007),
+            AtomId(2): atom(2, AtomicSymbol.O, -0.711, -0.249, 0.107),
+            AtomId(3): atom(3, AtomicSymbol.O, -1.411, -1.462, 0.207),
+            AtomId(4): atom(4, AtomicSymbol.N, -0.811, -2.501, 0.407),
+            AtomId(5): atom(5, AtomicSymbol.Cl, -0.161, -1.375, 0.507),
+            AtomId(6): atom(6, AtomicSymbol.H, -1.486, -1.332, 0.607),
+        },
+        local_bonds=frozenset(
+            {
+                Edge(AtomId(1), AtomId(2)),
+                Edge(AtomId(2), AtomId(3)),
+                Edge(AtomId(3), AtomId(4)),
+                Edge(AtomId(4), AtomId(5)),
+                Edge(AtomId(4), AtomId(6)),
+            }
+        ),
+        systems=(
+        ),
     )
 )
 

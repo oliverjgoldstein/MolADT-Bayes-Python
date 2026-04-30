@@ -1126,11 +1126,10 @@ def _candidate_python_source(rank: int, candidate: Candidate, target: float, see
         (
             "from __future__ import annotations",
             "",
-            "from moladt.chem.constants import element_attributes, element_shells",
-            "from moladt.chem.coordinate import Coordinate, mk_angstrom",
-            "from moladt.chem.dietz import AtomId, NonNegative, SystemId, mk_bonding_system, mk_edge",
-            "from moladt.chem.molecule import Atom, AtomicSymbol, Molecule",
+            "from moladt.chem.dietz import AtomId, Edge, NonNegative, SystemId, mk_bonding_system",
+            "from moladt.chem.molecule import AtomicSymbol, Molecule",
             "from moladt.chem.validate import validate_molecule",
+            "from moladt.examples._literal import atom",
             "",
             f"rank = {rank}",
             f"target_freesolv = {target:.12g}",
@@ -1143,23 +1142,19 @@ def _candidate_python_source(rank: int, candidate: Candidate, target: float, see
             f"score = {candidate.score:.12g}",
             f"formula = {molecular_formula(molecule)!r}",
             "",
-            "atoms = {",
-            *_atom_literal_lines(molecule),
-            "}",
-            "",
-            "local_bonds = frozenset({",
-            *_edge_literal_lines(molecule.local_bonds),
-            "})",
-            "",
-            "systems = (",
-            *_system_literal_lines(molecule),
-            ")",
-            "",
             "molecule = validate_molecule(",
             "    Molecule(",
-            "        atoms=atoms,",
-            "        local_bonds=local_bonds,",
-            "        systems=systems,",
+            "        atoms={",
+            *_atom_literal_lines(molecule),
+            "        },",
+            "        local_bonds=frozenset(",
+            "            {",
+            *_edge_literal_lines(molecule.local_bonds),
+            "            }",
+            "        ),",
+            "        systems=(",
+            *_system_literal_lines(molecule),
+            "        ),",
             "    )",
             ")",
             "",
@@ -1186,41 +1181,39 @@ def _atom_literal_lines(molecule: Molecule) -> tuple[str, ...]:
     for atom_id in sorted(molecule.atoms):
         atom = molecule.atoms[atom_id]
         symbol = atom.attributes.symbol.value
-        lines.extend(
-            (
-                f"    AtomId({atom_id.value}): Atom(",
-                f"        atom_id=AtomId({atom_id.value}),",
-                f"        attributes=element_attributes(AtomicSymbol.{symbol}),",
-                "        coordinate=Coordinate(",
-                f"            mk_angstrom({atom.coordinate.x.value:.12g}),",
-                f"            mk_angstrom({atom.coordinate.y.value:.12g}),",
-                f"            mk_angstrom({atom.coordinate.z.value:.12g}),",
-                "        ),",
-                f"        shells=element_shells(AtomicSymbol.{symbol}),",
-                f"        formal_charge={atom.formal_charge},",
-                "    ),",
-            )
+        charge_arg = "" if atom.formal_charge == 0 else f", formal_charge={atom.formal_charge}"
+        lines.append(
+            f"            AtomId({atom_id.value}): atom("
+            f"{atom_id.value}, AtomicSymbol.{symbol}, "
+            f"{atom.coordinate.x.value:.3f}, "
+            f"{atom.coordinate.y.value:.3f}, "
+            f"{atom.coordinate.z.value:.3f}{charge_arg}),"
         )
     return tuple(lines)
 
 
 def _edge_literal_lines(edges: frozenset[Edge] | set[Edge]) -> tuple[str, ...]:
-    return tuple(f"    mk_edge(AtomId({edge.a.value}), AtomId({edge.b.value}))," for edge in sorted(edges))
+    return tuple(f"                Edge(AtomId({edge.a.value}), AtomId({edge.b.value}))," for edge in sorted(edges))
 
 
 def _system_literal_lines(molecule: Molecule) -> tuple[str, ...]:
     lines: list[str] = []
     for system_id, system in molecule.systems:
-        lines.append("    (")
-        lines.append(f"        SystemId({system_id.value}),")
-        lines.append("        mk_bonding_system(")
-        lines.append(f"            NonNegative({system.shared_electrons.value}),")
-        lines.append("            frozenset({")
-        lines.extend(f"                mk_edge(AtomId({edge.a.value}), AtomId({edge.b.value}))," for edge in sorted(system.member_edges))
-        lines.append("            }),")
-        lines.append(f"            {system.tag!r},")
-        lines.append("        ),")
-        lines.append("    ),")
+        lines.append("            (")
+        lines.append(f"                SystemId({system_id.value}),")
+        lines.append("                mk_bonding_system(")
+        lines.append(f"                    NonNegative({system.shared_electrons.value}),")
+        lines.append("                    frozenset(")
+        lines.append("                        {")
+        lines.extend(
+            f"                            Edge(AtomId({edge.a.value}), AtomId({edge.b.value})),"
+            for edge in sorted(system.member_edges)
+        )
+        lines.append("                        }")
+        lines.append("                    ),")
+        lines.append(f"                    {system.tag!r},")
+        lines.append("                ),")
+        lines.append("            ),")
     return tuple(lines)
 
 

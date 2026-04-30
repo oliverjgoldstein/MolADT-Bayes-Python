@@ -27,7 +27,7 @@ MolADT JSON is the shared boundary format used by the Python and Haskell repos.
 ./.venv/bin/python -m moladt.cli to-example molecules/benzene.sdf --name benzene_generated --output moladt/examples/benzene_generated.py
 ```
 
-`to-python` and its `to-example` alias convert parsed geometry into expanded `Molecule(...)` source with literal `AtomId(...)`, `Edge(...)`, and `mk_bonding_system(...)` entries. The output is meant for checked examples and reviewable fixtures, so it does not hide atoms or bonds behind generated loops.
+`to-python` and its `to-example` alias convert parsed geometry into canonical expanded `Molecule(...)` source with literal `AtomId(...)`, `Edge(...)`, and `mk_bonding_system(...)` entries. Atoms are sorted by `AtomId`, edges are normalized and sorted, and systems are sorted by `SystemId`. The output is meant for checked examples and reviewable fixtures, so it does not hide atoms or bonds behind generated loops.
 
 Python API:
 
@@ -60,7 +60,7 @@ make molecule-viewer VIEWER_EXAMPLES=ferrocene
 ./.venv/bin/python -m moladt.cli view-html benzene.moladt.json --output benzene.viewer.html
 ```
 
-This writes a standalone HTML viewer under `results/viewer/`. The Make target uses built-in explicit ADT examples. The direct `view-html` command accepts MolADT JSON. Click an atom in the viewer to show its stored shell and orbital glyphs, coordinates, 3D edge lengths, and bond angles.
+This writes a standalone HTML viewer under `results/viewer/`. The Make target uses built-in explicit ADT examples. The direct `view-html` command accepts MolADT JSON. Click an atom in the viewer to show its stored shell and orbital glyphs, coordinates, 3D edge lengths, and bond angles calculated from the molecule's coordinate data.
 
 ## Rule Of Thumb
 

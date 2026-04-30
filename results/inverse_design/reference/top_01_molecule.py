@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from moladt.chem.constants import element_attributes, element_shells
-from moladt.chem.coordinate import Coordinate, mk_angstrom
-from moladt.chem.dietz import AtomId, NonNegative, SystemId, mk_bonding_system, mk_edge
-from moladt.chem.molecule import Atom, AtomicSymbol, Molecule
+from moladt.chem.dietz import AtomId, Edge, NonNegative, SystemId, mk_bonding_system
+from moladt.chem.molecule import AtomicSymbol, Molecule
 from moladt.chem.validate import validate_molecule
+from moladt.examples._literal import atom
 
 rank = 1
 target_freesolv = -5
@@ -17,115 +16,31 @@ bayesian_credible_score_percent = 59.263839007
 score = -0.523170863508
 formula = 'CH2Cl2FNO'
 
-atoms = {
-    AtomId(1): Atom(
-        atom_id=AtomId(1),
-        attributes=element_attributes(AtomicSymbol.O),
-        coordinate=Coordinate(
-            mk_angstrom(-0.011),
-            mk_angstrom(0.963),
-            mk_angstrom(0.007),
-        ),
-        shells=element_shells(AtomicSymbol.O),
-        formal_charge=0,
-    ),
-    AtomId(2): Atom(
-        atom_id=AtomId(2),
-        attributes=element_attributes(AtomicSymbol.Cl),
-        coordinate=Coordinate(
-            mk_angstrom(-0.711),
-            mk_angstrom(-0.249435565298),
-            mk_angstrom(0.107),
-        ),
-        shells=element_shells(AtomicSymbol.Cl),
-        formal_charge=0,
-    ),
-    AtomId(3): Atom(
-        atom_id=AtomId(3),
-        attributes=element_attributes(AtomicSymbol.C),
-        coordinate=Coordinate(
-            mk_angstrom(-0.711),
-            mk_angstrom(-0.249435565298),
-            mk_angstrom(0.107),
-        ),
-        shells=element_shells(AtomicSymbol.C),
-        formal_charge=0,
-    ),
-    AtomId(4): Atom(
-        atom_id=AtomId(4),
-        attributes=element_attributes(AtomicSymbol.F),
-        coordinate=Coordinate(
-            mk_angstrom(-0.061),
-            mk_angstrom(0.876397459622),
-            mk_angstrom(0.207),
-        ),
-        shells=element_shells(AtomicSymbol.F),
-        formal_charge=0,
-    ),
-    AtomId(5): Atom(
-        atom_id=AtomId(5),
-        attributes=element_attributes(AtomicSymbol.N),
-        coordinate=Coordinate(
-            mk_angstrom(-0.061),
-            mk_angstrom(0.876397459622),
-            mk_angstrom(0.207),
-        ),
-        shells=element_shells(AtomicSymbol.N),
-        formal_charge=0,
-    ),
-    AtomId(6): Atom(
-        atom_id=AtomId(6),
-        attributes=element_attributes(AtomicSymbol.Cl),
-        coordinate=Coordinate(
-            mk_angstrom(-1.461),
-            mk_angstrom(0.876397459622),
-            mk_angstrom(0.207),
-        ),
-        shells=element_shells(AtomicSymbol.Cl),
-        formal_charge=0,
-    ),
-    AtomId(7): Atom(
-        atom_id=AtomId(7),
-        attributes=element_attributes(AtomicSymbol.H),
-        coordinate=Coordinate(
-            mk_angstrom(-1.311),
-            mk_angstrom(-1.28866604984),
-            mk_angstrom(0.207),
-        ),
-        shells=element_shells(AtomicSymbol.H),
-        formal_charge=0,
-    ),
-    AtomId(8): Atom(
-        atom_id=AtomId(8),
-        attributes=element_attributes(AtomicSymbol.H),
-        coordinate=Coordinate(
-            mk_angstrom(0.564),
-            mk_angstrom(-0.206134295109),
-            mk_angstrom(0.407),
-        ),
-        shells=element_shells(AtomicSymbol.H),
-        formal_charge=0,
-    ),
-}
-
-local_bonds = frozenset({
-    mk_edge(AtomId(1), AtomId(2)),
-    mk_edge(AtomId(1), AtomId(3)),
-    mk_edge(AtomId(3), AtomId(4)),
-    mk_edge(AtomId(3), AtomId(5)),
-    mk_edge(AtomId(3), AtomId(7)),
-    mk_edge(AtomId(5), AtomId(6)),
-    mk_edge(AtomId(5), AtomId(8)),
-})
-
-systems = (
-)
-
 molecule = validate_molecule(
     Molecule(
-        atoms=atoms,
-        local_bonds=local_bonds,
-        systems=systems,
+        atoms={
+            AtomId(1): atom(1, AtomicSymbol.O, -0.011, 0.963, 0.007),
+            AtomId(2): atom(2, AtomicSymbol.Cl, -0.711, -0.249, 0.107),
+            AtomId(3): atom(3, AtomicSymbol.C, -0.711, -0.249, 0.107),
+            AtomId(4): atom(4, AtomicSymbol.F, -0.061, 0.876, 0.207),
+            AtomId(5): atom(5, AtomicSymbol.N, -0.061, 0.876, 0.207),
+            AtomId(6): atom(6, AtomicSymbol.Cl, -1.461, 0.876, 0.207),
+            AtomId(7): atom(7, AtomicSymbol.H, -1.311, -1.289, 0.207),
+            AtomId(8): atom(8, AtomicSymbol.H, 0.564, -0.206, 0.407),
+        },
+        local_bonds=frozenset(
+            {
+                Edge(AtomId(1), AtomId(2)),
+                Edge(AtomId(1), AtomId(3)),
+                Edge(AtomId(3), AtomId(4)),
+                Edge(AtomId(3), AtomId(5)),
+                Edge(AtomId(3), AtomId(7)),
+                Edge(AtomId(5), AtomId(6)),
+                Edge(AtomId(5), AtomId(8)),
+            }
+        ),
+        systems=(
+        ),
     )
 )
 

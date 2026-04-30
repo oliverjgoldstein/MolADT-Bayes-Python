@@ -67,7 +67,7 @@ def molecule_to_python_literal(molecule: Molecule, *, variable_name: str = "mole
     )
     if molecule.systems:
         lines.append("    systems=(")
-        for system_id, system in molecule.systems:
+        for system_id, system in sorted(molecule.systems, key=lambda item: item[0].value):
             lines.extend(
                 [
                     "        (",

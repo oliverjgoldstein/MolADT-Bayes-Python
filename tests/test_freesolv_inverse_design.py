@@ -308,6 +308,12 @@ def test_result_writer_exports_importable_top_molecule_files(tmp_path) -> None:
     written = write_result_molecule_files(result, tmp_path)
 
     assert len(written.molecule_file_paths) == 2
+    source = written.molecule_file_paths[0].read_text(encoding="utf-8")
+    assert "molecule = validate_molecule(\n    Molecule(" in source
+    assert "atoms = {" not in source
+    assert "local_bonds = " not in source
+    assert "mk_edge(" not in source
+    assert "Edge(AtomId(" in source
     payload = runpy.run_path(str(written.molecule_file_paths[0]))
     validate_molecule(payload["molecule"])
     assert payload["rank"] == 1

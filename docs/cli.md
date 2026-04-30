@@ -42,7 +42,7 @@ Run:
 ## Notes
 
 - `parse` accepts SDF V2000 and the core V3000 CTAB subset.
-- `to-python` and `to-example` emit explicit `AtomId(...)`, `Edge(...)`, and `mk_bonding_system(...)` source with no generated loops in the output.
+- `to-python` and `to-example` emit the canonical explicit form: sorted `AtomId(...)` atoms, normalized sorted `Edge(...)` entries, sorted systems, and no generated loops in the output.
 - `view-html` accepts MolADT JSON. Pass multiple JSON files to write one HTML page with a scrollable molecule list.
 - `view-examples` uses the built-in ADT examples, preserving diborane, ferrocene, benzene, and morphine bonding systems.
 - `--open-viewer` opens the written HTML viewer in the default browser.

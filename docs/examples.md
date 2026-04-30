@@ -39,6 +39,7 @@ make molecule-viewer VIEWER_EXAMPLES=ferrocene
 - Non-classical bonding is explicit in `systems`, not squeezed into a string.
 - The same object can be validated, viewed, serialized, featurized, and scored.
 - Checked-in examples are expanded as literal `AtomId`, `Edge`, and `BondingSystem` values. They do not hide their atoms or bonds behind loops.
+- The canonical normal form is sorted and fully explicit: atoms by `AtomId`, normalized edges with the lower `AtomId` first, and systems by `SystemId`.
 
 The examples use this shape:
 
@@ -68,13 +69,13 @@ benzene = Molecule(
     local_bonds=frozenset(
         {
             Edge(AtomId(1), AtomId(2)),
-            Edge(AtomId(1), AtomId(6)),
+            Edge(AtomId(1), AtomId(3)),
             Edge(AtomId(1), AtomId(7)),
-            Edge(AtomId(2), AtomId(3)),
+            Edge(AtomId(2), AtomId(4)),
             Edge(AtomId(2), AtomId(8)),
-            Edge(AtomId(3), AtomId(4)),
+            Edge(AtomId(3), AtomId(5)),
             Edge(AtomId(3), AtomId(9)),
-            Edge(AtomId(4), AtomId(5)),
+            Edge(AtomId(4), AtomId(6)),
             Edge(AtomId(4), AtomId(10)),
             Edge(AtomId(5), AtomId(6)),
             Edge(AtomId(5), AtomId(11)),
@@ -89,10 +90,10 @@ benzene = Molecule(
                 frozenset(
                     {
                         Edge(AtomId(1), AtomId(2)),
-                        Edge(AtomId(1), AtomId(6)),
-                        Edge(AtomId(2), AtomId(3)),
-                        Edge(AtomId(3), AtomId(4)),
-                        Edge(AtomId(4), AtomId(5)),
+                        Edge(AtomId(1), AtomId(3)),
+                        Edge(AtomId(2), AtomId(4)),
+                        Edge(AtomId(3), AtomId(5)),
+                        Edge(AtomId(4), AtomId(6)),
                         Edge(AtomId(5), AtomId(6)),
                     }
                 ),
@@ -115,7 +116,7 @@ for system_id, system in molecule.systems:
     print(system_id.value, system.tag, system.shared_electrons.value)
 ```
 
-Convert an SDF parser fixture into the same explicit shape:
+Convert an SDF parser fixture into the same explicit canonical shape:
 
 ```bash
 ./.venv/bin/python -m moladt.cli to-python molecules/benzene.sdf --name benzene_generated
