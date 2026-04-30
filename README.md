@@ -64,16 +64,21 @@ Full setup notes live in [Quickstart](docs/quickstart.md).
 ## See A Molecule
 
 ```bash
+make view
 make python-pretty-example EXAMPLE=morphine
 make molecule-viewer VIEWER_EXAMPLES=ferrocene
 make test-molecule-viewer
 ```
 
-The viewer exports a standalone HTML file under `results/viewer/` by default. The Make targets clear repo `__pycache__` files, remove the previous HTML output, and write a new file each run. Click an atom in the viewer to show the stored shell and orbital glyphs for that atom, its coordinates, the 3D lengths of incident edges, and bond angles around that atom. Those geometry values come from the molecule coordinates, not from the canvas projection. The canvas includes coordinate axes with Angstrom tick labels and an `Axes` toggle. `make view` and `make molecule-viewer` use the built-in ADT examples, so diborane and ferrocene keep their explicit bonding systems. `view-html` takes MolADT JSON files when you need a file-backed viewer export. Use `VIEWER_EXAMPLES`, `VIEWER_OUTPUT`, and `VIEWER_TITLE` when you need a custom export.
+`make view` opens the built-in example molecules in one browser page. `make molecule-viewer` writes a fresh HTML viewer under `results/viewer/`. Click an atom to see orbitals, coordinates, 3D edge lengths, and bond angles.
 
-`make test-molecule-viewer` now runs the viewer tests, writes the configured viewer HTML, and opens it in your default browser automatically.
+Use `VIEWER_EXAMPLES` to choose molecules:
 
-Turn on browser auto-open with `OPEN_VIEWER=1`:
+```bash
+make molecule-viewer VIEWER_EXAMPLES="benzene diborane ferrocene"
+```
+
+Use `OPEN_VIEWER=1` when you want Make to open the generated page:
 
 ```bash
 OPEN_VIEWER=1 make python-pretty-example EXAMPLE=ferrocene
@@ -81,19 +86,7 @@ OPEN_VIEWER=1 make molecule-viewer VIEWER_EXAMPLES=diborane
 OPEN_VIEWER=1 make inverse-design TARGET=-5.0
 ```
 
-The first command still prints the pretty molecule report, then writes and opens `results/viewer/ferrocene.viewer.html`. The inverse-design command writes `top_molecules.viewer.html` under `results/inverse_design/run_.../` and opens one page containing the top 10 molecules by default.
-
-Direct CLI equivalents:
-
-```bash
-./.venv/bin/python -m moladt.cli pretty-example diborane --open-viewer
-./.venv/bin/python -m moladt.cli view-examples --output results/viewer/examples.viewer.html --open-viewer
-./.venv/bin/python -m moladt.cli to-python molecules/benzene.sdf --name benzene_generated
-./.venv/bin/python -m moladt.cli to-example molecules/benzene.sdf --name benzene_generated --output moladt/examples/benzene_generated.py
-./.venv/bin/python -m moladt.cli to-json molecules/benzene.sdf > benzene.moladt.json
-./.venv/bin/python -m moladt.cli view-html benzene.moladt.json --output results/viewer/benzene.viewer.html --open-viewer
-./.venv/bin/python -m experiments.freesolv_inverse_design --target -5.0 --open-viewer
-```
+Inverse design opens the top 10 generated molecules by default.
 
 More examples: [Examples](docs/examples.md), [Parsing and rendering](docs/parsing.md), and [CLI reference](docs/cli.md).
 
