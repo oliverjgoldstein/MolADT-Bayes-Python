@@ -16,7 +16,7 @@ from typing import Callable, Protocol, Sequence, TextIO
 import numpy as np
 import pandas as pd
 
-from moladt.chem.constants import element_attributes, element_shells
+from moladt.chem.constants import element_attributes, element_shells, equilibrium_bond_length
 from moladt.chem.coordinate import Coordinate, mk_angstrom
 from moladt.chem.dietz import AtomId, BondingSystem, Edge, NonNegative, SystemId, mk_bonding_system, mk_edge
 from moladt.chem.molecule import Atom, AtomicSymbol, Molecule
@@ -88,6 +88,59 @@ GROWTH_MAX_VALENCE = {
 }
 VALENCE_TOLERANCE = 1e-9
 TERMINAL_FREE_SOLV_SYMBOLS = (AtomicSymbol.H, AtomicSymbol.F, AtomicSymbol.Cl)
+MIN_LOCAL_BOND_ANGLE_DEGREES = 90.0
+MIN_ATOM_DISTANCE_ANGSTROM = 0.45
+MIN_BOND_LENGTH_RATIO = 0.70
+MAX_BOND_LENGTH_RATIO = 1.40
+NONBONDED_CLEARANCE_FRACTION = 0.62
+PI_RING_CC_BOND_LENGTH = 1.40
+FREESOLV_SINGLE_BOND_LENGTHS = {
+    (AtomicSymbol.H, AtomicSymbol.F): 0.92,
+    (AtomicSymbol.H, AtomicSymbol.Cl): 1.27,
+    (AtomicSymbol.C, AtomicSymbol.F): 1.35,
+    (AtomicSymbol.C, AtomicSymbol.Cl): 1.77,
+    (AtomicSymbol.N, AtomicSymbol.F): 1.36,
+    (AtomicSymbol.N, AtomicSymbol.Cl): 1.75,
+    (AtomicSymbol.O, AtomicSymbol.F): 1.42,
+    (AtomicSymbol.O, AtomicSymbol.Cl): 1.69,
+    (AtomicSymbol.F, AtomicSymbol.F): 1.42,
+    (AtomicSymbol.Cl, AtomicSymbol.Cl): 1.99,
+}
+COVALENT_RADII = {
+    AtomicSymbol.H: 0.31,
+    AtomicSymbol.C: 0.76,
+    AtomicSymbol.N: 0.71,
+    AtomicSymbol.O: 0.66,
+    AtomicSymbol.F: 0.57,
+    AtomicSymbol.Cl: 1.02,
+}
+VAN_DER_WAALS_RADII = {
+    AtomicSymbol.H: 1.20,
+    AtomicSymbol.C: 1.70,
+    AtomicSymbol.N: 1.55,
+    AtomicSymbol.O: 1.52,
+    AtomicSymbol.F: 1.47,
+    AtomicSymbol.Cl: 1.75,
+}
+ATTACHMENT_DIRECTION_SEEDS = (
+    (1.0, 1.0, 1.0),
+    (-1.0, -1.0, 1.0),
+    (-1.0, 1.0, -1.0),
+    (1.0, -1.0, -1.0),
+    (1.0, 0.0, 0.0),
+    (-1.0, 0.0, 0.0),
+    (0.0, 1.0, 0.0),
+    (0.0, -1.0, 0.0),
+    (0.0, 0.0, 1.0),
+    (0.0, 0.0, -1.0),
+    (1.0, 1.0, 0.0),
+    (-1.0, 1.0, 0.0),
+    (1.0, -1.0, 0.0),
+    (0.0, 1.0, 1.0),
+    (0.0, -1.0, 1.0),
+    (1.0, 0.0, 1.0),
+    (-1.0, 0.0, 1.0),
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -574,10 +627,9 @@ def add_terminal_atom(molecule: Molecule, rng: random.Random) -> Molecule | None
     )
     new_symbol = rng.choice(allowed_new_symbols)
     new_id = AtomId(max(atom_id.value for atom_id in molecule.atoms) + 1)
-    parent_atom = molecule.atoms[parent_id]
     mutable = MutableMolecule.from_molecule(molecule)
     _free_one_valence_slot(mutable, parent_id)
-    mutable.atoms[new_id] = _new_atom(new_id, new_symbol, parent_atom)
+    mutable.atoms[new_id] = _new_atom(new_id, new_symbol, parent_id, mutable.freeze())
     mutable.local_bonds.add(mk_edge(parent_id, new_id))
     return _try_valid_candidate(mutable.freeze())
 
@@ -595,6 +647,8 @@ def add_sigma_edge(molecule: Molecule, rng: random.Random) -> Molecule | None:
         for right in atom_ids[left_index + 1 :]:
             edge = mk_edge(left, right)
             if edge in molecule.local_bonds or _has_localized_singleton_system(molecule, edge):
+                continue
+            if not _is_geometrically_linkable(molecule, edge):
                 continue
             pair = (left, right)
             path_length = _shortest_sigma_path_length(molecule, left, right)
@@ -722,7 +776,21 @@ def print_candidate(rank: int, candidate: Candidate, target: float, *, stream: T
     print(f"  local bonds: {len(molecule.local_bonds)}", file=stream)
     print(f"  Dietz bonding systems: {len(molecule.systems)}", file=stream)
     print(f"  formula: {molecular_formula(molecule)}", file=stream)
+    geometry = _geometry_summary(molecule)
+    if geometry["min_bond_length_angstrom"] is not None:
+        print(
+            "  geometry: "
+            f"bond lengths {_format_optional_geometry(geometry['min_bond_length_angstrom'], 3)}-"
+            f"{_format_optional_geometry(geometry['max_bond_length_angstrom'], 3)} A, "
+            f"min non-bonded distance {_format_optional_geometry(geometry['min_nonbonded_distance_angstrom'], 3)} A, "
+            f"min bond angle {_format_optional_geometry(geometry['min_bond_angle_degrees'], 1)} deg",
+            file=stream,
+        )
     print(format_dietz_molecule(molecule), file=stream)
+
+
+def _format_optional_geometry(value: float | None, precision: int) -> str:
+    return "n/a" if value is None else f"{value:.{precision}f}"
 
 
 def format_dietz_molecule(molecule: Molecule) -> str:
@@ -902,11 +970,15 @@ def _write_generated_candidate_bundle(
             "heavy_atoms",
             "local_bonds",
             "dietz_bonding_systems",
+            "min_bond_length_angstrom",
+            "max_bond_length_angstrom",
+            "min_nonbonded_distance_angstrom",
+            "min_bond_angle_degrees",
             "seed_molecule",
             "random_seed",
             "target_freesolv",
         )
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         for rank, candidate in enumerate(candidates, start=1):
             writer.writerow(_generated_candidate_metadata(rank, candidate, target, seed_molecule))
@@ -928,8 +1000,9 @@ def _generated_candidate_metadata(
     candidate: Candidate,
     target: float,
     seed_molecule: str,
-) -> dict[str, int | float | str]:
+) -> dict[str, int | float | str | None]:
     molecule = candidate.molecule
+    geometry = _geometry_summary(molecule)
     return {
         "rank": rank,
         "formula": molecular_formula(molecule),
@@ -942,10 +1015,18 @@ def _generated_candidate_metadata(
         "heavy_atoms": heavy_atom_count(molecule),
         "local_bonds": len(molecule.local_bonds),
         "dietz_bonding_systems": len(molecule.systems),
+        "min_bond_length_angstrom": _optional_float(geometry["min_bond_length_angstrom"]),
+        "max_bond_length_angstrom": _optional_float(geometry["max_bond_length_angstrom"]),
+        "min_nonbonded_distance_angstrom": _optional_float(geometry["min_nonbonded_distance_angstrom"]),
+        "min_bond_angle_degrees": _optional_float(geometry["min_bond_angle_degrees"]),
         "seed_molecule": seed_molecule,
         "random_seed": RANDOM_SEED,
         "target_freesolv": target,
     }
+
+
+def _optional_float(value: float | None) -> float | None:
+    return None if value is None else float(value)
 
 
 def _score_molecule(predictor: FreeSolvPredictor, molecule: Molecule, target: float) -> Candidate:
@@ -1280,20 +1361,162 @@ def _system_literal_lines(molecule: Molecule) -> tuple[str, ...]:
     return tuple(lines)
 
 
-def _new_atom(atom_id: AtomId, symbol: AtomicSymbol, parent_atom: Atom) -> Atom:
-    angle = (atom_id.value % 6) * math.pi / 3.0
-    radius = 1.2 + 0.05 * float(atom_id.value % 5)
+def _new_atom(atom_id: AtomId, symbol: AtomicSymbol, parent_id: AtomId, molecule: Molecule) -> Atom:
+    parent_atom = molecule.atoms[parent_id]
+    bond_length = _preferred_sigma_bond_length(parent_atom.attributes.symbol, symbol)
+    direction = _attachment_direction(molecule, parent_id, atom_id, symbol, bond_length)
     return Atom(
         atom_id=atom_id,
         attributes=element_attributes(symbol),
         coordinate=Coordinate(
-            mk_angstrom(parent_atom.coordinate.x.value + radius * math.cos(angle)),
-            mk_angstrom(parent_atom.coordinate.y.value + radius * math.sin(angle)),
-            mk_angstrom(parent_atom.coordinate.z.value + 0.1 * float(atom_id.value % 3)),
+            mk_angstrom(parent_atom.coordinate.x.value + bond_length * direction[0]),
+            mk_angstrom(parent_atom.coordinate.y.value + bond_length * direction[1]),
+            mk_angstrom(parent_atom.coordinate.z.value + bond_length * direction[2]),
         ),
         shells=element_shells(symbol),
         formal_charge=0,
     )
+
+
+def _attachment_direction(
+    molecule: Molecule,
+    parent_id: AtomId,
+    atom_id: AtomId,
+    symbol: AtomicSymbol,
+    bond_length: float,
+) -> tuple[float, float, float]:
+    parent_atom = molecule.atoms[parent_id]
+    existing_directions = tuple(
+        direction
+        for neighbor_id in sorted(neighbors_sigma(molecule, parent_id))
+        for direction in (_unit_vector_between_atoms(parent_atom, molecule.atoms[neighbor_id]),)
+        if direction is not None
+    )
+    ideal_angle = _ideal_attachment_angle_degrees(molecule, parent_id)
+    candidates = _attachment_direction_candidates(existing_directions, atom_id, ideal_angle)
+    if not candidates:
+        return (1.0, 0.0, 0.0)
+    return max(
+        candidates,
+        key=lambda direction: _attachment_direction_score(
+            molecule,
+            parent_id,
+            direction,
+            bond_length=bond_length,
+            existing_directions=existing_directions,
+            ideal_angle=ideal_angle,
+            new_symbol=symbol,
+        ),
+    )
+
+
+def _attachment_direction_candidates(
+    existing_directions: tuple[tuple[float, float, float], ...],
+    atom_id: AtomId,
+    ideal_angle: float,
+) -> tuple[tuple[float, float, float], ...]:
+    static_candidates = [
+        direction
+        for seed in ATTACHMENT_DIRECTION_SEEDS
+        for direction in (_normalize_vector(seed),)
+        if direction is not None
+    ]
+    rotated_static = static_candidates[atom_id.value % len(static_candidates) :] + static_candidates[: atom_id.value % len(static_candidates)]
+    candidates: list[tuple[float, float, float]] = list(rotated_static)
+    if len(existing_directions) == 1:
+        axis = existing_directions[0]
+        basis_a, basis_b = _perpendicular_basis(axis)
+        theta = math.radians(ideal_angle)
+        phase = (atom_id.value * 1.61803398875) % (2.0 * math.pi)
+        for offset in range(8):
+            phi = phase + offset * math.pi / 4.0
+            candidate = _normalize_vector(
+                (
+                    math.cos(theta) * axis[0]
+                    + math.sin(theta) * (math.cos(phi) * basis_a[0] + math.sin(phi) * basis_b[0]),
+                    math.cos(theta) * axis[1]
+                    + math.sin(theta) * (math.cos(phi) * basis_a[1] + math.sin(phi) * basis_b[1]),
+                    math.cos(theta) * axis[2]
+                    + math.sin(theta) * (math.cos(phi) * basis_a[2] + math.sin(phi) * basis_b[2]),
+                )
+            )
+            if candidate is not None:
+                candidates.append(candidate)
+    elif len(existing_directions) >= 2:
+        summed = _normalize_vector(tuple(-sum(direction[index] for direction in existing_directions) for index in range(3)))
+        if summed is not None:
+            candidates.insert(0, summed)
+    return tuple(candidates)
+
+
+def _attachment_direction_score(
+    molecule: Molecule,
+    parent_id: AtomId,
+    direction: tuple[float, float, float],
+    *,
+    bond_length: float,
+    existing_directions: tuple[tuple[float, float, float], ...],
+    ideal_angle: float,
+    new_symbol: AtomicSymbol,
+) -> float:
+    parent_atom = molecule.atoms[parent_id]
+    proposed = (
+        parent_atom.coordinate.x.value + bond_length * direction[0],
+        parent_atom.coordinate.y.value + bond_length * direction[1],
+        parent_atom.coordinate.z.value + bond_length * direction[2],
+    )
+    angle_penalty = 0.0
+    min_angle = 180.0
+    for existing in existing_directions:
+        angle = _angle_between_unit_vectors(direction, existing)
+        min_angle = min(min_angle, angle)
+        angle_penalty += abs(angle - ideal_angle)
+
+    clearance_penalty = 0.0
+    min_clearance = 10.0
+    for other_id, other_atom in molecule.atoms.items():
+        if other_id == parent_id:
+            continue
+        distance = _point_distance(proposed, _atom_position(other_atom))
+        min_clearance = min(min_clearance, distance)
+        threshold = _nonbonded_clearance_threshold(new_symbol, other_atom.attributes.symbol)
+        if distance < threshold:
+            clearance_penalty += 1000.0 * (threshold - distance)
+
+    average_angle_penalty = angle_penalty / max(1, len(existing_directions))
+    return min_angle + min_clearance - average_angle_penalty - clearance_penalty
+
+
+def _perpendicular_basis(axis: tuple[float, float, float]) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+    helper = (0.0, 0.0, 1.0) if abs(axis[2]) < 0.9 else (0.0, 1.0, 0.0)
+    basis_a = _normalize_vector(_cross(axis, helper))
+    if basis_a is None:
+        basis_a = (1.0, 0.0, 0.0)
+    basis_b = _normalize_vector(_cross(axis, basis_a))
+    if basis_b is None:
+        basis_b = (0.0, 1.0, 0.0)
+    return basis_a, basis_b
+
+
+def _cross(left: tuple[float, float, float], right: tuple[float, float, float]) -> tuple[float, float, float]:
+    return (
+        left[1] * right[2] - left[2] * right[1],
+        left[2] * right[0] - left[0] * right[2],
+        left[0] * right[1] - left[1] * right[0],
+    )
+
+
+def _ideal_attachment_angle_degrees(molecule: Molecule, parent_id: AtomId) -> float:
+    parent_symbol = molecule.atoms[parent_id].attributes.symbol
+    if parent_symbol is AtomicSymbol.O:
+        return 104.5
+    if parent_symbol is AtomicSymbol.N:
+        return 107.0
+    if parent_symbol is AtomicSymbol.C and _atom_participates_in_pi_ring(molecule, parent_id):
+        return 120.0
+    if parent_symbol is AtomicSymbol.C:
+        return 109.5
+    return 109.5
 
 
 def _seed_atom(atom_id: int, symbol: AtomicSymbol, x: float, y: float, z: float) -> Atom:
@@ -1635,6 +1858,7 @@ def _validate_candidate(molecule: Molecule) -> Molecule:
     _ensure_conservative_generator_valence(molecule)
     _ensure_closed_valence_shells(molecule)
     _ensure_sound_bonding_systems(molecule)
+    _ensure_plausible_freesolv_geometry(molecule)
     for edge in molecule.local_bonds:
         effective_order(molecule, edge)
     return molecule
@@ -1727,6 +1951,199 @@ def _ensure_sound_bonding_systems(molecule: Molecule) -> None:
             raise ValidationError("pi_ring bonding system is not a simple carbon six-ring")
 
 
+def _ensure_plausible_freesolv_geometry(molecule: Molecule) -> None:
+    _ensure_no_coordinate_collisions(molecule)
+    _ensure_local_bond_lengths(molecule)
+    _ensure_nonbonded_clearance(molecule)
+    _ensure_local_bond_angles(molecule)
+
+
+def _ensure_no_coordinate_collisions(molecule: Molecule) -> None:
+    atom_ids = tuple(sorted(molecule.atoms))
+    for left_index, left in enumerate(atom_ids):
+        for right in atom_ids[left_index + 1 :]:
+            distance = _atom_distance(molecule, left, right)
+            if distance < MIN_ATOM_DISTANCE_ANGSTROM:
+                raise ValidationError(
+                    f"Atoms {left.value} and {right.value} have overlapping coordinates "
+                    f"({distance:.3f} A)"
+                )
+
+
+def _ensure_local_bond_lengths(molecule: Molecule) -> None:
+    for edge in molecule.local_bonds:
+        distance = _atom_distance(molecule, edge.a, edge.b)
+        expected = _expected_local_bond_length(molecule, edge)
+        lower = expected * MIN_BOND_LENGTH_RATIO
+        upper = expected * MAX_BOND_LENGTH_RATIO
+        if distance < lower or distance > upper:
+            left = molecule.atoms[edge.a].attributes.symbol.value
+            right = molecule.atoms[edge.b].attributes.symbol.value
+            raise ValidationError(
+                f"Bond {edge.a.value}-{edge.b.value} ({left}-{right}) has implausible length "
+                f"{distance:.3f} A; expected about {expected:.3f} A"
+            )
+
+
+def _ensure_nonbonded_clearance(molecule: Molecule) -> None:
+    bonded_pairs = {frozenset((edge.a, edge.b)) for edge in _all_edges(molecule)}
+    atom_ids = tuple(sorted(molecule.atoms))
+    for left_index, left in enumerate(atom_ids):
+        for right in atom_ids[left_index + 1 :]:
+            if frozenset((left, right)) in bonded_pairs:
+                continue
+            distance = _atom_distance(molecule, left, right)
+            threshold = _nonbonded_clearance_threshold(
+                molecule.atoms[left].attributes.symbol,
+                molecule.atoms[right].attributes.symbol,
+            )
+            if distance < threshold:
+                raise ValidationError(
+                    f"Non-bonded atoms {left.value} and {right.value} are too close "
+                    f"({distance:.3f} A; minimum {threshold:.3f} A)"
+                )
+
+
+def _ensure_local_bond_angles(molecule: Molecule) -> None:
+    for center in sorted(molecule.atoms):
+        neighbors = tuple(sorted(neighbors_sigma(molecule, center)))
+        for left_index, left in enumerate(neighbors):
+            for right in neighbors[left_index + 1 :]:
+                angle = _atom_angle_degrees(molecule, left, center, right)
+                if angle is None:
+                    raise ValidationError(f"Cannot calculate bond angle at atom {center.value}")
+                if angle < MIN_LOCAL_BOND_ANGLE_DEGREES:
+                    raise ValidationError(
+                        f"Bond angle {left.value}-{center.value}-{right.value} is implausibly tight "
+                        f"({angle:.1f} degrees)"
+                    )
+
+
+def _is_geometrically_linkable(molecule: Molecule, edge: Edge) -> bool:
+    expected = _expected_local_bond_length(molecule, edge)
+    distance = _atom_distance(molecule, edge.a, edge.b)
+    return expected * MIN_BOND_LENGTH_RATIO <= distance <= expected * MAX_BOND_LENGTH_RATIO
+
+
+def _geometry_summary(molecule: Molecule) -> dict[str, float | None]:
+    bond_lengths = [_atom_distance(molecule, edge.a, edge.b) for edge in molecule.local_bonds]
+    nonbonded_distances: list[float] = []
+    bonded_pairs = {frozenset((edge.a, edge.b)) for edge in _all_edges(molecule)}
+    atom_ids = tuple(sorted(molecule.atoms))
+    for left_index, left in enumerate(atom_ids):
+        for right in atom_ids[left_index + 1 :]:
+            if frozenset((left, right)) not in bonded_pairs:
+                nonbonded_distances.append(_atom_distance(molecule, left, right))
+    angles: list[float] = []
+    for center in atom_ids:
+        neighbors = tuple(sorted(neighbors_sigma(molecule, center)))
+        for left_index, left in enumerate(neighbors):
+            for right in neighbors[left_index + 1 :]:
+                angle = _atom_angle_degrees(molecule, left, center, right)
+                if angle is not None:
+                    angles.append(angle)
+    return {
+        "min_bond_length_angstrom": min(bond_lengths) if bond_lengths else None,
+        "max_bond_length_angstrom": max(bond_lengths) if bond_lengths else None,
+        "min_nonbonded_distance_angstrom": min(nonbonded_distances) if nonbonded_distances else None,
+        "min_bond_angle_degrees": min(angles) if angles else None,
+    }
+
+
+def _expected_local_bond_length(molecule: Molecule, edge: Edge) -> float:
+    left_symbol = molecule.atoms[edge.a].attributes.symbol
+    right_symbol = molecule.atoms[edge.b].attributes.symbol
+    if _edge_participates_in_pi_ring(molecule, edge) and left_symbol is AtomicSymbol.C and right_symbol is AtomicSymbol.C:
+        return PI_RING_CC_BOND_LENGTH
+    order = max(1, min(3, int(round(effective_order(molecule, edge)))))
+    known = equilibrium_bond_length(order, left_symbol, right_symbol)
+    if known is not None:
+        return known.value
+    if order != 1:
+        known_single = equilibrium_bond_length(1, left_symbol, right_symbol)
+        if known_single is not None:
+            return known_single.value
+    return _preferred_sigma_bond_length(left_symbol, right_symbol)
+
+
+def _preferred_sigma_bond_length(left_symbol: AtomicSymbol, right_symbol: AtomicSymbol) -> float:
+    known = equilibrium_bond_length(1, left_symbol, right_symbol)
+    if known is not None:
+        return known.value
+    explicit = FREESOLV_SINGLE_BOND_LENGTHS.get((left_symbol, right_symbol))
+    if explicit is not None:
+        return explicit
+    explicit = FREESOLV_SINGLE_BOND_LENGTHS.get((right_symbol, left_symbol))
+    if explicit is not None:
+        return explicit
+    return _covalent_radius(left_symbol) + _covalent_radius(right_symbol)
+
+
+def _nonbonded_clearance_threshold(left_symbol: AtomicSymbol, right_symbol: AtomicSymbol) -> float:
+    return max(
+        MIN_ATOM_DISTANCE_ANGSTROM,
+        NONBONDED_CLEARANCE_FRACTION * (_van_der_waals_radius(left_symbol) + _van_der_waals_radius(right_symbol)),
+    )
+
+
+def _covalent_radius(symbol: AtomicSymbol) -> float:
+    return COVALENT_RADII[symbol]
+
+
+def _van_der_waals_radius(symbol: AtomicSymbol) -> float:
+    return VAN_DER_WAALS_RADII[symbol]
+
+
+def _atom_distance(molecule: Molecule, left: AtomId, right: AtomId) -> float:
+    return _point_distance(_atom_position(molecule.atoms[left]), _atom_position(molecule.atoms[right]))
+
+
+def _atom_position(atom: Atom) -> tuple[float, float, float]:
+    return (atom.coordinate.x.value, atom.coordinate.y.value, atom.coordinate.z.value)
+
+
+def _point_distance(left: tuple[float, float, float], right: tuple[float, float, float]) -> float:
+    return math.sqrt(sum((left[index] - right[index]) ** 2 for index in range(3)))
+
+
+def _unit_vector_between_atoms(start: Atom, end: Atom) -> tuple[float, float, float] | None:
+    start_position = _atom_position(start)
+    end_position = _atom_position(end)
+    return _normalize_vector(tuple(end_position[index] - start_position[index] for index in range(3)))
+
+
+def _normalize_vector(vector: tuple[float, float, float]) -> tuple[float, float, float] | None:
+    length = math.sqrt(sum(component * component for component in vector))
+    if length <= 1e-12:
+        return None
+    return tuple(component / length for component in vector)
+
+
+def _atom_angle_degrees(molecule: Molecule, left: AtomId, center: AtomId, right: AtomId) -> float | None:
+    center_atom = molecule.atoms[center]
+    left_direction = _unit_vector_between_atoms(center_atom, molecule.atoms[left])
+    right_direction = _unit_vector_between_atoms(center_atom, molecule.atoms[right])
+    if left_direction is None or right_direction is None:
+        return None
+    return _angle_between_unit_vectors(left_direction, right_direction)
+
+
+def _angle_between_unit_vectors(
+    left: tuple[float, float, float],
+    right: tuple[float, float, float],
+) -> float:
+    cosine = max(-1.0, min(1.0, sum(left[index] * right[index] for index in range(3))))
+    return math.degrees(math.acos(cosine))
+
+
+def _edge_participates_in_pi_ring(molecule: Molecule, edge: Edge) -> bool:
+    return any(system.tag == "pi_ring" and edge in system.member_edges for _, system in molecule.systems)
+
+
+def _atom_participates_in_pi_ring(molecule: Molecule, atom_id: AtomId) -> bool:
+    return any(system.tag == "pi_ring" and atom_id in system.member_atoms for _, system in molecule.systems)
+
+
 def _complete_terminal_hydrogens(molecule: Molecule) -> Molecule:
     mutable = MutableMolecule.from_molecule(molecule)
     system_atoms = {atom_id for _, system in molecule.systems for atom_id in system.member_atoms}
@@ -1752,7 +2169,7 @@ def _complete_terminal_hydrogens(molecule: Molecule) -> Molecule:
         for _ in range(hydrogen_count):
             hydrogen_id = AtomId(next_atom_id)
             next_atom_id += 1
-            mutable.atoms[hydrogen_id] = _new_atom(hydrogen_id, AtomicSymbol.H, atom)
+            mutable.atoms[hydrogen_id] = _new_atom(hydrogen_id, AtomicSymbol.H, atom_id, mutable.freeze())
             mutable.local_bonds.add(mk_edge(atom_id, hydrogen_id))
 
     return mutable.freeze()

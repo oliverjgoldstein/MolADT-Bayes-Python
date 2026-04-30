@@ -39,6 +39,13 @@ The reference folder is Git-trackable:
 
 The top files are the 10 generated molecules with the highest model-side Bayesian credible score percentage.
 
+The generated CSV and JSONL also include geometry audit columns:
+
+- `min_bond_length_angstrom`
+- `max_bond_length_angstrom`
+- `min_nonbonded_distance_angstrom` using the same van der Waals clearance rule as validation
+- `min_bond_angle_degrees`
+
 When inverse design runs with `--open-viewer`, the timestamped run folder also gets `top_molecules.viewer.html`: one page with the top 10 molecules by default in a scrollable molecule list. `make inverse-design-view` regenerates and opens the same viewer from saved `generated_molecules.jsonl` output.
 
 Read the generated pool:

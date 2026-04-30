@@ -9,29 +9,29 @@ rank = 8
 target_freesolv = -5
 seed_molecule = 'water'
 random_seed = 0
-predicted_freesolv = -3.84226286921
-predictive_sd = 1.27832229212
-target_error = 1.15773713079
-bayesian_credible_score_percent = 47.773682142
-score = -0.738695280921
-formula = 'CH3ClO'
+predicted_freesolv = -4.50121898382
+predictive_sd = 0.890627743953
+target_error = 0.498781016182
+bayesian_credible_score_percent = 69.6718763964
+score = -0.361373444677
+formula = 'CH3FO'
 
 molecule = validate_molecule(
     Molecule(
         atoms={
-            AtomId(1): atom(1, AtomicSymbol.O, -0.011, 0.963, 0.007),
-            AtomId(2): atom(2, AtomicSymbol.Cl, -0.711, -0.249, 0.107),
-            AtomId(3): atom(3, AtomicSymbol.C, -0.711, -0.249, 0.107),
-            AtomId(4): atom(4, AtomicSymbol.H, -0.111, -1.289, 0.307),
-            AtomId(5): atom(5, AtomicSymbol.H, 0.539, -0.249, 0.107),
-            AtomId(6): atom(6, AtomicSymbol.H, -0.061, 0.876, 0.207),
+            AtomId(1): atom(1, AtomicSymbol.C, -0.011, 0.963, 0.007),
+            AtomId(2): atom(2, AtomicSymbol.F, -1.491, 0.963, 0.007),
+            AtomId(3): atom(3, AtomicSymbol.O, 1.679, 0.963, 0.007),
+            AtomId(4): atom(4, AtomicSymbol.H, -0.011, 2.033, 0.007),
+            AtomId(5): atom(5, AtomicSymbol.H, -0.011, 0.963, 1.077),
+            AtomId(6): atom(6, AtomicSymbol.H, 2.639, 0.963, 0.007),
         },
         local_bonds=frozenset(
             {
                 Edge(AtomId(1), AtomId(2)),
                 Edge(AtomId(1), AtomId(3)),
-                Edge(AtomId(3), AtomId(4)),
-                Edge(AtomId(3), AtomId(5)),
+                Edge(AtomId(1), AtomId(4)),
+                Edge(AtomId(1), AtomId(5)),
                 Edge(AtomId(3), AtomId(6)),
             }
         ),

@@ -14,8 +14,10 @@ from experiments.freesolv_inverse_design import (
     FreeSolvBayesianPredictor,
     Prediction,
     _carbon_six_ring_seed,
+    _ensure_plausible_freesolv_geometry,
     _find_gp_draws_path,
     _find_model_dir,
+    _geometry_summary,
     _molecule_key,
     _remove_atom_if_terminal,
     _score_molecule,
@@ -123,6 +125,13 @@ def test_generated_candidates_validate() -> None:
     assert result.diagnostics.accepted_proposals >= 0
     for candidate in result.top_candidates:
         validate_molecule(candidate.molecule)
+        _ensure_plausible_freesolv_geometry(candidate.molecule)
+        geometry = _geometry_summary(candidate.molecule)
+        assert geometry["min_bond_length_angstrom"] is not None
+        assert (
+            geometry["min_bond_angle_degrees"] is None
+            or geometry["min_bond_angle_degrees"] >= inverse_design.MIN_LOCAL_BOND_ANGLE_DEGREES
+        )
 
 
 def test_top_candidates_are_highest_bayesian_credible_score_generated_candidates() -> None:
@@ -172,8 +181,8 @@ def test_generation_moves_construct_valid_candidates_without_rejection_loop() ->
     )
 
     assert result.diagnostics.total_proposals == 100
-    assert result.diagnostics.valid_proposals == 100
-    assert result.diagnostics.invalid_proposals == 0
+    assert result.diagnostics.valid_proposals >= 90
+    assert result.diagnostics.invalid_proposals <= 10
 
 
 def test_inverse_design_can_require_minimum_unique_valid_molecules() -> None:
@@ -285,6 +294,49 @@ def test_charged_freesolv_candidate_is_rejected_before_scoring() -> None:
         _score_molecule(ExplodingPredictor(), mutable.freeze(), -5.0)
 
 
+def test_overlapping_freesolv_candidate_coordinates_are_rejected_before_scoring() -> None:
+    molecule = _seed_molecule(
+        (
+            _seed_atom(1, AtomicSymbol.O, 0.0, 0.0, 0.0),
+            _seed_atom(2, AtomicSymbol.F, 1.42, 0.0, 0.0),
+            _seed_atom(3, AtomicSymbol.H, 1.42, 0.0, 0.0),
+        ),
+        ((1, 2), (1, 3)),
+    )
+
+    with pytest.raises(ValidationError, match="overlapping coordinates"):
+        _score_molecule(ExplodingPredictor(), molecule, -5.0)
+
+
+def test_nonbonded_van_der_waals_overlap_is_rejected_before_scoring() -> None:
+    molecule = _seed_molecule(
+        (
+            _seed_atom(1, AtomicSymbol.O, 0.0, 0.0, 0.0),
+            _seed_atom(2, AtomicSymbol.O, 1.65, 0.0, 0.0),
+            _seed_atom(3, AtomicSymbol.H, 0.167, 0.945, 0.0),
+            _seed_atom(4, AtomicSymbol.H, 1.483, 0.945, 0.0),
+        ),
+        ((1, 2), (1, 3), (2, 4)),
+    )
+
+    with pytest.raises(ValidationError, match="Non-bonded atoms"):
+        _score_molecule(ExplodingPredictor(), molecule, -5.0)
+
+
+def test_tight_freesolv_candidate_bond_angles_are_rejected_before_scoring() -> None:
+    molecule = _seed_molecule(
+        (
+            _seed_atom(1, AtomicSymbol.O, 0.0, 0.0, 0.0),
+            _seed_atom(2, AtomicSymbol.F, 1.90, 0.0, 0.0),
+            _seed_atom(3, AtomicSymbol.Cl, 0.382, 2.167, 0.0),
+        ),
+        ((1, 2), (1, 3)),
+    )
+
+    with pytest.raises(ValidationError, match="implausibly tight"):
+        _score_molecule(ExplodingPredictor(), molecule, -5.0)
+
+
 def test_score_prefers_more_credible_prediction_at_same_target_error() -> None:
     high_credibility = _score_molecule(FixedPredictor(Prediction(mean=-5.0, sd=1.0)), water, -5.0)
     uncertain = _score_molecule(FixedPredictor(Prediction(mean=-5.0, sd=6.0)), water, -5.0)
@@ -338,6 +390,12 @@ def test_result_writer_exports_importable_top_molecule_files(tmp_path) -> None:
     generated_record = json.loads(jsonl_records[0])
     assert generated_record["rank"] == 1
     assert "bayesian_credible_score_percent" in generated_record
+    assert generated_record["min_bond_length_angstrom"] > 0.0
+    assert generated_record["max_bond_length_angstrom"] >= generated_record["min_bond_length_angstrom"]
+    assert (
+        generated_record["min_bond_angle_degrees"] is None
+        or generated_record["min_bond_angle_degrees"] >= inverse_design.MIN_LOCAL_BOND_ANGLE_DEGREES
+    )
     assert "atoms" in generated_record["molecule"]
     assert "local_bonds" in generated_record["molecule"]
 

@@ -47,7 +47,8 @@ The comparison figure uses the MoleculeNet MPNN RMSE row `1.15` as the paper bar
 4. Prints one progress line per generated molecule with count and elapsed time.
 5. Sorts the 1,000 generated molecules by the model's Bayesian credible score percentage.
 6. Writes the top 10 as importable `top_*.py` files.
-7. With `--open-viewer`, writes one combined viewer HTML page for the top 10 molecules by default.
+7. Writes geometry audit columns for bond lengths, van der Waals non-bonded clearance, and bond angles.
+8. With `--open-viewer`, writes one combined viewer HTML page for the top 10 molecules by default.
 
 `make inverse-design-view` opens the saved top 10 molecules from `results/inverse_design/reference/` without rerunning inverse design. To inspect a timestamped run, pass `INVERSE_DESIGN_VIEW_DIR=results/inverse_design/run_...`.
 
@@ -81,8 +82,12 @@ The generator builds molecules under conservative rules:
 - closed valence shells
 - terminal H/F/Cl rules
 - valid Dietz bonding systems
+- no overlapping atom coordinates
+- plausible local bond lengths
+- minimum van der Waals non-bonded clearance
+- minimum local bond angles
 
-The move rules avoid impossible local valence states before validation. Validation remains an invariant guard.
+The move rules avoid impossible local valence and geometry states before validation. Validation remains an invariant guard. These checks enforce a physically plausible generated geometry; they do not prove thermodynamic stability.
 
 Run `make freesolv` first when inverse design should use a fresh FreeSolv model.
 

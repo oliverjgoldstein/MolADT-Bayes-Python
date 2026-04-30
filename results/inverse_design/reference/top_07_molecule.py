@@ -9,44 +9,34 @@ rank = 7
 target_freesolv = -5
 seed_molecule = 'water'
 random_seed = 0
-predicted_freesolv = -4.11708735162
-predictive_sd = 1.46287523763
-target_error = 0.88291264838
-bayesian_credible_score_percent = 49.8455176434
-score = -0.696241610505
-formula = 'C3H6F2O2'
+predicted_freesolv = -4.98282374103
+predictive_sd = 1.01505806137
+target_error = 0.0171762589694
+bayesian_credible_score_percent = 70.1752154658
+score = -0.354174993338
+formula = 'CH3ClFNO'
 
 molecule = validate_molecule(
     Molecule(
         atoms={
-            AtomId(1): atom(1, AtomicSymbol.O, -0.711, -0.249, 0.107),
-            AtomId(2): atom(2, AtomicSymbol.O, -1.411, -1.462, 0.207),
-            AtomId(3): atom(3, AtomicSymbol.C, -0.811, -2.501, 0.407),
-            AtomId(4): atom(4, AtomicSymbol.C, -0.161, -1.375, 0.507),
-            AtomId(5): atom(5, AtomicSymbol.C, -0.161, -1.375, 0.507),
-            AtomId(6): atom(6, AtomicSymbol.F, 0.464, -2.458, 0.707),
-            AtomId(7): atom(7, AtomicSymbol.F, 0.464, -2.458, 0.707),
-            AtomId(8): atom(8, AtomicSymbol.H, -1.386, 0.920, 0.307),
-            AtomId(9): atom(9, AtomicSymbol.H, -2.211, -2.501, 0.407),
-            AtomId(10): atom(10, AtomicSymbol.H, -0.761, -2.414, 0.607),
-            AtomId(11): atom(11, AtomicSymbol.H, 0.464, -2.458, 0.707),
-            AtomId(12): atom(12, AtomicSymbol.H, 1.139, -1.375, 0.507),
-            AtomId(13): atom(13, AtomicSymbol.H, 0.514, -0.206, 0.607),
+            AtomId(1): atom(1, AtomicSymbol.O, -0.011, 0.963, 0.007),
+            AtomId(2): atom(2, AtomicSymbol.N, 1.419, 0.963, 0.007),
+            AtomId(3): atom(3, AtomicSymbol.C, 2.308, 0.074, -0.882),
+            AtomId(4): atom(4, AtomicSymbol.F, 2.095, 1.886, 0.930),
+            AtomId(5): atom(5, AtomicSymbol.Cl, -0.837, 1.789, -0.819),
+            AtomId(6): atom(6, AtomicSymbol.H, 2.926, -0.544, -1.500),
+            AtomId(7): atom(7, AtomicSymbol.H, 3.065, 0.830, -0.882),
+            AtomId(8): atom(8, AtomicSymbol.H, 2.308, -0.683, -0.126),
         },
         local_bonds=frozenset(
             {
                 Edge(AtomId(1), AtomId(2)),
-                Edge(AtomId(1), AtomId(8)),
+                Edge(AtomId(1), AtomId(5)),
                 Edge(AtomId(2), AtomId(3)),
-                Edge(AtomId(3), AtomId(4)),
-                Edge(AtomId(3), AtomId(5)),
-                Edge(AtomId(3), AtomId(9)),
-                Edge(AtomId(4), AtomId(10)),
-                Edge(AtomId(4), AtomId(11)),
-                Edge(AtomId(4), AtomId(12)),
-                Edge(AtomId(5), AtomId(6)),
-                Edge(AtomId(5), AtomId(7)),
-                Edge(AtomId(5), AtomId(13)),
+                Edge(AtomId(2), AtomId(4)),
+                Edge(AtomId(3), AtomId(6)),
+                Edge(AtomId(3), AtomId(7)),
+                Edge(AtomId(3), AtomId(8)),
             }
         ),
         systems=(

@@ -9,38 +9,26 @@ rank = 9
 target_freesolv = -5
 seed_molecule = 'water'
 random_seed = 0
-predicted_freesolv = -5.79533497234
-predictive_sd = 1.77258781748
-target_error = 0.79533497234
-bayesian_credible_score_percent = 45.5228738752
-score = -0.786955263822
-formula = 'C2H4ClFO2'
+predicted_freesolv = -4.67781970415
+predictive_sd = 0.991194978955
+target_error = 0.32218029585
+bayesian_credible_score_percent = 69.1874520002
+score = -0.368350669284
+formula = 'H2FN'
 
 molecule = validate_molecule(
     Molecule(
         atoms={
-            AtomId(1): atom(1, AtomicSymbol.O, -0.711, -0.249, 0.107),
-            AtomId(2): atom(2, AtomicSymbol.O, -1.411, -1.462, 0.207),
-            AtomId(3): atom(3, AtomicSymbol.C, -0.811, -2.501, 0.407),
-            AtomId(4): atom(4, AtomicSymbol.Cl, -0.161, -1.375, 0.507),
-            AtomId(5): atom(5, AtomicSymbol.C, -0.161, -1.375, 0.507),
-            AtomId(6): atom(6, AtomicSymbol.F, 0.464, -2.458, 0.707),
-            AtomId(7): atom(7, AtomicSymbol.H, 0.589, -0.249, 0.107),
-            AtomId(8): atom(8, AtomicSymbol.H, -0.136, -1.332, 0.507),
-            AtomId(9): atom(9, AtomicSymbol.H, -0.861, -0.163, 0.707),
-            AtomId(10): atom(10, AtomicSymbol.H, -1.361, -1.375, 0.507),
+            AtomId(1): atom(1, AtomicSymbol.N, -0.011, 0.963, 0.007),
+            AtomId(2): atom(2, AtomicSymbol.F, 0.557, 0.395, -1.091),
+            AtomId(3): atom(3, AtomicSymbol.H, -0.011, 1.677, 0.721),
+            AtomId(4): atom(4, AtomicSymbol.H, -0.825, 0.398, 0.202),
         },
         local_bonds=frozenset(
             {
                 Edge(AtomId(1), AtomId(2)),
-                Edge(AtomId(1), AtomId(7)),
-                Edge(AtomId(2), AtomId(3)),
-                Edge(AtomId(3), AtomId(4)),
-                Edge(AtomId(3), AtomId(5)),
-                Edge(AtomId(3), AtomId(8)),
-                Edge(AtomId(5), AtomId(6)),
-                Edge(AtomId(5), AtomId(9)),
-                Edge(AtomId(5), AtomId(10)),
+                Edge(AtomId(1), AtomId(3)),
+                Edge(AtomId(1), AtomId(4)),
             }
         ),
         systems=(
