@@ -162,6 +162,38 @@ def test_makefile_inverse_design_can_open_generated_viewers(tmp_path: Path) -> N
     assert "--open-viewer --viewer-count 3" in result.stdout
 
 
+def test_makefile_inverse_design_view_opens_saved_results(tmp_path: Path) -> None:
+    _copy_makefile(tmp_path)
+    _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
+
+    result = subprocess.run(
+        [
+            "make",
+            "-C",
+            str(tmp_path),
+            "-n",
+            "inverse-design-view",
+            "SYSTEM_PYTHON=python3",
+            "INVERSE_DESIGN_VIEW_DIR=results/inverse_design/run_20260429_152431",
+            "INVERSE_DESIGN_VIEW_COUNT=4",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "Opening saved FreeSolv inverse-design molecules." in result.stdout
+    assert "command: experiments.freesolv_inverse_design --view-results" in result.stdout
+    assert "source_dir: results/inverse_design/run_20260429_152431" in result.stdout
+    assert "viewer_count: 4" in result.stdout
+    assert 'rm -f "results/inverse_design/run_20260429_152431/top_molecules.viewer.html"' in result.stdout
+    assert (
+        'PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python -m experiments.freesolv_inverse_design --view-results "results/inverse_design/run_20260429_152431"'
+        in result.stdout
+    )
+    assert "--viewer-count 4 --open-viewer" in result.stdout
+
+
 def test_makefile_pretty_example_can_open_viewer(tmp_path: Path) -> None:
     _copy_makefile(tmp_path)
     _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
@@ -184,9 +216,10 @@ def test_makefile_pretty_example_can_open_viewer(tmp_path: Path) -> None:
     )
 
     assert (
-        './.venv/bin/python -m moladt.cli pretty-example diborane --viewer-output "results/viewer/diborane.viewer.html" --open-viewer'
+        'PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python -m moladt.cli pretty-example diborane --viewer-output "results/viewer/diborane.viewer.html" --open-viewer'
         in result.stdout
     )
+    assert "Refreshing Python bytecode cache under the repo." in result.stdout
 
 
 def test_makefile_molecule_viewer_target_exports_html(tmp_path: Path) -> None:
@@ -212,7 +245,8 @@ def test_makefile_molecule_viewer_target_exports_html(tmp_path: Path) -> None:
     assert "command: moladt.cli view-examples" in result.stdout
     assert "examples: morphine" in result.stdout
     assert "output: results/viewer/morphine.viewer.html" in result.stdout
-    assert './.venv/bin/python -m moladt.cli view-examples morphine --output "results/viewer/morphine.viewer.html"' in result.stdout
+    assert 'rm -f "results/viewer/morphine.viewer.html"' in result.stdout
+    assert 'PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python -m moladt.cli view-examples morphine --output "results/viewer/morphine.viewer.html"' in result.stdout
 
 
 def test_makefile_view_target_opens_example_collection(tmp_path: Path) -> None:
@@ -236,7 +270,8 @@ def test_makefile_view_target_opens_example_collection(tmp_path: Path) -> None:
     assert "Opening MolADT example molecule viewer." in result.stdout
     assert "command: moladt.cli view-examples" in result.stdout
     assert "examples: benzene diborane ferrocene morphine methane water" in result.stdout
-    assert "./.venv/bin/python -m moladt.cli view-examples benzene diborane ferrocene morphine methane water" in result.stdout
+    assert 'rm -f "results/viewer/examples.viewer.html"' in result.stdout
+    assert "PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python -m moladt.cli view-examples benzene diborane ferrocene morphine methane water" in result.stdout
     assert '--output "results/viewer/examples.viewer.html" --title "MolADT example molecules" --open-viewer' in result.stdout
 
 
@@ -277,8 +312,9 @@ def test_makefile_test_molecule_viewer_target_runs_viewer_tests(tmp_path: Path) 
 
     assert "Running MolADT molecule viewer tests." in result.stdout
     assert "auto_open: yes" in result.stdout
-    assert "./.venv/bin/python -m pytest -q tests/test_molecule_viewer.py" in result.stdout
-    assert './.venv/bin/python -m moladt.cli view-examples ferrocene --output "results/viewer/ferrocene.viewer.html"  --open-viewer' in result.stdout
+    assert "PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python -m pytest -q tests/test_molecule_viewer.py" in result.stdout
+    assert 'rm -f "results/viewer/ferrocene.viewer.html"' in result.stdout
+    assert 'PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python -m moladt.cli view-examples ferrocene --output "results/viewer/ferrocene.viewer.html"  --open-viewer' in result.stdout
 
 
 def test_makefile_qm9_target_prints_recovered_predictive_path(tmp_path: Path) -> None:

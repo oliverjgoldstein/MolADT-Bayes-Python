@@ -8,7 +8,8 @@ This page is the run contract.
 make python-cmdstan-install
 make freesolv
 make inverse-design TARGET=-5.0
-OPEN_VIEWER=1 VIEWER_COUNT=3 make inverse-design TARGET=-5.0
+OPEN_VIEWER=1 make inverse-design TARGET=-5.0
+make inverse-design-view
 make qm9long
 make timing
 ```
@@ -17,7 +18,8 @@ Direct inverse-design command:
 
 ```bash
 python -m experiments.freesolv_inverse_design --target -5.0
-python -m experiments.freesolv_inverse_design --target -5.0 --open-viewer --viewer-count 3
+python -m experiments.freesolv_inverse_design --target -5.0 --open-viewer
+python -m experiments.freesolv_inverse_design --view-results results/inverse_design/reference --open-viewer
 ```
 
 ## FreeSolv Benchmark
@@ -45,7 +47,9 @@ The comparison figure uses the MoleculeNet MPNN RMSE row `1.15` as the paper bar
 4. Prints one progress line per generated molecule with count and elapsed time.
 5. Sorts the 1,000 generated molecules by the model's Bayesian credible score percentage.
 6. Writes the top 10 as importable `top_*.py` files.
-7. With `--open-viewer`, writes one combined viewer HTML page for the first `--viewer-count` top molecules.
+7. With `--open-viewer`, writes one combined viewer HTML page for the top 10 molecules by default.
+
+`make inverse-design-view` opens the saved top 10 molecules from `results/inverse_design/reference/` without rerunning inverse design. To inspect a timestamped run, pass `INVERSE_DESIGN_VIEW_DIR=results/inverse_design/run_...`.
 
 The credible score is from the model's posterior predictive perspective. It is a bounded `0..100` value derived from the target log credible score. It is not a frequentist confidence or coverage statement.
 

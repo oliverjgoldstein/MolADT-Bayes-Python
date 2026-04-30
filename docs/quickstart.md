@@ -27,7 +27,7 @@ make view
 make molecule-viewer VIEWER_EXAMPLES=ferrocene
 ```
 
-Those commands check SDF parsing, built-in examples, validation, and the standalone molecule viewer. `make view` opens six built-in ADT examples in one browser page, preserving explicit bonding systems such as diborane bridges and ferrocene back-donation. In the viewer, clicking an atom shows the shell data, orbital glyphs, coordinates, 3D edge lengths, and bond angles stored or calculated from that atom; the canvas also shows coordinate axes with Angstrom tick labels.
+Those commands check SDF parsing, built-in examples, validation, and the standalone molecule viewer. `make view` clears repo Python bytecode caches, overwrites the viewer HTML, and opens six built-in ADT examples in one browser page, preserving explicit bonding systems such as diborane bridges and ferrocene back-donation. In the viewer, clicking an atom shows the shell data, orbital glyphs, coordinates, 3D edge lengths, and bond angles calculated from the molecule's coordinate data; the canvas also shows coordinate axes with Angstrom tick labels.
 
 `make test-molecule-viewer` runs the viewer tests and then opens the configured viewer HTML in the default browser.
 
@@ -43,12 +43,14 @@ OPEN_VIEWER=1 make molecule-viewer VIEWER_EXAMPLES=diborane
 ```bash
 make freesolv
 make inverse-design TARGET=-5.0
+make inverse-design-view
 make qm9long
 make timing
 ```
 
 - `make freesolv` runs the FreeSolv Bayesian GP benchmark.
 - `make inverse-design TARGET=-5.0` generates 1,000 valid FreeSolv candidates and writes the top 10 by the model's Bayesian credible score.
+- `make inverse-design-view` opens those saved top 10 molecules in one viewer page.
 - `make qm9long` runs the full local QM9 `mu` path.
 - `make timing` runs the ZINC representation timing comparison.
 

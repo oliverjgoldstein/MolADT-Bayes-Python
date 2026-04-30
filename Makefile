@@ -9,6 +9,7 @@ VENV_PYTHON_UNIX := .venv/bin/python
 VENV_PYTHON_WIN := .venv/Scripts/python.exe
 VENV_PYTHON_WIN_ALT := .venv/Scripts/python
 PYTHON_CMD := $(if $(wildcard $(VENV_PYTHON_UNIX)),./$(VENV_PYTHON_UNIX),$(if $(wildcard $(VENV_PYTHON_WIN)),./$(VENV_PYTHON_WIN),$(if $(wildcard $(VENV_PYTHON_WIN_ALT)),./$(VENV_PYTHON_WIN_ALT),$(SYSTEM_PYTHON))))
+PYTHON_NO_CACHE := PYTHONDONTWRITEBYTECODE=1
 BASH := $(strip $(shell command -v bash 2>/dev/null || printf "%s" /bin/bash))
 APT_GET ?= apt-get
 SUDO ?= sudo
@@ -28,7 +29,10 @@ VIEWER_OUTPUT ?= results/viewer/$(firstword $(VIEWER_EXAMPLES)).viewer.html
 VIEW_EXAMPLES ?= benzene diborane ferrocene morphine methane water
 VIEW_OUTPUT ?= results/viewer/examples.viewer.html
 OPEN_VIEWER ?= 0
-VIEWER_COUNT ?= 1
+VIEWER_COUNT ?= 10
+INVERSE_DESIGN_VIEW_DIR ?= results/inverse_design/reference
+INVERSE_DESIGN_VIEW_OUTPUT ?= $(INVERSE_DESIGN_VIEW_DIR)/top_molecules.viewer.html
+INVERSE_DESIGN_VIEW_COUNT ?= 10
 PRETTY_VIEWER_OUTPUT ?=
 VIEWER_TITLE_ARG := $(if $(VIEWER_TITLE),--title "$(VIEWER_TITLE)",)
 OPEN_VIEWER_ARG := $(if $(filter 1 true yes TRUE YES,$(OPEN_VIEWER)),--open-viewer,)
@@ -130,7 +134,7 @@ BEST_QM9_EXTRA_MODELS := visnet_ensemble
 QM9_LONG_RESULTS_SUBDIR := qm9/long/run_$(RUN_TIMESTAMP)
 QM9_LONG_SEED := 102
 
-.PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-activate python-parse python-parse-smiles python-to-smiles python-pretty-example view molecule-viewer test-molecule-viewer python-benchmark-qm9 python-benchmark-zinc freesolv inverse-design qm9long benchmark benchmark-bg timing catboost-geom-model catboost-geom-model-paper model
+.PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-activate refresh-python-cache python-parse python-parse-smiles python-to-smiles python-pretty-example view molecule-viewer test-molecule-viewer python-benchmark-qm9 python-benchmark-zinc freesolv inverse-design inverse-design-view qm9long benchmark benchmark-bg timing catboost-geom-model catboost-geom-model-paper model
 
 help:
 	@printf "%s\n" \
@@ -140,6 +144,7 @@ help:
 	"  make python-test            Run the pytest suite" \
 	"  make python-typecheck       Run mypy on the package" \
 	"  make python-activate        Print the command that activates the local venv" \
+	"  make refresh-python-cache   Remove repo __pycache__ and .pyc files" \
 	"  make python-parse           Parse molecules/benzene.sdf" \
 	"  make python-parse-smiles    Parse c1ccccc1" \
 		"  make python-to-smiles       Render molecules/benzene.sdf to SMILES" \
@@ -149,6 +154,7 @@ help:
 		"  make test-molecule-viewer   Run the molecule viewer tests, then open the viewer" \
 		"  make freesolv              Run the long FreeSolv MolADT-vs-MoleculeNet comparison" \
 		"  make inverse-design        Run the FreeSolv MolADT inverse-design proof of concept" \
+		"  make inverse-design-view   Open saved inverse-design molecules in the viewer" \
 		"  make qm9long               Run the full-data QM9 ViSNet benchmark on rich SDF-backed MolADT geometry" \
 		"  make benchmark              Run the combined FreeSolv + QM9 comparison bundle" \
 		"  make benchmark-bg           Run the benchmark in the foreground and mirror output to the active results directory" \
@@ -384,6 +390,11 @@ python-activate:
 		printf "%s\n" "Run this in your shell after \`make python-setup\`:" "  source .venv/bin/activate" "  or, if your environment created a Windows-style venv:" "  source .venv/Scripts/activate"; \
 	fi
 
+refresh-python-cache:
+	@printf "%s\n" "Refreshing Python bytecode cache under the repo."
+	find . -path "./.venv" -prune -o -path "./.git" -prune -o -type d -name "__pycache__" -exec rm -rf {} +
+	find . -path "./.venv" -prune -o -path "./.git" -prune -o -type f -name "*.pyc" -delete
+
 python-parse:
 	$(PYTHON_CMD) -m moladt.cli parse molecules/benzene.sdf
 
@@ -393,10 +404,10 @@ python-parse-smiles:
 python-to-smiles:
 	$(PYTHON_CMD) -m moladt.cli to-smiles molecules/benzene.sdf
 
-python-pretty-example:
-	$(PYTHON_CMD) -m moladt.cli pretty-example $(EXAMPLE) $(PRETTY_VIEWER_OUTPUT_ARG) $(OPEN_VIEWER_ARG)
+python-pretty-example: refresh-python-cache
+	$(PYTHON_NO_CACHE) $(PYTHON_CMD) -m moladt.cli pretty-example $(EXAMPLE) $(PRETTY_VIEWER_OUTPUT_ARG) $(OPEN_VIEWER_ARG)
 
-view:
+view: refresh-python-cache
 	@printf "%s\n" \
 		"Opening MolADT example molecule viewer." \
 		"  repo: MolADT-Bayes-Python" \
@@ -404,9 +415,10 @@ view:
 		"  examples: $(VIEW_EXAMPLES)" \
 		"  output: $(VIEW_OUTPUT)" \
 		"  auto_open: yes"
-	$(PYTHON_CMD) -m moladt.cli view-examples $(VIEW_EXAMPLES) --output "$(VIEW_OUTPUT)" --title "MolADT example molecules" --open-viewer
+	rm -f "$(VIEW_OUTPUT)"
+	$(PYTHON_NO_CACHE) $(PYTHON_CMD) -m moladt.cli view-examples $(VIEW_EXAMPLES) --output "$(VIEW_OUTPUT)" --title "MolADT example molecules" --open-viewer
 
-molecule-viewer:
+molecule-viewer: refresh-python-cache
 	@printf "%s\n" \
 	"Exporting standalone MolADT molecule viewer." \
 	"  repo: MolADT-Bayes-Python" \
@@ -416,9 +428,10 @@ molecule-viewer:
 	"  title: $(if $(VIEWER_TITLE),$(VIEWER_TITLE),example title)" \
 	"  open_viewer: $(OPEN_VIEWER)" \
 	"  usage: make molecule-viewer VIEWER_EXAMPLES=\"diborane ferrocene\""
-	$(PYTHON_CMD) -m moladt.cli view-examples $(VIEWER_EXAMPLES) --output "$(VIEWER_OUTPUT)" $(VIEWER_TITLE_ARG) $(OPEN_VIEWER_ARG)
+	rm -f "$(VIEWER_OUTPUT)"
+	$(PYTHON_NO_CACHE) $(PYTHON_CMD) -m moladt.cli view-examples $(VIEWER_EXAMPLES) --output "$(VIEWER_OUTPUT)" $(VIEWER_TITLE_ARG) $(OPEN_VIEWER_ARG)
 
-test-molecule-viewer:
+test-molecule-viewer: refresh-python-cache
 	@printf "%s\n" \
 	"Running MolADT molecule viewer tests." \
 	"  repo: MolADT-Bayes-Python" \
@@ -428,8 +441,9 @@ test-molecule-viewer:
 	"  viewer output: $(VIEWER_OUTPUT)" \
 	"  auto_open: yes" \
 	"  example: make test-molecule-viewer VIEWER_EXAMPLES=\"diborane ferrocene\""
-	$(PYTHON_CMD) -m pytest -q tests/test_molecule_viewer.py
-	$(PYTHON_CMD) -m moladt.cli view-examples $(VIEWER_EXAMPLES) --output "$(VIEWER_OUTPUT)" $(VIEWER_TITLE_ARG) --open-viewer
+	$(PYTHON_NO_CACHE) $(PYTHON_CMD) -m pytest -q tests/test_molecule_viewer.py
+	rm -f "$(VIEWER_OUTPUT)"
+	$(PYTHON_NO_CACHE) $(PYTHON_CMD) -m moladt.cli view-examples $(VIEWER_EXAMPLES) --output "$(VIEWER_OUTPUT)" $(VIEWER_TITLE_ARG) --open-viewer
 
 python-benchmark-qm9:
 	@printf "%s\n" \
@@ -502,6 +516,19 @@ inverse-design:
 	"  viewer_count: $(VIEWER_COUNT)" \
 	"  output: generated MolADT/Dietz molecules on stdout plus top_*.py and dietz_*.py files"
 	MOLADT_RESULTS_DIR=results/$(INVERSE_DESIGN_RESULTS_SUBDIR) MOLADT_REFERENCE_RESULTS_DIR=results/inverse_design/reference $(PYTHON_CMD) -m experiments.freesolv_inverse_design $(INVERSE_DESIGN_TARGET_ARG) $(INVERSE_DESIGN_SEED_ARG) $(OPEN_VIEWER_ARG) $(INVERSE_VIEWER_COUNT_ARG)
+
+inverse-design-view: refresh-python-cache
+	@printf "%s\n" \
+	"Opening saved FreeSolv inverse-design molecules." \
+	"  repo: MolADT-Bayes-Python" \
+	"  command: experiments.freesolv_inverse_design --view-results" \
+	"  source_dir: $(INVERSE_DESIGN_VIEW_DIR)" \
+	"  viewer_output: $(INVERSE_DESIGN_VIEW_OUTPUT)" \
+	"  viewer_count: $(INVERSE_DESIGN_VIEW_COUNT)" \
+	"  auto_open: yes" \
+	"  usage: make inverse-design-view INVERSE_DESIGN_VIEW_DIR=results/inverse_design/run_YYYYMMDD_HHMMSS"
+	rm -f "$(INVERSE_DESIGN_VIEW_OUTPUT)"
+	$(PYTHON_NO_CACHE) $(PYTHON_CMD) -m experiments.freesolv_inverse_design --view-results "$(INVERSE_DESIGN_VIEW_DIR)" --viewer-output "$(INVERSE_DESIGN_VIEW_OUTPUT)" --viewer-count $(INVERSE_DESIGN_VIEW_COUNT) --open-viewer
 
 qm9long:
 	@printf "%s\n" \

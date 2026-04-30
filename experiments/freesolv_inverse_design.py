@@ -24,7 +24,7 @@ from moladt.chem.molecule_ops import effective_order, neighbors_sigma
 from moladt.chem.mutable import MutableMolecule
 from moladt.chem.validate import ValidationError, used_electrons_at, validate_molecule
 from moladt.examples.sample_molecules import methane, water
-from moladt.io import molecule_to_json_bytes
+from moladt.io import molecule_from_dict, molecule_to_json_bytes
 from moladt.viewer import open_molecule_viewer, write_molecule_viewer_collection_html
 from scripts.common import PROCESSED_DATA_DIR, PROJECT_ROOT, configured_results_dir, ensure_directory
 from scripts.features import compute_moladt_featurized_descriptors
@@ -275,8 +275,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--viewer-count",
         type=int,
-        default=1,
-        help="Number of top generated molecule viewers to write/open when --open-viewer is set. Defaults to 1.",
+        default=TOP_K,
+        help=f"Number of top generated molecule viewers to write/open when --open-viewer is set. Defaults to {TOP_K}.",
+    )
+    parser.add_argument(
+        "--view-results",
+        type=Path,
+        default=None,
+        help="Write a viewer for an existing inverse-design result directory instead of running a search.",
+    )
+    parser.add_argument(
+        "--viewer-output",
+        type=Path,
+        default=None,
+        help="Optional output path for --view-results. Defaults to <result-dir>/top_molecules.viewer.html.",
     )
     return parser
 
@@ -293,6 +305,17 @@ def main(
     parser = build_parser()
     args = parser.parse_args(argv)
     output_stream = stream or sys.stdout
+    if args.view_results is not None:
+        viewer_path = write_saved_inverse_design_viewer_file(
+            args.view_results,
+            output_path=args.viewer_output,
+            count=args.viewer_count,
+        )
+        print(f"Viewer: {viewer_path}", file=output_stream)
+        if args.open_viewer:
+            open_result_viewers((viewer_path,), stream=output_stream)
+        return 0
+
     result = run_inverse_design(
         target=args.target,
         n_steps=n_steps,
@@ -781,7 +804,7 @@ def write_result_molecule_files(result: SearchResult, output_dir: Path) -> Searc
     )
 
 
-def write_result_viewer_files(result: SearchResult, output_dir: Path, *, count: int = 1) -> SearchResult:
+def write_result_viewer_files(result: SearchResult, output_dir: Path, *, count: int = TOP_K) -> SearchResult:
     target_dir = ensure_directory(output_dir)
     viewer_count = max(0, min(int(count), len(result.top_candidates)))
     if viewer_count == 0:
@@ -800,6 +823,46 @@ def write_result_viewer_files(result: SearchResult, output_dir: Path, *, count: 
         title=f"Top {viewer_count} FreeSolv inverse-design molecules",
     )
     return replace(result, viewer_file_paths=(written,))
+
+
+def write_saved_inverse_design_viewer_file(
+    result_dir: Path,
+    *,
+    output_path: Path | None = None,
+    count: int = TOP_K,
+) -> Path:
+    """Write a viewer for molecules already saved by an inverse-design run."""
+
+    source_dir = Path(result_dir)
+    jsonl_path = source_dir / "generated_molecules.jsonl"
+    if not jsonl_path.exists():
+        raise FileNotFoundError(f"Missing inverse-design molecule bundle: {jsonl_path}")
+
+    viewer_count = max(0, int(count))
+    entries: list[tuple[str, Molecule]] = []
+    with jsonl_path.open(encoding="utf-8") as handle:
+        for line in handle:
+            if len(entries) >= viewer_count:
+                break
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            molecule = validate_molecule(molecule_from_dict(record["molecule"]))
+            rank = int(record.get("rank", len(entries) + 1))
+            formula = str(record.get("formula", molecular_formula(molecule)))
+            score = float(record.get("bayesian_credible_score_percent", 0.0))
+            entries.append((f"FreeSolv top #{rank}: {formula} ({score:.2f}% credible score)", molecule))
+
+    if not entries:
+        raise ValueError(f"No generated molecules found in {jsonl_path}")
+
+    target_path = Path(output_path) if output_path is not None else source_dir / "top_molecules.viewer.html"
+    target_path.unlink(missing_ok=True)
+    return write_molecule_viewer_collection_html(
+        tuple(entries),
+        target_path,
+        title=f"Top {len(entries)} FreeSolv inverse-design molecules",
+    )
 
 
 def open_result_viewers(paths: Sequence[Path], *, stream: TextIO) -> None:

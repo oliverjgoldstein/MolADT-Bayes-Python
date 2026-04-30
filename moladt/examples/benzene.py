@@ -23,13 +23,13 @@ benzene = Molecule(
     local_bonds=frozenset(
         {
             Edge(AtomId(1), AtomId(2)),
-            Edge(AtomId(1), AtomId(6)),
+            Edge(AtomId(1), AtomId(3)),
             Edge(AtomId(1), AtomId(7)),
-            Edge(AtomId(2), AtomId(3)),
+            Edge(AtomId(2), AtomId(4)),
             Edge(AtomId(2), AtomId(8)),
-            Edge(AtomId(3), AtomId(4)),
+            Edge(AtomId(3), AtomId(5)),
             Edge(AtomId(3), AtomId(9)),
-            Edge(AtomId(4), AtomId(5)),
+            Edge(AtomId(4), AtomId(6)),
             Edge(AtomId(4), AtomId(10)),
             Edge(AtomId(5), AtomId(6)),
             Edge(AtomId(5), AtomId(11)),
@@ -44,10 +44,10 @@ benzene = Molecule(
                 frozenset(
                     {
                         Edge(AtomId(1), AtomId(2)),
-                        Edge(AtomId(1), AtomId(6)),
-                        Edge(AtomId(2), AtomId(3)),
-                        Edge(AtomId(3), AtomId(4)),
-                        Edge(AtomId(4), AtomId(5)),
+                        Edge(AtomId(1), AtomId(3)),
+                        Edge(AtomId(2), AtomId(4)),
+                        Edge(AtomId(3), AtomId(5)),
+                        Edge(AtomId(4), AtomId(6)),
                         Edge(AtomId(5), AtomId(6)),
                     }
                 ),

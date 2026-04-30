@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
+
+import pytest
 
 from moladt.cli import main
 import moladt.cli as cli
@@ -16,6 +19,39 @@ from moladt.viewer import (
 )
 
 
+def _payload_atom(payload: dict, atom_id: int) -> dict:
+    return next(atom for atom in payload["atoms"] if atom["id"] == atom_id)
+
+
+def _payload_distance(payload: dict, atom_a: int, atom_b: int) -> float:
+    left = _payload_atom(payload, atom_a)
+    right = _payload_atom(payload, atom_b)
+    return math.dist((left["x"], left["y"], left["z"]), (right["x"], right["y"], right["z"]))
+
+
+def _payload_angle(payload: dict, atom_a: int, center: int, atom_b: int) -> float:
+    left = _payload_atom(payload, atom_a)
+    middle = _payload_atom(payload, center)
+    right = _payload_atom(payload, atom_b)
+    vector_a = (
+        left["x"] - middle["x"],
+        left["y"] - middle["y"],
+        left["z"] - middle["z"],
+    )
+    vector_b = (
+        right["x"] - middle["x"],
+        right["y"] - middle["y"],
+        right["z"] - middle["z"],
+    )
+    length_a = math.sqrt(sum(component * component for component in vector_a))
+    length_b = math.sqrt(sum(component * component for component in vector_b))
+    cosine = sum(
+        component_a * component_b
+        for component_a, component_b in zip(vector_a, vector_b, strict=True)
+    ) / (length_a * length_b)
+    return math.degrees(math.acos(max(-1.0, min(1.0, cosine))))
+
+
 def test_molecule_viewer_payload_includes_bonding_system_annotations() -> None:
     payload = molecule_viewer_payload(diborane_pretty, title="Diborane")
 
@@ -24,7 +60,35 @@ def test_molecule_viewer_payload_includes_bonding_system_annotations() -> None:
     assert len(payload["atoms"]) == 8
     assert len(payload["bonds"]) == 5
     assert [system["tag"] for system in payload["systems"]] == ["bridge_h3_3c2e", "bridge_h4_3c2e"]
-    assert payload["systems"][0]["edges"] == [{"a": 1, "b": 3}, {"a": 2, "b": 3}]
+    assert [(edge["a"], edge["b"]) for edge in payload["systems"][0]["edges"]] == [(1, 3), (2, 3)]
+    assert all("length" in edge for edge in payload["systems"][0]["edges"])
+
+
+def test_molecule_viewer_payload_lengths_come_from_3d_coordinates() -> None:
+    payload = molecule_viewer_payload(ferrocene_pretty, title="Ferrocene")
+    sigma_edges = {tuple(sorted((edge["a"], edge["b"]))): edge for edge in payload["bonds"]}
+    backdonation = next(system for system in payload["systems"] if system["tag"] == "fe_backdonation")
+    backdonation_edges = {
+        tuple(sorted((edge["a"], edge["b"]))): edge
+        for edge in backdonation["edges"]
+    }
+
+    assert sigma_edges[(2, 3)]["length"] == pytest.approx(_payload_distance(payload, 2, 3))
+    assert sigma_edges[(2, 3)]["length"] == pytest.approx(1.404, abs=0.002)
+    assert backdonation_edges[(1, 2)]["length"] == pytest.approx(_payload_distance(payload, 1, 2))
+    assert backdonation_edges[(1, 2)]["length"] == pytest.approx(2.046, abs=0.002)
+
+
+def test_molecule_viewer_payload_angles_come_from_3d_coordinates() -> None:
+    payload = molecule_viewer_payload(ferrocene_pretty, title="Ferrocene")
+    angles = {
+        (item["a"], item["center"], item["b"]): item["angle"]
+        for item in payload["angles"]
+    }
+
+    assert angles[(3, 2, 6)] == pytest.approx(_payload_angle(payload, 3, 2, 6))
+    assert angles[(3, 2, 6)] == pytest.approx(108.0, abs=0.2)
+    assert angles[(2, 1, 7)] == pytest.approx(_payload_angle(payload, 2, 1, 7))
 
 
 def test_molecule_viewer_payload_keeps_overlapping_system_colours_distinct() -> None:
@@ -96,6 +160,9 @@ def test_molecule_viewer_html_displays_3d_lengths_and_angles() -> None:
 
     assert "function geometryEdgesForAtom" in html
     assert "function bondAnglesForAtom" in html
+    assert "function normalizeAngles" in html
+    assert "length: numericOrNull" in html
+    assert "molecule.angles" in html
     assert "Edge Lengths From 3D Coordinates" in html
     assert "Bond Angles" in html
 

@@ -189,13 +189,13 @@ def test_python_literal_export_is_the_canonical_normal_form() -> None:
 def test_explicit_examples_keep_expected_sigma_edges() -> None:
     assert _edge_pairs(benzene_pretty) == [
         (1, 2),
-        (1, 6),
+        (1, 3),
         (1, 7),
-        (2, 3),
+        (2, 4),
         (2, 8),
-        (3, 4),
+        (3, 5),
         (3, 9),
-        (4, 5),
+        (4, 6),
         (4, 10),
         (5, 6),
         (5, 11),

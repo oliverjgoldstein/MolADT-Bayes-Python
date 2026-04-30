@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
+import math
 import webbrowser
 from html import escape
 from pathlib import Path
 from typing import Any, Sequence
 
-from .chem.dietz import Edge
+from .chem.dietz import AtomId, Edge
 from .chem.molecule import Molecule
 from .chem.molecule_ops import effective_order
 
@@ -65,6 +66,7 @@ def molecule_viewer_payload(molecule: Molecule, *, title: str = "MolADT 3D Viewe
             "b": edge.b.value,
             "order": round(effective_order(molecule, edge), 3),
             "kind": "sigma",
+            "length": _edge_length(molecule, edge),
         }
         for edge in sorted(molecule.local_bonds)
     ]
@@ -76,7 +78,7 @@ def molecule_viewer_payload(molecule: Molecule, *, title: str = "MolADT 3D Viewe
             "sharedElectrons": system.shared_electrons.value,
             "color": _SYSTEM_COLORS[(system_id.value - 1) % len(_SYSTEM_COLORS)],
             "atoms": [atom_id.value for atom_id in sorted(system.member_atoms)],
-            "edges": [_edge_payload(edge) for edge in sorted(system.member_edges)],
+            "edges": [_edge_payload(edge, molecule=molecule) for edge in sorted(system.member_edges)],
         }
         for system_id, system in molecule.systems
     ]
@@ -86,6 +88,7 @@ def molecule_viewer_payload(molecule: Molecule, *, title: str = "MolADT 3D Viewe
         "atoms": atoms,
         "bonds": bonds,
         "systems": systems,
+        "angles": _angle_payloads(molecule),
     }
 
 
@@ -167,8 +170,75 @@ def open_molecule_viewer(path: str | Path) -> bool:
     return webbrowser.open(output_path.as_uri())
 
 
-def _edge_payload(edge: Edge) -> dict[str, int]:
-    return {"a": edge.a.value, "b": edge.b.value}
+def _edge_payload(edge: Edge, *, molecule: Molecule | None = None) -> dict[str, int | float]:
+    payload: dict[str, int | float] = {"a": edge.a.value, "b": edge.b.value}
+    if molecule is not None:
+        payload["length"] = _edge_length(molecule, edge)
+    return payload
+
+
+def _edge_length(molecule: Molecule, edge: Edge) -> float:
+    return round(_atom_distance(molecule, edge.a, edge.b), 6)
+
+
+def _atom_distance(molecule: Molecule, atom_a: AtomId, atom_b: AtomId) -> float:
+    left = molecule.atoms[atom_a].coordinate
+    right = molecule.atoms[atom_b].coordinate
+    return math.dist(
+        (left.x.value, left.y.value, left.z.value),
+        (right.x.value, right.y.value, right.z.value),
+    )
+
+
+def _angle_payloads(molecule: Molecule) -> list[dict[str, int | float]]:
+    geometry_edges = set(molecule.local_bonds)
+    for _, system in molecule.systems:
+        geometry_edges.update(system.member_edges)
+    neighbors: dict[AtomId, set[AtomId]] = {atom_id: set() for atom_id in molecule.atoms}
+    for edge in geometry_edges:
+        if edge.a in neighbors and edge.b in neighbors:
+            neighbors[edge.a].add(edge.b)
+            neighbors[edge.b].add(edge.a)
+
+    payloads: list[dict[str, int | float]] = []
+    for center in sorted(neighbors):
+        adjacent = sorted(neighbors[center])
+        for left_index, left in enumerate(adjacent):
+            for right in adjacent[left_index + 1 :]:
+                angle = _atom_angle(molecule, left, center, right)
+                if angle is not None:
+                    payloads.append(
+                        {
+                            "a": left.value,
+                            "center": center.value,
+                            "b": right.value,
+                            "angle": round(angle, 6),
+                        }
+                    )
+    return payloads
+
+
+def _atom_angle(molecule: Molecule, atom_a: AtomId, center: AtomId, atom_b: AtomId) -> float | None:
+    left = molecule.atoms[atom_a].coordinate
+    middle = molecule.atoms[center].coordinate
+    right = molecule.atoms[atom_b].coordinate
+    vector_a = (
+        left.x.value - middle.x.value,
+        left.y.value - middle.y.value,
+        left.z.value - middle.z.value,
+    )
+    vector_b = (
+        right.x.value - middle.x.value,
+        right.y.value - middle.y.value,
+        right.z.value - middle.z.value,
+    )
+    length_a = math.sqrt(sum(component * component for component in vector_a))
+    length_b = math.sqrt(sum(component * component for component in vector_b))
+    if length_a <= 1e-12 or length_b <= 1e-12:
+        return None
+    dot = sum(component_a * component_b for component_a, component_b in zip(vector_a, vector_b, strict=True))
+    cosine = max(-1.0, min(1.0, dot / (length_a * length_b)))
+    return math.degrees(math.acos(cosine))
 
 
 def _shells_payload(shells: Any) -> list[dict[str, Any]]:
@@ -850,14 +920,16 @@ _HTML_TEMPLATE = """<!doctype html>
       const bonds = (raw.local_bonds || []).map(edgeFromMoladt).map((edge) => ({
         ...edge,
         order: 1 + (systemContrib.get(edgeKey(edge)) || 0),
-        kind: "sigma"
+        kind: "sigma",
+        length: null
       }));
       return {
         format: "moladt-viewer-v1",
         title: raw.title || "Dropped MolADT",
         atoms,
         bonds,
-        systems
+        systems,
+        angles: []
       };
     }
 
@@ -926,8 +998,12 @@ _HTML_TEMPLATE = """<!doctype html>
         a: Number(bond.a),
         b: Number(bond.b),
         order: Number(bond.order || 1),
-        kind: bond.kind || "sigma"
-      })).filter((bond) => atomMap.has(bond.a) && atomMap.has(bond.b));
+        kind: bond.kind || "sigma",
+        length: numericOrNull(bond.length)
+      })).filter((bond) => atomMap.has(bond.a) && atomMap.has(bond.b)).map((bond) => ({
+        ...bond,
+        length: bond.length ?? distanceBetweenAtoms(atomMap.get(bond.a), atomMap.get(bond.b))
+      }));
       const systems = (payload.systems || []).map((system, index) => ({
         ...system,
         id: Number(system.id),
@@ -935,14 +1011,24 @@ _HTML_TEMPLATE = """<!doctype html>
         sharedElectrons: Number(system.sharedElectrons || 0),
         color: system.color || SYSTEM_COLORS[index % SYSTEM_COLORS.length],
         atoms: (system.atoms || []).map(Number),
-        edges: (system.edges || []).map((edge) => ({ a: Number(edge.a), b: Number(edge.b) }))
+        edges: (system.edges || []).map((edge) => ({
+          a: Number(edge.a),
+          b: Number(edge.b),
+          length: numericOrNull(edge.length)
+        })).filter((edge) => atomMap.has(edge.a) && atomMap.has(edge.b)).map((edge) => ({
+          ...edge,
+          length: edge.length ?? distanceBetweenAtoms(atomMap.get(edge.a), atomMap.get(edge.b))
+        }))
       }));
+      const payloadAngles = normalizeAngles(payload.angles || [], atomMap);
+      const angles = payloadAngles.length ? payloadAngles : buildAnglePayloads(atomMap, bonds, systems);
       return {
         title: payload.title || "MolADT 3D Viewer",
         atoms,
         atomMap,
         bonds,
         systems,
+        angles,
         center,
         scale,
         axes: buildAxes(center, bounds, maxSpan)
@@ -1108,6 +1194,11 @@ _HTML_TEMPLATE = """<!doctype html>
       return Number(value).toFixed(digits).replace(/\\.?0+$/, "");
     }
 
+    function numericOrNull(value) {
+      const number = Number(value);
+      return Number.isFinite(number) ? number : null;
+    }
+
     function distanceBetweenAtoms(left, right) {
       return Math.hypot(left.x - right.x, left.y - right.y, left.z - right.z);
     }
@@ -1128,6 +1219,62 @@ _HTML_TEMPLATE = """<!doctype html>
       return Math.acos(cosine) * 180 / Math.PI;
     }
 
+    function normalizeAngles(rawAngles, atomMap) {
+      return (rawAngles || []).map((item) => ({
+        a: Number(item.a ?? item.left),
+        center: Number(item.center),
+        b: Number(item.b ?? item.right),
+        angle: numericOrNull(item.angle)
+      })).filter((item) => (
+        atomMap.has(item.a)
+        && atomMap.has(item.center)
+        && atomMap.has(item.b)
+        && item.a !== item.center
+        && item.b !== item.center
+        && item.a !== item.b
+        && item.angle !== null
+      )).sort((left, right) => (
+        left.center - right.center
+        || left.a - right.a
+        || left.b - right.b
+      ));
+    }
+
+    function buildAnglePayloads(atomMap, bonds, systems) {
+      const neighbors = new Map();
+      function ensure(atomId) {
+        if (!neighbors.has(atomId)) {
+          neighbors.set(atomId, new Set());
+        }
+        return neighbors.get(atomId);
+      }
+      function addEdge(edge) {
+        if (!atomMap.has(edge.a) || !atomMap.has(edge.b)) {
+          return;
+        }
+        ensure(edge.a).add(edge.b);
+        ensure(edge.b).add(edge.a);
+      }
+      bonds.forEach(addEdge);
+      systems.forEach((system) => system.edges.forEach(addEdge));
+      const angles = [];
+      Array.from(neighbors.keys()).sort((a, b) => a - b).forEach((centerId) => {
+        const center = atomMap.get(centerId);
+        const adjacent = Array.from(neighbors.get(centerId)).sort((a, b) => a - b);
+        for (let i = 0; i < adjacent.length; i += 1) {
+          for (let j = i + 1; j < adjacent.length; j += 1) {
+            const leftId = adjacent[i];
+            const rightId = adjacent[j];
+            const angle = angleBetweenAtoms(atomMap.get(leftId), center, atomMap.get(rightId));
+            if (angle !== null) {
+              angles.push({ a: leftId, center: centerId, b: rightId, angle });
+            }
+          }
+        }
+      });
+      return angles;
+    }
+
     function geometryEdgesForAtom(atom) {
       const edges = new Map();
       function addGeometryEdge(edge, label) {
@@ -1140,12 +1287,17 @@ _HTML_TEMPLATE = """<!doctype html>
           return;
         }
         const key = edgeKey(edge);
+        const edgeLength = numericOrNull(edge.length);
         const existing = edges.get(key) || {
           a: Number(edge.a),
           b: Number(edge.b),
           other,
+          length: edgeLength,
           labels: []
         };
+        if (existing.length === null && edgeLength !== null) {
+          existing.length = edgeLength;
+        }
         if (!existing.labels.includes(label)) {
           existing.labels.push(label);
         }
@@ -1161,6 +1313,14 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     function bondAnglesForAtom(atom) {
+      const storedAngles = (molecule.angles || []).filter((item) => item.center === atom.id).map((item) => ({
+        left: molecule.atomMap.get(item.a),
+        right: molecule.atomMap.get(item.b),
+        angle: item.angle
+      })).filter((item) => item.left && item.right && item.angle !== null);
+      if (storedAngles.length) {
+        return storedAngles.sort((left, right) => left.left.id - right.left.id || left.right.id - right.right.id);
+      }
       const neighbors = geometryEdgesForAtom(atom).map((edge) => edge.other);
       const angles = [];
       for (let i = 0; i < neighbors.length; i += 1) {
@@ -1186,7 +1346,7 @@ _HTML_TEMPLATE = """<!doctype html>
       const edges = geometryEdgesForAtom(atom);
       const edgeRows = edges.length
         ? edges.map((edge) => {
-          const length = distanceBetweenAtoms(atom, edge.other);
+          const length = edge.length ?? distanceBetweenAtoms(atom, edge.other);
           return escapeHtml(atom.label + " - " + edge.other.label)
             + ": " + escapeHtml(formatMeasure(length)) + " A"
             + " (" + escapeHtml(edge.labels.join(", ")) + ")";

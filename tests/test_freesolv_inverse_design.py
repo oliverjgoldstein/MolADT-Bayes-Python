@@ -24,6 +24,7 @@ from experiments.freesolv_inverse_design import (
     load_seed_molecules,
     molecular_formula,
     write_result_viewer_files,
+    write_saved_inverse_design_viewer_file,
     add_pi_ring_system,
     build_parser,
     main,
@@ -66,7 +67,16 @@ def test_cli_exposes_target_seed_and_optional_viewer_flags_plus_default_help() -
         for option in action.option_strings
     }
 
-    assert options == {"-h", "--help", "--target", "--seed-molecule", "--open-viewer", "--viewer-count"}
+    assert options == {
+        "-h",
+        "--help",
+        "--target",
+        "--seed-molecule",
+        "--open-viewer",
+        "--viewer-count",
+        "--view-results",
+        "--viewer-output",
+    }
 
 
 def test_default_seed_molecule_is_water_and_seed_option_accepts_methane() -> None:
@@ -76,6 +86,7 @@ def test_default_seed_molecule_is_water_and_seed_option_accepts_methane() -> Non
     methane_args = parser.parse_args(["--seed-molecule", "methane"])
 
     assert default_args.seed_molecule == "water"
+    assert default_args.viewer_count == 10
     assert methane_args.seed_molecule == "methane"
     assert len(load_seed_molecules(seed_molecule="water", n_seeds=5)) == 5
 
@@ -371,6 +382,25 @@ def test_result_writer_can_export_top_candidate_viewers(tmp_path: Path) -> None:
     assert "moladt-viewer-collection-v1" in html
     assert "FreeSolv top #1" in html
     assert "FreeSolv top #2" in html
+
+
+def test_saved_inverse_design_results_can_be_reopened_in_viewer(tmp_path: Path) -> None:
+    result = run_inverse_design(
+        target=-5.0,
+        n_steps=4,
+        n_seeds=1,
+        top_k=2,
+        predictor=FakePredictor(),
+    )
+    write_result_molecule_files(result, tmp_path)
+
+    viewer_path = write_saved_inverse_design_viewer_file(tmp_path, count=2)
+
+    assert viewer_path == tmp_path / "top_molecules.viewer.html"
+    html = viewer_path.read_text(encoding="utf-8")
+    assert "moladt-viewer-collection-v1" in html
+    assert "FreeSolv top #1" in html
+    assert "credible score" in html
 
 
 def test_freesolv_model_dir_uses_latest_run_directory(tmp_path, monkeypatch) -> None:

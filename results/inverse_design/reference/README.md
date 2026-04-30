@@ -20,3 +20,9 @@ Tracked files:
 - `generated_molecules.jsonl`
 
 Run `make freesolv` first when these molecules should be paired with a fresh FreeSolv benchmark.
+
+Open the saved top 10 in the browser:
+
+```bash
+make inverse-design-view
+```

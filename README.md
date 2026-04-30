@@ -49,7 +49,7 @@ make python-parse
 make view
 ```
 
-`make view` opens six example molecules in one browser page with a scrollable molecule list. Click any atom to show its stored orbital glyphs, coordinates, 3D edge lengths, and bond angles.
+`make view` refreshes the repo Python bytecode cache, regenerates the viewer HTML, and opens six example molecules in one browser page with a scrollable molecule list. Click any atom to show its stored orbital glyphs, coordinates, 3D edge lengths, and bond angles calculated from the molecule's 3D coordinates.
 
 For Stan-backed FreeSolv runs:
 
@@ -69,7 +69,7 @@ make molecule-viewer VIEWER_EXAMPLES=ferrocene
 make test-molecule-viewer
 ```
 
-The viewer exports a standalone HTML file under `results/viewer/` by default. Click an atom in the viewer to show the stored shell and orbital glyphs for that atom, its coordinates, the 3D lengths of incident edges, and bond angles around that atom. The canvas includes coordinate axes with Angstrom tick labels and an `Axes` toggle. `make view` and `make molecule-viewer` use the built-in ADT examples, so diborane and ferrocene keep their explicit bonding systems. `view-html` takes MolADT JSON files when you need a file-backed viewer export. Use `VIEWER_EXAMPLES`, `VIEWER_OUTPUT`, and `VIEWER_TITLE` when you need a custom export.
+The viewer exports a standalone HTML file under `results/viewer/` by default. The Make targets clear repo `__pycache__` files, remove the previous HTML output, and write a new file each run. Click an atom in the viewer to show the stored shell and orbital glyphs for that atom, its coordinates, the 3D lengths of incident edges, and bond angles around that atom. Those geometry values come from the molecule coordinates, not from the canvas projection. The canvas includes coordinate axes with Angstrom tick labels and an `Axes` toggle. `make view` and `make molecule-viewer` use the built-in ADT examples, so diborane and ferrocene keep their explicit bonding systems. `view-html` takes MolADT JSON files when you need a file-backed viewer export. Use `VIEWER_EXAMPLES`, `VIEWER_OUTPUT`, and `VIEWER_TITLE` when you need a custom export.
 
 `make test-molecule-viewer` now runs the viewer tests, writes the configured viewer HTML, and opens it in your default browser automatically.
 
@@ -78,10 +78,10 @@ Turn on browser auto-open with `OPEN_VIEWER=1`:
 ```bash
 OPEN_VIEWER=1 make python-pretty-example EXAMPLE=ferrocene
 OPEN_VIEWER=1 make molecule-viewer VIEWER_EXAMPLES=diborane
-OPEN_VIEWER=1 VIEWER_COUNT=3 make inverse-design TARGET=-5.0
+OPEN_VIEWER=1 make inverse-design TARGET=-5.0
 ```
 
-The first command still prints the pretty molecule report, then writes and opens `results/viewer/ferrocene.viewer.html`. The inverse-design command writes `top_molecules.viewer.html` under `results/inverse_design/run_.../` and opens one page containing the first `VIEWER_COUNT` top molecules.
+The first command still prints the pretty molecule report, then writes and opens `results/viewer/ferrocene.viewer.html`. The inverse-design command writes `top_molecules.viewer.html` under `results/inverse_design/run_.../` and opens one page containing the top 10 molecules by default.
 
 Direct CLI equivalents:
 
@@ -92,7 +92,7 @@ Direct CLI equivalents:
 ./.venv/bin/python -m moladt.cli to-example molecules/benzene.sdf --name benzene_generated --output moladt/examples/benzene_generated.py
 ./.venv/bin/python -m moladt.cli to-json molecules/benzene.sdf > benzene.moladt.json
 ./.venv/bin/python -m moladt.cli view-html benzene.moladt.json --output results/viewer/benzene.viewer.html --open-viewer
-./.venv/bin/python -m experiments.freesolv_inverse_design --target -5.0 --open-viewer --viewer-count 3
+./.venv/bin/python -m experiments.freesolv_inverse_design --target -5.0 --open-viewer
 ```
 
 More examples: [Examples](docs/examples.md), [Parsing and rendering](docs/parsing.md), and [CLI reference](docs/cli.md).
@@ -100,6 +100,8 @@ More examples: [Examples](docs/examples.md), [Parsing and rendering](docs/parsin
 ## Pretty Representation Examples
 
 The built-in examples are written as explicit typed molecules. They are intentionally not just display fixtures: the same values can be validated, serialized, opened in the viewer, featurized, and used as proposal states.
+
+Canonical normal form means fully expanded Python ADT source: atoms sorted by `AtomId`, `Edge(AtomId(a), AtomId(b))` normalized with `a < b`, systems sorted by `SystemId`, and no loops hiding atoms, bonds, or bonding systems. `to-python` and `to-example` emit that form for parser fixtures.
 
 ### Morphine
 
@@ -430,9 +432,10 @@ FreeSolv should usually be read as a pair:
 ```bash
 make freesolv
 make inverse-design TARGET=-5.0
+make inverse-design-view
 ```
 
-The first command checks the predictive model on the FreeSolv split. The second command uses the latest `results/freesolv/run_*` FreeSolv GP artifact to search for molecules near the requested hydration free energy. If the newest FreeSolv run is incomplete, inverse design fails instead of falling back to an older model. The inverse-design run writes top generated molecule files under `results/inverse_design/run_.../` and refreshes the reference files under `results/inverse_design/reference/`.
+The first command checks the predictive model on the FreeSolv split. The second command uses the latest `results/freesolv/run_*` FreeSolv GP artifact to search for molecules near the requested hydration free energy. If the newest FreeSolv run is incomplete, inverse design fails instead of falling back to an older model. The inverse-design run writes top generated molecule files under `results/inverse_design/run_.../` and refreshes the reference files under `results/inverse_design/reference/`. `make inverse-design-view` opens the saved reference molecules in one viewer page; use `INVERSE_DESIGN_VIEW_DIR=results/inverse_design/run_...` to inspect a specific run.
 
 The FreeSolv generator uses MolADT/Dietz-aware edits whose move rules choose only locally feasible atoms, elements, and rings. Candidates are then checked by the repo validator plus FreeSolv-specific chemistry invariants before scoring: connected, neutral, CHONFCl-only, closed-valence, and sound bonding systems. That enforces the relevant graph and electron-count rules for this generator; it is not a substitute for quantum relaxation, thermodynamic stability analysis, or a synthesizability filter.
 
