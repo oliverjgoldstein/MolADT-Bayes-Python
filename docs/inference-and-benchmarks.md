@@ -42,13 +42,15 @@ The comparison figure uses the MoleculeNet MPNN RMSE row `1.15` as the paper bar
 `make inverse-design TARGET=-5.0` does this:
 
 1. Loads the latest `results/freesolv/run_*` Bayesian GP artifact.
-2. Starts from water by default.
+2. Samples initial molecules from the valid MolADT FreeSolv prior by default, reweighted by the unchanged GP target likelihood.
 3. Generates at least `1,000` unique valid molecules.
 4. Prints one progress line per generated molecule with count and elapsed time.
 5. Sorts the 1,000 generated molecules by the model's Bayesian credible score percentage.
 6. Writes the top 10 as importable `top_*.py` files.
 7. Writes geometry audit columns for bond lengths, van der Waals non-bonded clearance, and bond angles.
 8. With `--open-viewer`, writes one combined viewer HTML page for the top 10 molecules by default.
+
+Pass `SEED_MOLECULE=water` when you want the old fixed water start instead of the FreeSolv prior.
 
 `make inverse-design-view` opens the saved top 10 molecules from `results/inverse_design/reference/` without rerunning inverse design. To inspect a timestamped run, pass `INVERSE_DESIGN_VIEW_DIR=results/inverse_design/run_...`.
 
@@ -87,7 +89,7 @@ The generator builds molecules under conservative rules:
 - minimum van der Waals non-bonded clearance
 - minimum local bond angles
 
-The move rules avoid impossible local valence and geometry states before validation. Validation remains an invariant guard. These checks enforce a physically plausible generated geometry; they do not prove thermodynamic stability.
+The move rules avoid impossible local valence and geometry states during generation. The remaining FreeSolv generation contract is the construction boundary before scoring; these checks enforce a physically plausible generated geometry, but they do not prove thermodynamic stability.
 
 Run `make freesolv` first when inverse design should use a fresh FreeSolv model.
 

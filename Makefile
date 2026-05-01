@@ -507,7 +507,7 @@ inverse-design:
 	"  model: latest results/freesolv/run_* moladt_featurized Bayesian GP artifact" \
 	"  cli_flags: --target, --seed-molecule, --open-viewer, --viewer-count" \
 	"  target: $(if $(TARGET),$(TARGET),median experimental FreeSolv value)" \
-	"  seed_molecule: $(if $(SEED_MOLECULE),$(SEED_MOLECULE),water)" \
+	"  seed_molecule: $(if $(SEED_MOLECULE),$(SEED_MOLECULE),freesolv-prior)" \
 	"  minimum_unique_valid_molecules: 1000" \
 	"  chemistry_rules: connected neutral CHONFCl closed-valence geometry-checked candidates only" \
 	"  results_dir: results/$(INVERSE_DESIGN_RESULTS_SUBDIR)" \

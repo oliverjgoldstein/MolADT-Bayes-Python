@@ -49,7 +49,7 @@ make timing
 ```
 
 - `make freesolv` runs the FreeSolv Bayesian GP benchmark.
-- `make inverse-design TARGET=-5.0` generates 1,000 valid FreeSolv candidates and writes the top 10 by the model's Bayesian credible score.
+- `make inverse-design TARGET=-5.0` samples initial molecules from the valid FreeSolv prior, generates 1,000 valid FreeSolv candidates, and writes the top 10 by the model's Bayesian credible score.
 - `make inverse-design-view` opens those saved top 10 molecules in one viewer page.
 - `make qm9long` runs the full local QM9 `mu` path.
 - `make timing` runs the ZINC representation timing comparison.

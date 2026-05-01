@@ -103,7 +103,7 @@ def test_makefile_inverse_design_target_uses_target_and_seed_flags(tmp_path: Pat
     assert "Running reviewer-facing FreeSolv inverse design." in result.stdout
     assert "model: latest results/freesolv/run_* moladt_featurized Bayesian GP artifact" in result.stdout
     assert "cli_flags: --target, --seed-molecule, --open-viewer, --viewer-count" in result.stdout
-    assert "seed_molecule: water" in result.stdout
+    assert "seed_molecule: freesolv-prior" in result.stdout
     assert "open_viewer: 0" in result.stdout
     assert "results_dir: results/inverse_design/run_" in result.stdout
     assert "reference_dir: results/inverse_design/reference" in result.stdout

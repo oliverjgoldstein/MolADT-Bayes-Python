@@ -81,23 +81,31 @@ def test_cli_exposes_target_seed_and_optional_viewer_flags_plus_default_help() -
     }
 
 
-def test_default_seed_molecule_is_water_and_seed_option_accepts_methane() -> None:
+def test_default_seed_molecule_is_freesolv_prior_and_seed_option_accepts_methane() -> None:
     parser = build_parser()
 
     default_args = parser.parse_args([])
     methane_args = parser.parse_args(["--seed-molecule", "methane"])
 
-    assert default_args.seed_molecule == "water"
+    assert default_args.seed_molecule == "freesolv-prior"
     assert default_args.viewer_count == 10
     assert methane_args.seed_molecule == "methane"
     assert len(load_seed_molecules(seed_molecule="water", n_seeds=5)) == 5
+    prior_seeds = load_seed_molecules(
+        seed_molecule="freesolv-prior",
+        n_seeds=3,
+        predictor=FakePredictor(),
+        target=-5.0,
+    )
+    assert len(prior_seeds) == 3
+    assert all(validate_molecule(molecule) == molecule for molecule in prior_seeds)
 
 
 def test_tiny_smoke_run_prints_dietz_molecules() -> None:
     stream = StringIO()
 
     status = main(
-        ["--target", "-5.0"],
+        ["--target", "-5.0", "--seed-molecule", "water"],
         n_steps=8,
         n_seeds=1,
         top_k=2,
@@ -113,6 +121,20 @@ def test_tiny_smoke_run_prints_dietz_molecules() -> None:
     assert "bonding_systems:" in output
 
 
+def test_default_inverse_design_samples_from_freesolv_prior() -> None:
+    result = run_inverse_design(
+        target=-5.0,
+        n_steps=0,
+        n_seeds=2,
+        top_k=2,
+        predictor=FakePredictor(),
+    )
+
+    assert result.seed_molecule == "freesolv-prior"
+    assert len(result.top_candidates) == 2
+    assert all(validate_molecule(candidate.molecule) == candidate.molecule for candidate in result.top_candidates)
+
+
 def test_generated_candidates_validate() -> None:
     result = run_inverse_design(
         target=-5.0,
@@ -120,6 +142,7 @@ def test_generated_candidates_validate() -> None:
         n_seeds=2,
         top_k=5,
         predictor=FakePredictor(),
+        seed_molecule="water",
     )
 
     assert result.diagnostics.accepted_proposals >= 0
@@ -142,6 +165,7 @@ def test_top_candidates_are_highest_bayesian_credible_score_generated_candidates
         top_k=3,
         predictor=FakePredictor(),
         min_unique_valid_molecules=8,
+        seed_molecule="water",
     )
 
     top_scores = [candidate.bayesian_credible_score_percent for candidate in result.top_candidates]
@@ -178,6 +202,7 @@ def test_generation_moves_construct_valid_candidates_without_rejection_loop() ->
         n_seeds=2,
         top_k=5,
         predictor=FakePredictor(),
+        seed_molecule="water",
     )
 
     assert result.diagnostics.total_proposals == 100
@@ -195,6 +220,7 @@ def test_inverse_design_can_require_minimum_unique_valid_molecules() -> None:
         predictor=FakePredictor(),
         min_unique_valid_molecules=3,
         progress_stream=stream,
+        seed_molecule="water",
     )
 
     assert result.minimum_unique_valid_molecules == 3
@@ -215,6 +241,7 @@ def test_inverse_design_minimum_unique_target_stops_before_planned_steps() -> No
         top_k=3,
         predictor=FakePredictor(),
         min_unique_valid_molecules=3,
+        seed_molecule="water",
     )
 
     assert len(result.generated_candidates) == 3
@@ -231,6 +258,7 @@ def test_inverse_design_fails_if_minimum_unique_valid_molecules_exceeds_proposal
             predictor=FakePredictor(),
             min_unique_valid_molecules=2,
             max_total_proposals=0,
+            seed_molecule="water",
         )
 
 
@@ -366,13 +394,15 @@ def test_result_writer_exports_importable_top_molecule_files(tmp_path) -> None:
         n_seeds=1,
         top_k=2,
         predictor=FakePredictor(),
+        seed_molecule="water",
     )
 
     written = write_result_molecule_files(result, tmp_path)
 
     assert len(written.molecule_file_paths) == 2
     source = written.molecule_file_paths[0].read_text(encoding="utf-8")
-    assert "molecule = validate_molecule(\n    Molecule(" in source
+    assert "molecule = Molecule(" in source
+    assert "validate_molecule(" not in source
     assert "atoms = {" not in source
     assert "local_bonds = " not in source
     assert "mk_edge(" not in source
@@ -413,6 +443,7 @@ def test_result_writer_removes_stale_candidate_files(tmp_path) -> None:
         n_seeds=1,
         top_k=1,
         predictor=FakePredictor(),
+        seed_molecule="water",
     )
 
     write_result_molecule_files(result, tmp_path)
@@ -430,6 +461,7 @@ def test_result_writer_can_export_top_candidate_viewers(tmp_path: Path) -> None:
         n_seeds=1,
         top_k=2,
         predictor=FakePredictor(),
+        seed_molecule="water",
     )
 
     written = write_result_viewer_files(result, tmp_path, count=2)
@@ -449,6 +481,7 @@ def test_saved_inverse_design_results_can_be_reopened_in_viewer(tmp_path: Path) 
         n_seeds=1,
         top_k=2,
         predictor=FakePredictor(),
+        seed_molecule="water",
     )
     write_result_molecule_files(result, tmp_path)
 
