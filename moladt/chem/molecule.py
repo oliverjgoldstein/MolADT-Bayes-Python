@@ -6,7 +6,7 @@ from types import MappingProxyType
 from typing import Mapping, TypeAlias
 
 from .coordinate import Coordinate
-from .dietz import AtomId, BondingSystem, Edge, SystemId
+from .dietz import AtomId, BondingSystem, Edge, NonNegative, SystemId
 from .orbital import Shells
 
 
@@ -133,6 +133,22 @@ MoleculeFields: TypeAlias = tuple[
     MoleculeSystems,
     SmilesStereochemistry,
 ]
+CanonicalBondingSystem: TypeAlias = tuple[
+    NonNegative,
+    tuple[AtomId, ...],
+    tuple[Edge, ...],
+    str | None,
+]
+CanonicalStereochemistry: TypeAlias = tuple[
+    tuple[tuple[AtomId, SmilesAtomStereoClass, int, str], ...],
+    tuple[tuple[AtomId, AtomId, SmilesBondStereoDirection], ...],
+]
+CanonicalMolecule: TypeAlias = tuple[
+    tuple[tuple[AtomId, Atom], ...],
+    tuple[Edge, ...],
+    tuple[tuple[SystemId, CanonicalBondingSystem], ...],
+    CanonicalStereochemistry,
+]
 
 
 def _normalize_atom_map(atoms: Mapping[AtomId, Atom]) -> Mapping[AtomId, Atom]:
@@ -158,6 +174,102 @@ class Molecule:
         object.__setattr__(self, "atoms", _normalize_atom_map(self.atoms))
         object.__setattr__(self, "local_bonds", frozenset(self.local_bonds))
         object.__setattr__(self, "systems", _normalize_systems(self.systems))
+
+
+def same_molecule(left: Molecule, right: Molecule) -> bool:
+    """Return True when two MolADT values differ only by container ordering.
+
+    Atom and system identifiers still matter. This is not graph isomorphism or
+    atom relabelling; it is equality after putting maps, edge sets, bonding
+    systems, and stereochemistry annotations into a canonical order.
+    """
+
+    return molecule_canonical_key(left) == molecule_canonical_key(right)
+
+
+def molecule_canonical_key(molecule: Molecule) -> CanonicalMolecule:
+    system_entries = (
+        (system_id, _canonical_bonding_system(system))
+        for system_id, system in molecule.systems
+    )
+    return (
+        tuple(sorted(molecule.atoms.items(), key=lambda item: item[0].value)),
+        tuple(sorted(molecule.local_bonds)),
+        tuple(
+            sorted(
+                system_entries,
+                key=lambda item: (
+                    item[0].value,
+                    _canonical_bonding_system_sort_key(item[1]),
+                ),
+            )
+        ),
+        _canonical_stereochemistry(molecule.smiles_stereochemistry),
+    )
+
+
+def _canonical_bonding_system(system: BondingSystem) -> CanonicalBondingSystem:
+    return (
+        system.shared_electrons,
+        tuple(sorted(system.member_atoms)),
+        tuple(sorted(system.member_edges)),
+        system.tag,
+    )
+
+
+def _canonical_bonding_system_sort_key(
+    system: CanonicalBondingSystem,
+) -> tuple[int, tuple[int, ...], tuple[tuple[int, int], ...], tuple[int, str]]:
+    tag = system[3]
+    return (
+        system[0].value,
+        tuple(atom.value for atom in system[1]),
+        tuple((edge.a.value, edge.b.value) for edge in system[2]),
+        (0, "") if tag is None else (1, tag),
+    )
+
+
+def _canonical_stereochemistry(stereo: SmilesStereochemistry) -> CanonicalStereochemistry:
+    atom_stereo = (
+        (
+            item.center,
+            item.stereo_class,
+            item.configuration,
+            item.token,
+        )
+        for item in stereo.atom_stereo
+    )
+    bond_stereo = (
+        (
+            item.start_atom,
+            item.end_atom,
+            item.direction,
+        )
+        for item in stereo.bond_stereo
+    )
+    return (
+        tuple(
+            sorted(
+                atom_stereo,
+                key=lambda item: (
+                    item[0].value,
+                    item[1].value,
+                    item[2],
+                    item[3],
+                ),
+            )
+        ),
+        tuple(
+            sorted(
+                bond_stereo,
+                key=lambda item: (
+                    item[0].value,
+                    item[1].value,
+                    item[2].value,
+                ),
+            )
+        ),
+    )
 
 
 def molecule_atoms(molecule: Molecule) -> Mapping[AtomId, Atom]:

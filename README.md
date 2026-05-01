@@ -4,7 +4,7 @@ MolADT represents molecules as typed data for Bayesian modelling, feature genera
 
 The core object is not just a string and not just a graph. It keeps atoms, coordinates, local bonds, electron-sharing systems, formal charge, and shell/orbital data in explicit fields that can be inspected, mutated, scored, serialized, and shared with the Haskell repo.
 
-[Quickstart](docs/quickstart.md) · [Representation](docs/representation.md) · [Examples](docs/examples.md) · [CLI](docs/cli.md) · [Models](docs/models.md) · [Benchmarks](docs/inference-and-benchmarks.md) · [Outputs](docs/outputs.md)
+[Quickstart](docs/quickstart.md) · [Representation](docs/representation.md) · [Examples](docs/examples.md) · [Equality](docs/molecule-equality.md) · [CLI](docs/cli.md) · [Models](docs/models.md) · [Benchmarks](docs/inference-and-benchmarks.md) · [Outputs](docs/outputs.md)
 
 ## What It Does
 
@@ -61,6 +61,10 @@ class Molecule:
     local_bonds: frozenset[Edge]
     systems: tuple[tuple[SystemId, BondingSystem], ...]
 ```
+
+Use [`same_molecule`](docs/molecule-equality.md) when you want equality modulo
+container ordering, such as atom maps, edge sets, system tuples, and annotation
+tuples. It keeps atom and system identifiers meaningful.
 
 An atom carries element data, position, formal charge, and shell data:
 

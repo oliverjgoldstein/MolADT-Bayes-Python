@@ -7,11 +7,13 @@ from .molecule import (
     AtomicSymbol,
     ElementAttributes,
     Molecule,
+    molecule_canonical_key,
     molecule_atoms,
     molecule_fields,
     molecule_local_bonds,
     molecule_smiles_stereochemistry,
     molecule_systems,
+    same_molecule,
 )
 from .molecule_ops import add_sigma, distance_angstrom, edge_systems, effective_order, neighbors_sigma, pretty_print_molecule
 from .mutable import MutableMolecule
@@ -43,11 +45,13 @@ __all__ = [
     "ValidationError",
     "mk_bonding_system",
     "mk_edge",
+    "molecule_canonical_key",
     "molecule_atoms",
     "molecule_fields",
     "molecule_local_bonds",
     "molecule_smiles_stereochemistry",
     "molecule_systems",
+    "same_molecule",
     "used_electrons_at",
     "validate_molecule",
 ]
