@@ -2,7 +2,7 @@
 
 MolADT is a molecule ADT.
 
-The central object is not a SMILES string, a plain graph, or an untyped hypergraph. It is a record: atoms, sigma edges, Dietz bonding systems, stereochemistry, coordinates, charges, and shell data all have their own fields.
+The central object is not a SMILES string, a plain graph, or an untyped hypergraph. It is a record: atoms, sigma edges, Dietz bonding systems, coordinates, charges, and shell data all have their own fields.
 
 ## Molecule ADT
 
@@ -13,7 +13,6 @@ data Molecule = Molecule
   { atoms      :: Map AtomId Atom
   , localBonds :: Set Edge
   , systems    :: [(SystemId, BondingSystem)]
-  , smilesStereochemistry :: SmilesStereochemistry
   }
 ```
 
@@ -25,7 +24,6 @@ class Molecule:
     atoms: Mapping[AtomId, Atom]
     local_bonds: frozenset[Edge]
     systems: tuple[tuple[SystemId, BondingSystem], ...]
-    smiles_stereochemistry: SmilesStereochemistry = field(default_factory=SmilesStereochemistry)
 ```
 
 | Haskell field | Python field | Meaning |
@@ -33,7 +31,6 @@ class Molecule:
 | `atoms` | `atoms` | Atom table keyed by stable ids. |
 | `localBonds` | `local_bonds` | Ordinary two-atom sigma edges. |
 | `systems` | `systems` | Dietz electron-sharing systems. |
-| `smilesStereochemistry` | `smiles_stereochemistry` | Stereo annotations preserved at the boundary. |
 
 ## Atom ADT
 
@@ -138,7 +135,7 @@ That is why the same molecule can carry both a normal graph and explicit non-cla
 | Benzene | six local ring edges plus a six-electron `pi_ring` system |
 | Diborane | two `3c-2e` bridge systems |
 | Ferrocene | cyclopentadienyl pi systems plus Fe/Cp electron pools |
-| Morphine | fused graph, delocalisation, and preserved stereochemistry flags |
+| Morphine | fused graph plus named delocalisation systems |
 
 ## Orbital Layer
 

@@ -61,4 +61,4 @@ def test_manuscript_examples_render_titles_and_notes() -> None:
     assert "Diborane (B2H6)" in diborane_text
     assert "3c-2e bridging hydrogen bonding systems" in diborane_text
     assert "Morphine (explicit Dietz skeleton)" in morphine_text
-    assert "atom-centered stereochemistry flags" in morphine_text
+    assert "phenyl ring as an explicit pi system" in morphine_text

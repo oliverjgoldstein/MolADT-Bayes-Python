@@ -20,7 +20,7 @@ make molecule-viewer VIEWER_EXAMPLES=ferrocene
 | Water | Small parser, validation, and SMILES sanity check. |
 | Diborane | Two explicit `3c-2e` bridge systems. |
 | Ferrocene | Organometallic Cp/metal bonding systems. |
-| Morphine | Fused graph, delocalization, and stored stereochemistry flags. |
+| Morphine | Fused graph plus named delocalization systems. |
 
 ## Where They Live
 
