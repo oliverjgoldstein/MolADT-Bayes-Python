@@ -509,7 +509,7 @@ inverse-design:
 	"  target: $(if $(TARGET),$(TARGET),median experimental FreeSolv value)" \
 	"  seed_molecule: $(if $(SEED_MOLECULE),$(SEED_MOLECULE),freesolv-prior)" \
 	"  minimum_unique_valid_molecules: 1000" \
-	"  chemistry_rules: connected neutral CHONFCl closed-valence geometry-checked candidates only" \
+	"  chemistry_rules: connected neutral CHONFCl closed-valence typed candidates; geometry is audited, not conditioned" \
 	"  results_dir: results/$(INVERSE_DESIGN_RESULTS_SUBDIR)" \
 	"  reference_dir: results/inverse_design/reference" \
 	"  open_viewer: $(OPEN_VIEWER)" \

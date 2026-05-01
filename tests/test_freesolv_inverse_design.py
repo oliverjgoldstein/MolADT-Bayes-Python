@@ -148,13 +148,8 @@ def test_generated_candidates_validate() -> None:
     assert result.diagnostics.accepted_proposals >= 0
     for candidate in result.top_candidates:
         validate_molecule(candidate.molecule)
-        _ensure_plausible_freesolv_geometry(candidate.molecule)
         geometry = _geometry_summary(candidate.molecule)
         assert geometry["min_bond_length_angstrom"] is not None
-        assert (
-            geometry["min_bond_angle_degrees"] is None
-            or geometry["min_bond_angle_degrees"] >= inverse_design.MIN_LOCAL_BOND_ANGLE_DEGREES
-        )
 
 
 def test_top_candidates_are_highest_bayesian_credible_score_generated_candidates() -> None:
@@ -322,7 +317,7 @@ def test_charged_freesolv_candidate_is_rejected_before_scoring() -> None:
         _score_molecule(ExplodingPredictor(), mutable.freeze(), -5.0)
 
 
-def test_overlapping_freesolv_candidate_coordinates_are_rejected_before_scoring() -> None:
+def test_geometry_audit_detects_overlapping_freesolv_candidate_coordinates() -> None:
     molecule = _seed_molecule(
         (
             _seed_atom(1, AtomicSymbol.O, 0.0, 0.0, 0.0),
@@ -333,10 +328,10 @@ def test_overlapping_freesolv_candidate_coordinates_are_rejected_before_scoring(
     )
 
     with pytest.raises(ValidationError, match="overlapping coordinates"):
-        _score_molecule(ExplodingPredictor(), molecule, -5.0)
+        _ensure_plausible_freesolv_geometry(molecule)
 
 
-def test_nonbonded_van_der_waals_overlap_is_rejected_before_scoring() -> None:
+def test_geometry_audit_detects_nonbonded_van_der_waals_overlap() -> None:
     molecule = _seed_molecule(
         (
             _seed_atom(1, AtomicSymbol.O, 0.0, 0.0, 0.0),
@@ -348,10 +343,10 @@ def test_nonbonded_van_der_waals_overlap_is_rejected_before_scoring() -> None:
     )
 
     with pytest.raises(ValidationError, match="Non-bonded atoms"):
-        _score_molecule(ExplodingPredictor(), molecule, -5.0)
+        _ensure_plausible_freesolv_geometry(molecule)
 
 
-def test_tight_freesolv_candidate_bond_angles_are_rejected_before_scoring() -> None:
+def test_geometry_audit_detects_tight_freesolv_candidate_bond_angles() -> None:
     molecule = _seed_molecule(
         (
             _seed_atom(1, AtomicSymbol.O, 0.0, 0.0, 0.0),
@@ -362,7 +357,7 @@ def test_tight_freesolv_candidate_bond_angles_are_rejected_before_scoring() -> N
     )
 
     with pytest.raises(ValidationError, match="implausibly tight"):
-        _score_molecule(ExplodingPredictor(), molecule, -5.0)
+        _ensure_plausible_freesolv_geometry(molecule)
 
 
 def test_score_prefers_more_credible_prediction_at_same_target_error() -> None:
@@ -422,10 +417,7 @@ def test_result_writer_exports_importable_top_molecule_files(tmp_path) -> None:
     assert "bayesian_credible_score_percent" in generated_record
     assert generated_record["min_bond_length_angstrom"] > 0.0
     assert generated_record["max_bond_length_angstrom"] >= generated_record["min_bond_length_angstrom"]
-    assert (
-        generated_record["min_bond_angle_degrees"] is None
-        or generated_record["min_bond_angle_degrees"] >= inverse_design.MIN_LOCAL_BOND_ANGLE_DEGREES
-    )
+    assert "min_bond_angle_degrees" in generated_record
     assert "atoms" in generated_record["molecule"]
     assert "local_bonds" in generated_record["molecule"]
 

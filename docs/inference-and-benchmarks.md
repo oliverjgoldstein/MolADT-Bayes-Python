@@ -44,7 +44,7 @@ The comparison figure uses the MoleculeNet MPNN RMSE row `1.15` as the paper bar
 1. Loads the latest `results/freesolv/run_*` Bayesian GP artifact.
 2. Samples initial molecules from the valid MolADT FreeSolv prior by default, reweighted by the unchanged GP target likelihood.
 3. Generates at least `1,000` unique valid molecules.
-4. Prints one progress line per generated molecule with count and elapsed time.
+4. Prints progress and ETA while loading/scoring the FreeSolv prior, periodic proposal-attempt progress, then one progress line per generated molecule with count and elapsed time.
 5. Sorts the 1,000 generated molecules by the model's Bayesian credible score percentage.
 6. Writes the top 10 as importable `top_*.py` files.
 7. Writes geometry audit columns for bond lengths, van der Waals non-bonded clearance, and bond angles.
@@ -84,12 +84,8 @@ The generator builds molecules under conservative rules:
 - closed valence shells
 - terminal H/F/Cl rules
 - valid Dietz bonding systems
-- no overlapping atom coordinates
-- plausible local bond lengths
-- minimum van der Waals non-bonded clearance
-- minimum local bond angles
 
-The move rules avoid impossible local valence and geometry states during generation. The remaining FreeSolv generation contract is the construction boundary before scoring; these checks enforce a physically plausible generated geometry, but they do not prove thermodynamic stability.
+The move rules avoid impossible local valence states during generation. Geometry values are still audited and written to the result files, but the inverse-design sampler is not conditioned on whether a candidate is physically plausible.
 
 Run `make freesolv` first when inverse design should use a fresh FreeSolv model.
 

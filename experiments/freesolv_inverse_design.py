@@ -4,7 +4,6 @@ import argparse
 from collections import Counter
 import csv
 from dataclasses import dataclass, replace
-from functools import lru_cache
 import json
 import math
 import os
@@ -47,6 +46,9 @@ FREESOLV_PRIOR_SEED = "freesolv-prior"
 DEFAULT_SEED_MOLECULE = FREESOLV_PRIOR_SEED
 REFERENCE_RESULTS_ENV = "MOLADT_REFERENCE_RESULTS_DIR"
 CREDIBLE_SCORE_NOISE_FLOOR = 1.0
+FREESOLV_PRIOR_PROGRESS_INTERVAL = 25
+PROPOSAL_PROGRESS_INTERVAL = 100
+_FREESOLV_PRIOR_CACHE: tuple[Molecule, ...] | None = None
 
 DATASET_PREFIX = "freesolv_moladt_featurized"
 FREESOLV_RESULTS_DIR = PROJECT_ROOT / "results" / "freesolv"
@@ -425,6 +427,7 @@ def run_inverse_design(
         rng_seed=rng_seed,
         predictor=active_predictor,
         target=resolved_target,
+        progress_stream=progress_stream,
     )
 
     chains: list[tuple[random.Random, Molecule, Candidate]] = []
@@ -448,6 +451,7 @@ def run_inverse_design(
     )
     chain_index = 0
     progress_start = time.perf_counter()
+    _print_generation_start(progress_stream, target_count=minimum_unique, proposal_limit=proposal_limit)
 
     while chains and (
         len(generated_candidate_keys) < minimum_unique
@@ -492,6 +496,15 @@ def run_inverse_design(
 
         chains[chain_index] = (rng, current, current_candidate)
         chain_index = (chain_index + 1) % len(chains)
+        if diagnostics.total_proposals % PROPOSAL_PROGRESS_INTERVAL == 0:
+            _print_proposal_progress(
+                progress_stream,
+                diagnostics=diagnostics,
+                generated_count=len(generated_candidate_keys),
+                target_count=minimum_unique,
+                proposal_limit=proposal_limit,
+                elapsed_seconds=time.perf_counter() - progress_start,
+            )
 
     diagnostics.unique_valid_molecules_seen = len(candidate_by_key)
     all_candidates = tuple(
@@ -534,6 +547,7 @@ def load_seed_molecules(
     rng_seed: int = RANDOM_SEED,
     predictor: FreeSolvPredictor | None = None,
     target: float | None = None,
+    progress_stream: TextIO | None = None,
 ) -> tuple[Molecule, ...]:
     if n_seeds <= 0:
         return ()
@@ -543,6 +557,7 @@ def load_seed_molecules(
             rng_seed=rng_seed,
             predictor=predictor,
             target=target,
+            progress_stream=progress_stream,
         )
     seed_builders: dict[str, Callable[[], Molecule]] = {
         "water": lambda: water,
@@ -566,22 +581,45 @@ def _sample_freesolv_prior_molecules(
     rng_seed: int,
     predictor: FreeSolvPredictor | None,
     target: float | None,
+    progress_stream: TextIO | None,
 ) -> tuple[Molecule, ...]:
-    prior_molecules = list(_valid_freesolv_prior_molecules())
+    if progress_stream is not None:
+        print(
+            f"Preparing FreeSolv prior for {n_seeds} inverse-design chain starts.",
+            file=progress_stream,
+            flush=True,
+        )
+    prior_molecules = list(_usable_freesolv_prior_molecules(progress_stream=progress_stream))
     if not prior_molecules:
         raise ValueError("No valid FreeSolv molecules are available for the empirical prior")
 
     rng = random.Random(rng_seed)
     seeds: list[Molecule] = []
     available = prior_molecules[:]
-    weights = _freesolv_prior_weights(available, predictor=predictor, target=target)
+    weights = _freesolv_prior_weights(
+        available,
+        predictor=predictor,
+        target=target,
+        progress_stream=progress_stream,
+    )
     while len(seeds) < n_seeds:
         if not available:
             available = prior_molecules[:]
-            weights = _freesolv_prior_weights(available, predictor=predictor, target=target)
+            weights = _freesolv_prior_weights(
+                available,
+                predictor=predictor,
+                target=target,
+                progress_stream=progress_stream,
+            )
         chosen_index = _weighted_index(weights, rng)
         seeds.append(available.pop(chosen_index))
         weights.pop(chosen_index)
+    if progress_stream is not None:
+        print(
+            f"Selected {len(seeds)} initial molecules from {len(prior_molecules)} FreeSolv prior molecules.",
+            file=progress_stream,
+            flush=True,
+        )
     return tuple(seeds)
 
 
@@ -590,16 +628,34 @@ def _freesolv_prior_weights(
     *,
     predictor: FreeSolvPredictor | None,
     target: float | None,
+    progress_stream: TextIO | None,
 ) -> list[float]:
     if predictor is None or target is None:
         return [1.0 for _ in molecules]
-    scores = [_score_molecule(predictor, molecule, target).score for molecule in molecules]
+    scores: list[float] = []
+    start = time.perf_counter()
+    total = len(molecules)
+    _print_timed_progress(progress_stream, "Scoring FreeSolv prior molecules", 0, total, start)
+    for index, molecule in enumerate(molecules, start=1):
+        scores.append(_score_molecule(predictor, molecule, target).score)
+        if _should_print_interval(index, total):
+            _print_timed_progress(progress_stream, "Scoring FreeSolv prior molecules", index, total, start)
     max_score = max(scores, default=0.0)
     return [math.exp(max(-60.0, score - max_score)) for score in scores]
 
 
-@lru_cache(maxsize=1)
-def _valid_freesolv_prior_molecules() -> tuple[Molecule, ...]:
+def _usable_freesolv_prior_molecules(*, progress_stream: TextIO | None = None) -> tuple[Molecule, ...]:
+    global _FREESOLV_PRIOR_CACHE
+    if _FREESOLV_PRIOR_CACHE is not None:
+        _print_timed_progress(
+            progress_stream,
+            "Loaded cached FreeSolv prior molecules",
+            len(_FREESOLV_PRIOR_CACHE),
+            len(_FREESOLV_PRIOR_CACHE),
+            time.perf_counter(),
+        )
+        return _FREESOLV_PRIOR_CACHE
+
     index_path = PROCESSED_DATA_DIR / "freesolv_moladt_index.csv"
     raw_root = PROJECT_ROOT / "data" / "raw" / "freesolv"
     if not index_path.exists():
@@ -607,7 +663,11 @@ def _valid_freesolv_prior_molecules() -> tuple[Molecule, ...]:
 
     molecules: list[Molecule] = []
     with index_path.open(newline="", encoding="utf-8") as handle:
-        for row in csv.DictReader(handle):
+        rows = tuple(csv.DictReader(handle))
+        total = len(rows)
+        start = time.perf_counter()
+        _print_prior_load_progress(progress_stream, scanned=0, total=total, usable_count=0, start=start)
+        for index, row in enumerate(rows, start=1):
             sdf_relpath = row.get("sdf_relpath")
             if not sdf_relpath:
                 continue
@@ -616,9 +676,19 @@ def _valid_freesolv_prior_molecules() -> tuple[Molecule, ...]:
                 molecules.append(_enforce_generation_contract(molecule))
             except (OSError, ValueError, ValidationError):
                 continue
+            finally:
+                if _should_print_interval(index, total):
+                    _print_prior_load_progress(
+                        progress_stream,
+                        scanned=index,
+                        total=total,
+                        usable_count=len(molecules),
+                        start=start,
+                    )
     if not molecules:
         raise ValueError("FreeSolv molecule index did not contain any valid generated-prior molecules")
-    return tuple(molecules)
+    _FREESOLV_PRIOR_CACHE = tuple(molecules)
+    return _FREESOLV_PRIOR_CACHE
 
 
 def _weighted_index(weights: Sequence[float], rng: random.Random) -> int:
@@ -672,10 +742,12 @@ def _print_generation_progress(
         return
     average_seconds = elapsed_seconds / max(1, generated_count)
     if target_count > 0:
+        eta_seconds = average_seconds * max(0, target_count - generated_count)
         print(
             "Generated unique valid candidates: "
             f"{generated_count}/{target_count} "
-            f"(elapsed {elapsed_seconds:.2f}s, avg {average_seconds:.3f}s/candidate)",
+            f"(elapsed {elapsed_seconds:.2f}s, avg {average_seconds:.3f}s/candidate, "
+            f"eta {eta_seconds:.2f}s)",
             file=stream,
             flush=True,
         )
@@ -687,6 +759,101 @@ def _print_generation_progress(
             file=stream,
             flush=True,
         )
+
+
+def _print_generation_start(
+    stream: TextIO | None,
+    *,
+    target_count: int,
+    proposal_limit: int,
+) -> None:
+    if stream is None:
+        return
+    target = f"{target_count} unique valid candidates" if target_count else "planned proposal budget"
+    print(
+        f"Starting inverse-design generation for {target}; proposal limit {proposal_limit}.",
+        file=stream,
+        flush=True,
+    )
+
+
+def _print_proposal_progress(
+    stream: TextIO | None,
+    *,
+    diagnostics: SearchDiagnostics,
+    generated_count: int,
+    target_count: int,
+    proposal_limit: int,
+    elapsed_seconds: float,
+) -> None:
+    if stream is None:
+        return
+    if generated_count > 0 and target_count > 0:
+        eta_seconds = (elapsed_seconds / generated_count) * max(0, target_count - generated_count)
+        eta_text = f"{eta_seconds:.2f}s"
+    else:
+        eta_text = "pending first generated candidate"
+    target_text = f"/{target_count}" if target_count > 0 else ""
+    print(
+        "Proposal attempts: "
+        f"{diagnostics.total_proposals}/{proposal_limit}; "
+        f"generated {generated_count}{target_text}; "
+        f"valid proposals {diagnostics.valid_proposals}; "
+        f"invalid proposals {diagnostics.invalid_proposals}; "
+        f"elapsed {elapsed_seconds:.2f}s; eta {eta_text}",
+        file=stream,
+        flush=True,
+    )
+
+
+def _should_print_interval(count: int, total: int) -> bool:
+    return count == 1 or count == total or count % FREESOLV_PRIOR_PROGRESS_INTERVAL == 0
+
+
+def _timing_suffix(completed: int, total: int, start: float) -> str:
+    elapsed_seconds = time.perf_counter() - start
+    if completed <= 0:
+        return f"elapsed {elapsed_seconds:.2f}s, eta pending"
+    if completed >= total:
+        return f"elapsed {elapsed_seconds:.2f}s, eta 0.00s"
+    average_seconds = elapsed_seconds / completed
+    eta_seconds = average_seconds * max(0, total - completed)
+    return f"elapsed {elapsed_seconds:.2f}s, eta {eta_seconds:.2f}s"
+
+
+def _print_timed_progress(
+    stream: TextIO | None,
+    label: str,
+    completed: int,
+    total: int,
+    start: float,
+) -> None:
+    if stream is None:
+        return
+    print(
+        f"{label}: {completed}/{total} ({_timing_suffix(completed, total, start)})",
+        file=stream,
+        flush=True,
+    )
+
+
+def _print_prior_load_progress(
+    stream: TextIO | None,
+    *,
+    scanned: int,
+    total: int,
+    usable_count: int,
+    start: float,
+) -> None:
+    if stream is None:
+        return
+    print(
+        "Loading FreeSolv prior molecules: "
+        f"scanned {scanned}/{total}, usable {usable_count} "
+        f"({_timing_suffix(scanned, total, start)})",
+        file=stream,
+        flush=True,
+    )
 
 
 def propose_molecule(molecule: Molecule, rng: random.Random) -> Molecule | None:
@@ -1949,7 +2116,6 @@ def _enforce_generation_contract(molecule: Molecule) -> Molecule:
     _ensure_conservative_generator_valence(molecule)
     _ensure_closed_valence_shells(molecule)
     _ensure_sound_bonding_systems(molecule)
-    _ensure_plausible_freesolv_geometry(molecule)
     for edge in molecule.local_bonds:
         effective_order(molecule, edge)
     return molecule
@@ -1959,9 +2125,9 @@ def _complete_generated_candidate(molecule: Molecule) -> Molecule | None:
     """Complete terminal hydrogens and enforce the FreeSolv generation contract.
 
     This is the generator boundary: a proposal only becomes a generated molecule
-    after it has closed valence shells, accepted terminal atoms, plausible
-    geometry, and valid Dietz systems. Invalid proposals are discarded before
-    scoring or insertion into the candidate set.
+    after it has closed valence shells, accepted terminal atoms, and valid
+    Dietz systems. Geometry is reported as an audit field, not used as a
+    physical-plausibility condition for inverse-design sampling.
     """
 
     try:
