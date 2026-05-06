@@ -96,6 +96,17 @@ M  END
 $$$$
 """
 
+V2000_CHARGE_CODE_SODIUM_CHLORIDE = """sodium chloride charge codes
+MolADT
+generated
+  2  1  0  0  0  0            999 V2000
+    0.0000    0.0000    0.0000 Na  0  3  0  0  0  0  0  0  0  0  0  0
+    2.3600    0.0000    0.0000 Cl  0  5  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+M  END
+$$$$
+"""
+
 
 def test_benzene_round_trip_preserves_atom_count_and_sigma_bonds() -> None:
     molecule = read_sdf(PROJECT_ROOT / "molecules" / "benzene.sdf")
@@ -172,6 +183,14 @@ def test_v3000_atom_charge_is_read_from_atom_tokens() -> None:
     assert molecule.atoms[AtomId(1)].formal_charge == 1
 
 
+def test_v2000_atom_charge_codes_are_read_as_formal_charges() -> None:
+    molecule = parse_sdf(V2000_CHARGE_CODE_SODIUM_CHLORIDE)
+
+    assert molecule.atoms[AtomId(1)].formal_charge == 1
+    assert molecule.atoms[AtomId(2)].formal_charge == -1
+    assert _count_tag(molecule, "ionic") == 1
+
+
 def test_sdf_quadruple_bond_becomes_eight_electron_covalent_system() -> None:
     molecule = parse_sdf(V3000_QUADRUPLE)
     round_tripped = parse_sdf(molecule_to_sdf(molecule))
@@ -186,6 +205,8 @@ def test_sdf_charged_sodium_halide_single_bond_becomes_ionic_system() -> None:
 
     assert molecule.atoms[AtomId(1)].formal_charge == 1
     assert molecule.atoms[AtomId(2)].formal_charge == -1
+    assert round_tripped.atoms[AtomId(1)].formal_charge == 1
+    assert round_tripped.atoms[AtomId(2)].formal_charge == -1
     assert _count_tag(molecule, "ionic") == 1
     assert molecule.systems[0][1].shared_electrons.value == 0
     assert _count_tag(round_tripped, "ionic") == 1

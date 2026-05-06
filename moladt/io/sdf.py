@@ -394,12 +394,24 @@ def _parse_atom_line(index: int, line: str) -> Atom:
     symbol_text = words[3]
     symbol = AtomicSymbol(symbol_text)
     atom_id = AtomId(index)
+    formal_charge = _v2000_charge_from_code(int(words[5])) if len(words) > 5 else 0
     return Atom(
         atom_id=atom_id,
         attributes=element_attributes(symbol),
         coordinate=Coordinate(mk_angstrom(x), mk_angstrom(y), mk_angstrom(z)),
-        formal_charge=0,
+        formal_charge=formal_charge,
     )
+
+
+def _v2000_charge_from_code(code: int) -> int:
+    return {
+        1: 3,
+        2: 2,
+        3: 1,
+        5: -1,
+        6: -2,
+        7: -3,
+    }.get(code, 0)
 
 
 def _parse_bond_line(line: str) -> tuple[Edge, int]:

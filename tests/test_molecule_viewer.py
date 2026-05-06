@@ -8,7 +8,7 @@ import pytest
 
 from moladt.cli import main
 import moladt.cli as cli
-from moladt.examples import diborane_pretty, ferrocene_pretty
+from moladt.examples import diborane_pretty, ferrocene_pretty, sodium_chloride
 from moladt.io import molecule_to_json
 from moladt.viewer import (
     molecule_viewer_collection_html,
@@ -63,6 +63,23 @@ def test_molecule_viewer_payload_includes_bonding_system_annotations() -> None:
     assert [system["tag"] for system in bridge_systems] == ["bridge_h3_3c2e", "bridge_h4_3c2e"]
     assert [(edge["a"], edge["b"]) for edge in bridge_systems[0]["edges"]] == [(1, 3), (2, 3)]
     assert all("length" in edge for edge in bridge_systems[0]["edges"])
+
+
+def test_molecule_viewer_payload_marks_ionic_edges_for_charge_gradient() -> None:
+    payload = molecule_viewer_payload(sodium_chloride, title="Sodium chloride")
+
+    assert payload["atoms"][0]["charge"] == 1
+    assert payload["atoms"][1]["charge"] == -1
+    assert len(payload["bonds"]) == 1
+    bond = payload["bonds"][0]
+    assert (bond["a"], bond["b"]) == (1, 2)
+    assert bond["order"] == 0.0
+    assert bond["kind"] == "ionic"
+    assert bond["length"] == pytest.approx(2.36)
+    html = molecule_viewer_html(sodium_chloride, title="Sodium chloride")
+    assert "POSITIVE_CHARGE_COLOR" in html
+    assert "NEGATIVE_CHARGE_COLOR" in html
+    assert '"kind":"ionic"' in html
 
 
 def test_molecule_viewer_payload_lengths_come_from_3d_coordinates() -> None:

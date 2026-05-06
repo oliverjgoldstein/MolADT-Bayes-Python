@@ -145,7 +145,7 @@ make molecule-viewer VIEWER_EXAMPLES="benzene diborane ferrocene"
 make python-pretty-example EXAMPLE=morphine
 ```
 
-`make view` opens seven built-in examples in one browser page, including sodium chloride's charged 0e ionic edge. Click an atom to see coordinates, 3D edge lengths, effective orders, bonding systems, and bond angles from the molecule coordinates.
+`make view` opens seven built-in examples in one browser page, including sodium chloride's charged 0e ionic edge. Ionic edges draw as a charge gradient, with blue at the positive end and red at the negative end. Click an atom to see coordinates, 3D edge lengths, effective orders, bonding systems, and bond angles from the molecule coordinates.
 
 Use `OPEN_VIEWER=1` to open generated viewer pages automatically:
 

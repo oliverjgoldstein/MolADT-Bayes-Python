@@ -46,6 +46,7 @@ _DEFAULT_ELEMENT_STYLE: dict[str, object] = {"color": "#7b8794", "edge": "#48526
 def molecule_viewer_payload(molecule: Molecule, *, title: str = "MolADT 3D Viewer") -> dict[str, Any]:
     """Return the compact JSON payload used by the browser molecule viewer."""
 
+    ionic_edges = _ionic_edge_keys(molecule)
     atoms = [
         {
             "id": atom_id.value,
@@ -65,7 +66,7 @@ def molecule_viewer_payload(molecule: Molecule, *, title: str = "MolADT 3D Viewe
             "a": edge.a.value,
             "b": edge.b.value,
             "order": round(effective_order(molecule, edge), 3),
-            "kind": "sigma",
+            "kind": "ionic" if _edge_key(edge) in ionic_edges else "sigma",
             "length": _edge_length(molecule, edge),
         }
         for edge in sorted(molecule_edges(molecule))
@@ -112,6 +113,25 @@ def _system_display_label(system: BondingSystem) -> str | None:
         if system.shared_electrons.value == 8:
             return "quadruple covalent"
     return system.tag
+
+
+def _ionic_edge_keys(molecule: Molecule) -> frozenset[tuple[int, int]]:
+    return frozenset(
+        _edge_key(edge)
+        for _, system in molecule.systems
+        if _is_ionic_system(system)
+        for edge in system.member_edges
+    )
+
+
+def _is_ionic_system(system: BondingSystem) -> bool:
+    return system.tag == "ionic" and len(system.member_edges) == 1 and system.shared_electrons.value == 0
+
+
+def _edge_key(edge: Edge) -> tuple[int, int]:
+    left = edge.a.value
+    right = edge.b.value
+    return (left, right) if left <= right else (right, left)
 
 
 def molecule_viewer_html(molecule: Molecule, *, title: str = "MolADT 3D Viewer") -> str:
@@ -728,6 +748,8 @@ _HTML_TEMPLATE = """<!doctype html>
     };
 
     const SYSTEM_COLORS = ["#f05a3f", "#008f87", "#7b5cff", "#d89b00", "#2f73d9", "#c43b78", "#258a45", "#94552b"];
+    const POSITIVE_CHARGE_COLOR = "#2563eb";
+    const NEGATIVE_CHARGE_COLOR = "#dc2626";
     const canvas = document.getElementById("molecule-canvas");
     const ctx = canvas.getContext("2d");
     const tooltip = document.getElementById("tooltip");
@@ -943,10 +965,11 @@ _HTML_TEMPLATE = """<!doctype html>
       systems.forEach((system) => {
         system.edges.forEach((edge) => edgeMap.set(edgeKey(edge), edge));
       });
+      const ionicEdgeKeys = ionicEdgeKeySet(systems);
       const bonds = Array.from(edgeMap.values()).map((edge) => ({
         ...edge,
         order: systemContrib.get(edgeKey(edge)) || 0,
-        kind: "sigma",
+        kind: ionicEdgeKeys.has(edgeKey(edge)) ? "ionic" : "sigma",
         length: null
       }));
       return {
@@ -1020,7 +1043,7 @@ _HTML_TEMPLATE = """<!doctype html>
         atom.vz = (atom.z - center.z) * scale;
       });
       const atomMap = new Map(atoms.map((atom) => [atom.id, atom]));
-      const bonds = (payload.bonds || []).map((bond) => ({
+      const rawBonds = (payload.bonds || []).map((bond) => ({
         a: Number(bond.a),
         b: Number(bond.b),
         order: Number(bond.order || 1),
@@ -1045,6 +1068,11 @@ _HTML_TEMPLATE = """<!doctype html>
           ...edge,
           length: edge.length ?? distanceBetweenAtoms(atomMap.get(edge.a), atomMap.get(edge.b))
         }))
+      }));
+      const ionicEdgeKeys = ionicEdgeKeySet(systems);
+      const bonds = rawBonds.map((bond) => ({
+        ...bond,
+        kind: ionicEdgeKeys.has(edgeKey(bond)) ? "ionic" : bond.kind
       }));
       const payloadAngles = normalizeAngles(payload.angles || [], atomMap);
       const angles = payloadAngles.length ? payloadAngles : buildAnglePayloads(atomMap, bonds, systems);
@@ -1077,6 +1105,35 @@ _HTML_TEMPLATE = """<!doctype html>
         if (sharedElectrons === 8) return "quadruple covalent";
         return null;
       }
+
+    function isIonicSystem(system) {
+      return system && system.tag === "ionic" && system.sharedElectrons === 0 && system.edges && system.edges.length === 1;
+    }
+
+    function ionicEdgeKeySet(systems) {
+      const keys = new Set();
+      (systems || []).forEach((system) => {
+        if (isIonicSystem(system)) {
+          system.edges.forEach((edge) => keys.add(edgeKey(edge)));
+        }
+      });
+      return keys;
+    }
+
+    function chargeGradientForEdge(atomMap, edge) {
+      const atomA = atomMap.get(Number(edge.a));
+      const atomB = atomMap.get(Number(edge.b));
+      return {
+        colorA: chargeColor(atomA ? atomA.charge : 0),
+        colorB: chargeColor(atomB ? atomB.charge : 0)
+      };
+    }
+
+    function chargeColor(charge) {
+      if (Number(charge) > 0) return POSITIVE_CHARGE_COLOR;
+      if (Number(charge) < 0) return NEGATIVE_CHARGE_COLOR;
+      return "rgba(83, 91, 99, 0.78)";
+    }
 
       function resizeCanvas() {
       const rect = canvas.getBoundingClientRect();
@@ -1672,11 +1729,12 @@ _HTML_TEMPLATE = """<!doctype html>
       drawCoordinateAxes();
       bondDraws.forEach(({ bond, a, b }) => {
         const width = Math.max(3.5, 4.2 + Math.min(2.5, bond.order - 1) * 2.2) * ((a.p + b.p) / 2) * state.zoom;
+        const chargeGradient = bond.kind === "ionic" ? chargeGradientForEdge(molecule.atomMap, bond) : null;
         drawLine(a, b, {
           width,
-          colorA: "rgba(83, 91, 99, 0.78)",
-          colorB: "rgba(83, 91, 99, 0.78)",
-          alpha: 0.78
+          colorA: chargeGradient ? chargeGradient.colorA : "rgba(83, 91, 99, 0.78)",
+          colorB: chargeGradient ? chargeGradient.colorB : "rgba(83, 91, 99, 0.78)",
+          alpha: chargeGradient ? 0.92 : 0.78
         });
       });
 
@@ -1691,9 +1749,12 @@ _HTML_TEMPLATE = """<!doctype html>
               const lane = lanes.get(edgeKey(edge) + ":" + Number(system.id)) || { index: 0, count: 1 };
               const width = active ? 6.2 : 3.8;
               const laneOffset = lane.count > 1 ? (lane.index - (lane.count - 1) / 2) * (width + 2.0) : 0;
+              const chargeGradient = isIonicSystem(system) ? chargeGradientForEdge(molecule.atomMap, edge) : null;
               drawLine(a, b, {
                 width,
                 color: system.color,
+                colorA: chargeGradient ? chargeGradient.colorA : system.color,
+                colorB: chargeGradient ? chargeGradient.colorB : system.color,
                 alpha: active ? 1 : 0.18,
                 dash: state.activeSystem === system.id ? [] : [10, 8],
                 offset: laneOffset
