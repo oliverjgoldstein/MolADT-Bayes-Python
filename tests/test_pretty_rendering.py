@@ -54,7 +54,7 @@ def test_benzene_pretty_rendering_omits_empty_stereochemistry_section() -> None:
 
     assert "SMILES Stereochemistry" not in rendered
     assert "shared=3e  order=1.50" in rendered
-    assert "#13[pi_ring]:1e/edge from 6e" in rendered
+    assert "#1[pi_ring]:1e/edge from 6e" in rendered
 
 
 def test_quadruple_covalent_bond_pretty_rendering_uses_conventional_label() -> None:

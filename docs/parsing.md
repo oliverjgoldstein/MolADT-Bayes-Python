@@ -29,6 +29,11 @@ MolADT JSON is the shared boundary format used by the Python and Haskell repos.
 
 `to-python` and its `to-example` alias convert parsed geometry into canonical expanded `Molecule(...)` source with literal `AtomId(...)`, `Edge(...)`, and `mk_bonding_system(...)` entries. Atoms are sorted by `AtomId`, edges are normalized and sorted, and systems are sorted by `SystemId`. The output is meant for checked examples and reviewable fixtures, so it does not hide atoms or bonding systems behind generated loops.
 
+For display stability, parsers assign low `SystemId` values to named or
+multi-edge systems before the ordinary one-edge covalent systems. A parsed
+benzene fixture therefore has `SystemId(1)` for `pi_ring`, followed by the
+one-edge 2e systems.
+
 Python API:
 
 ```python

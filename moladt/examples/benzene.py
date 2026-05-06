@@ -24,150 +24,6 @@ benzene = Molecule(
         (
             SystemId(1),
             mk_bonding_system(
-                NonNegative(2),
-                frozenset(
-                    {
-                        Edge(AtomId(1), AtomId(2)),
-                    }
-                ),
-                None,
-            ),
-        ),
-        (
-            SystemId(2),
-            mk_bonding_system(
-                NonNegative(2),
-                frozenset(
-                    {
-                        Edge(AtomId(1), AtomId(3)),
-                    }
-                ),
-                None,
-            ),
-        ),
-        (
-            SystemId(3),
-            mk_bonding_system(
-                NonNegative(2),
-                frozenset(
-                    {
-                        Edge(AtomId(1), AtomId(7)),
-                    }
-                ),
-                None,
-            ),
-        ),
-        (
-            SystemId(4),
-            mk_bonding_system(
-                NonNegative(2),
-                frozenset(
-                    {
-                        Edge(AtomId(2), AtomId(4)),
-                    }
-                ),
-                None,
-            ),
-        ),
-        (
-            SystemId(5),
-            mk_bonding_system(
-                NonNegative(2),
-                frozenset(
-                    {
-                        Edge(AtomId(2), AtomId(8)),
-                    }
-                ),
-                None,
-            ),
-        ),
-        (
-            SystemId(6),
-            mk_bonding_system(
-                NonNegative(2),
-                frozenset(
-                    {
-                        Edge(AtomId(3), AtomId(5)),
-                    }
-                ),
-                None,
-            ),
-        ),
-        (
-            SystemId(7),
-            mk_bonding_system(
-                NonNegative(2),
-                frozenset(
-                    {
-                        Edge(AtomId(3), AtomId(9)),
-                    }
-                ),
-                None,
-            ),
-        ),
-        (
-            SystemId(8),
-            mk_bonding_system(
-                NonNegative(2),
-                frozenset(
-                    {
-                        Edge(AtomId(4), AtomId(6)),
-                    }
-                ),
-                None,
-            ),
-        ),
-        (
-            SystemId(9),
-            mk_bonding_system(
-                NonNegative(2),
-                frozenset(
-                    {
-                        Edge(AtomId(4), AtomId(10)),
-                    }
-                ),
-                None,
-            ),
-        ),
-        (
-            SystemId(10),
-            mk_bonding_system(
-                NonNegative(2),
-                frozenset(
-                    {
-                        Edge(AtomId(5), AtomId(6)),
-                    }
-                ),
-                None,
-            ),
-        ),
-        (
-            SystemId(11),
-            mk_bonding_system(
-                NonNegative(2),
-                frozenset(
-                    {
-                        Edge(AtomId(5), AtomId(11)),
-                    }
-                ),
-                None,
-            ),
-        ),
-        (
-            SystemId(12),
-            mk_bonding_system(
-                NonNegative(2),
-                frozenset(
-                    {
-                        Edge(AtomId(6), AtomId(12)),
-                    }
-                ),
-                None,
-            ),
-        ),
-        (
-            SystemId(13),
-            mk_bonding_system(
                 NonNegative(6),
                 frozenset(
                     {
@@ -180,6 +36,150 @@ benzene = Molecule(
                     }
                 ),
                 "pi_ring",
+            ),
+        ),
+        (
+            SystemId(2),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(1), AtomId(2)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(3),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(1), AtomId(3)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(4),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(1), AtomId(7)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(5),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(2), AtomId(4)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(6),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(2), AtomId(8)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(7),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(3), AtomId(5)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(8),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(3), AtomId(9)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(9),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(4), AtomId(6)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(10),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(4), AtomId(10)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(11),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(5), AtomId(6)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(12),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(5), AtomId(11)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(13),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(6), AtomId(12)),
+                    }
+                ),
+                None,
             ),
         ),
     ),

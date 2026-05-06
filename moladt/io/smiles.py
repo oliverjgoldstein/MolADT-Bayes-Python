@@ -516,13 +516,12 @@ def _normalize_smiles_systems(
 ) -> list[BondingSystem]:
     pi_rings = {ring for ring in _detect_aromatic_six_rings(aromatic_candidate_edges)}
     pi_rings.update(_detect_lowercase_aromatic_six_rings(bond_edges, aromatic_candidate_edges, aromatic_atoms))
-    ring_edges = {edge for ring in pi_rings for edge in ring}
 
-    normalized = list(systems)
-    normalized.extend(
+    normalized = [
         mk_bonding_system(NonNegative(6), ring, "pi_ring")
         for ring in sorted(pi_rings, key=_ring_sort_key)
-    )
+    ]
+    normalized.extend(systems)
     return normalized
 
 

@@ -317,12 +317,12 @@ def _build_molecule(atoms: list[Atom], bonds: list[tuple[Edge, int]]) -> Molecul
     aromatic_ring_edges = frozenset(edge for ring in aromatic_rings for edge in ring)
     systems: list[tuple[SystemId, BondingSystem]] = []
     system_index = 1
+    for ring_edges in aromatic_rings:
+        systems.append((SystemId(system_index), mk_bonding_system(NonNegative(6), ring_edges, "pi_ring")))
+        system_index += 1
     for edge, order in bonds:
         shared_electrons, tag = _bond_electron_system(order, edge in aromatic_ring_edges)
         systems.append((SystemId(system_index), mk_bonding_system(NonNegative(shared_electrons), frozenset({edge}), tag)))
-        system_index += 1
-    for ring_edges in aromatic_rings:
-        systems.append((SystemId(system_index), mk_bonding_system(NonNegative(6), ring_edges, "pi_ring")))
         system_index += 1
     return Molecule(atoms=atom_map, systems=tuple(systems))
 

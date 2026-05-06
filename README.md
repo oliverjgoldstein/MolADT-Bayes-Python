@@ -74,6 +74,10 @@ benzene C-C edge displays as `shared=3e` and `order=1.50`: `2e` from its
 unnamed one-edge system plus `1e/edge` from the six-electron `pi_ring`
 system. The viewer lists the same explicit bonding systems.
 
+System identifiers are stable display IDs, not chemistry. Checked examples and
+parsers put named or multi-edge systems first, so benzene uses `SystemId(1)` for
+`pi_ring` and then numbers the ordinary one-edge covalent systems after it.
+
 Use [`same_molecule`](docs/molecule-equality.md) when you want equality modulo
 container ordering, such as atom maps, system tuples, member-edge sets, and
 annotation tuples. It keeps atom and system identifiers meaningful.

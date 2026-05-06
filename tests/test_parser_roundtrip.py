@@ -89,6 +89,8 @@ def test_benzene_round_trip_preserves_atom_count_and_sigma_bonds() -> None:
 def test_benzene_detects_one_pi_ring() -> None:
     record = read_sdf_record(PROJECT_ROOT / "molecules" / "benzene.sdf")
     assert len(record.molecule.systems) == 13
+    assert record.molecule.systems[0][0].value == 1
+    assert record.molecule.systems[0][1].tag == "pi_ring"
     assert _count_unnamed_edge_systems(record.molecule, 2) == 12
     assert _count_tag(record.molecule, "pi_ring") == 1
 
@@ -160,6 +162,8 @@ def test_smiles_parse_recovers_benzene_pi_ring() -> None:
     assert counts == Counter({"C": 6, "H": 6})
     assert len(molecule_edges(molecule)) == 12
     assert len(molecule.systems) == 13
+    assert molecule.systems[0][0].value == 1
+    assert molecule.systems[0][1].tag == "pi_ring"
     assert _count_unnamed_edge_systems(molecule, 2) == 12
     assert _count_tag(molecule, "pi_ring") == 1
 
