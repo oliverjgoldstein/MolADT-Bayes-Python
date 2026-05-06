@@ -1167,6 +1167,10 @@ _HTML_TEMPLATE = """<!doctype html>
       return !!standardCovalentLineCount(system);
     }
 
+    function displaySystems(systems) {
+      return (systems || []).filter((system) => !isStandardCovalentSystem(system));
+    }
+
     function standardCovalentLineCount(system) {
       if (!system) return 0;
       const key = standardSystemKey(system.tag || null, Number(system.sharedElectrons || 0), system.edges || []);
@@ -1938,7 +1942,7 @@ _HTML_TEMPLATE = """<!doctype html>
       sortedAtoms.forEach(drawAtom);
       state.screenAtoms = sortedAtoms;
       if (state.systems) {
-        molecule.systems.forEach((system) => drawSystemLabel(system, points));
+        displaySystems(molecule.systems).forEach((system) => drawSystemLabel(system, points));
       }
     }
 
@@ -1981,13 +1985,14 @@ _HTML_TEMPLATE = """<!doctype html>
 
       const systemList = document.getElementById("system-list");
       systemList.innerHTML = "";
-      if (!molecule.systems.length) {
+      const visibleSystems = displaySystems(molecule.systems);
+      if (!visibleSystems.length) {
         const empty = document.createElement("p");
         empty.className = "row-meta";
         empty.textContent = "None";
         systemList.append(empty);
       }
-      molecule.systems.forEach((system) => {
+      visibleSystems.forEach((system) => {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "system-row";
@@ -2033,7 +2038,7 @@ _HTML_TEMPLATE = """<!doctype html>
         selection.textContent = "None";
         return;
       }
-      const systems = molecule.systems.filter((system) => system.atoms.includes(atom.id)).map((system) => system.label);
+      const systems = displaySystems(molecule.systems).filter((system) => system.atoms.includes(atom.id)).map((system) => system.label);
       const charge = atom.charge ? (atom.charge > 0 ? "+" + atom.charge : String(atom.charge)) : "0";
       const shellText = shellSummary(atom);
       selection.innerHTML = "<strong>" + escapeHtml(atom.label) + "</strong><br>charge " + escapeHtml(charge) + "<br>"

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import math
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -53,6 +55,87 @@ def _payload_angle(payload: dict, atom_a: int, center: int, atom_b: int) -> floa
     return math.degrees(math.acos(max(-1.0, min(1.0, cosine))))
 
 
+def _assert_viewer_script_executes(html_path: Path) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is required for viewer script execution smoke checks")
+    supports_modern_js = subprocess.run(
+        [node, "-e", "new Function('return null ?? 1')()"],
+        capture_output=True,
+        text=True,
+    )
+    if supports_modern_js.returncode != 0:
+        pytest.skip("node is too old for the viewer script syntax")
+    script = r"""
+const fs = require("fs");
+const html = fs.readFileSync(process.argv[1], "utf8");
+const payloadMatch = html.match(/<script id="moladt-payload" type="application\/json">([\s\S]*?)<\/script>/);
+const scripts = [...html.matchAll(/<script(?![^>]*application\/json)[^>]*>([\s\S]*?)<\/script>/g)].map((match) => match[1]);
+if (!payloadMatch || !scripts.length) throw new Error("missing viewer payload or script");
+
+const elements = new Map();
+function classList() {
+  return { add() {}, remove() {}, toggle() {} };
+}
+function makeElement(id) {
+  return {
+    id,
+    style: {},
+    children: [],
+    classList: classList(),
+    _queries: {},
+    textContent: "",
+    innerHTML: "",
+    type: "",
+    className: "",
+    append(...nodes) { this.children.push(...nodes); },
+    appendChild(node) { this.children.push(node); },
+    setAttribute() {},
+    addEventListener() {},
+    setPointerCapture() {},
+    releasePointerCapture() {},
+    getBoundingClientRect() { return { width: 900, height: 640, left: 0, top: 0 }; },
+    get clientWidth() { return 900; },
+    get clientHeight() { return 640; },
+    querySelector(selector) {
+      if (!this._queries[selector]) this._queries[selector] = makeElement(`${id}:${selector}`);
+      return this._queries[selector];
+    }
+  };
+}
+const ctx = new Proxy({}, {
+  get(_target, prop) {
+    if (prop === "createLinearGradient" || prop === "createRadialGradient") return () => ({ addColorStop() {} });
+    if (prop === "measureText") return (text) => ({ width: String(text || "").length * 7 });
+    return () => {};
+  },
+  set() { return true; }
+});
+const canvas = makeElement("molecule-canvas");
+canvas.getContext = () => ctx;
+global.document = {
+  body: makeElement("body"),
+  createElement: (tag) => makeElement(tag),
+  getElementById(id) {
+    if (id === "moladt-payload") return { textContent: payloadMatch[1] };
+    if (id === "molecule-canvas") return canvas;
+    if (!elements.has(id)) elements.set(id, makeElement(id));
+    return elements.get(id);
+  }
+};
+global.window = { devicePixelRatio: 1, addEventListener() {} };
+new Function(scripts[scripts.length - 1])();
+const systemList = elements.get("system-list");
+const labels = (systemList ? systemList.children : [])
+  .map((child) => child._queries && child._queries[".row-title"] ? child._queries[".row-title"].textContent : child.textContent)
+  .filter(Boolean);
+if (labels.some((label) => /(single|double|triple|quadruple) covalent/.test(label))) {
+  throw new Error(`ordinary covalent systems should not be page labels: ${labels.join(", ")}`);
+}
+"""
+    subprocess.run([node, "-e", script, str(html_path)], check=True, capture_output=True, text=True)
+
+
 def test_molecule_viewer_payload_includes_bonding_system_annotations() -> None:
     payload = molecule_viewer_payload(diborane_pretty, title="Diborane")
 
@@ -85,6 +168,29 @@ def test_molecule_viewer_payload_marks_ionic_edges_and_draws_charge_field() -> N
     assert "chargeGradientForEdge" in html
     assert '"kind":"ionic"' in html
     assert "setLineDash" not in html
+
+
+def test_molecule_viewer_script_executes_for_ferrocene_and_sodium_chloride(tmp_path: Path) -> None:
+    html_path = tmp_path / "viewer.html"
+    html_path.write_text(
+        molecule_viewer_collection_html(
+            (
+                ("Ferrocene", ferrocene_pretty),
+                ("Sodium chloride", sodium_chloride),
+            ),
+            title="Viewer smoke",
+        ),
+        encoding="utf-8",
+    )
+
+    _assert_viewer_script_executes(html_path)
+
+
+def test_molecule_viewer_selection_keeps_system_lookup_inside_function() -> None:
+    html = molecule_viewer_html(ferrocene_pretty, title="Ferrocene")
+
+    assert "return;\n      }\n      const systems = displaySystems" in html
+    assert "return;\n      }\n      }\n      const systems" not in html
 
 
 def test_molecule_viewer_payload_lengths_come_from_3d_coordinates() -> None:
