@@ -186,6 +186,14 @@ def test_molecule_viewer_script_executes_for_ferrocene_and_sodium_chloride(tmp_p
     _assert_viewer_script_executes(html_path)
 
 
+def test_molecule_viewer_projects_atom_radius_before_charge_field() -> None:
+    html = molecule_viewer_html(ferrocene_pretty, title="Ferrocene")
+
+    assert "const radius = Math.max(8, Number(atom.radius || 0.82) * 13 * perspective * state.zoom);" in html
+    assert "radius,\n        atom" in html
+    assert "const radius = point.radius;" in html
+
+
 def test_molecule_viewer_selection_keeps_system_lookup_inside_function() -> None:
     html = molecule_viewer_html(ferrocene_pretty, title="Ferrocene")
 

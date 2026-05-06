@@ -1253,11 +1253,13 @@ _HTML_TEMPLATE = """<!doctype html>
       const distance = 8.5;
       const perspective = distance / (distance - rotated.z);
       const unit = Math.min(rect.width, rect.height) / 8.2;
+      const radius = Math.max(8, Number(atom.radius || 0.82) * 13 * perspective * state.zoom);
       return {
         x: rect.width / 2 + rotated.x * unit * state.zoom * perspective,
         y: rect.height / 2 - rotated.y * unit * state.zoom * perspective,
         z: rotated.z,
         p: perspective,
+        radius,
         atom
       };
     }
@@ -1827,7 +1829,7 @@ _HTML_TEMPLATE = """<!doctype html>
 
     function drawAtom(point) {
       const atom = point.atom;
-      const radius = Math.max(8, atom.radius * 13 * point.p * state.zoom);
+      const radius = point.radius;
       const active = (state.hoverAtom && state.hoverAtom.id === atom.id)
         || (state.selectedAtom && state.selectedAtom.id === atom.id);
       const gradient = ctx.createRadialGradient(point.x - radius * 0.32, point.y - radius * 0.36, radius * 0.1, point.x, point.y, radius);
@@ -1854,7 +1856,6 @@ _HTML_TEMPLATE = """<!doctype html>
         ctx.fillText(atom.symbol, point.x, point.y);
       }
       ctx.restore();
-      point.radius = radius;
     }
 
     function draw() {
