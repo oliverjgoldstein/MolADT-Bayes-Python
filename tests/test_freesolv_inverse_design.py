@@ -18,6 +18,7 @@ from experiments.freesolv_inverse_design import (
     _find_gp_draws_path,
     _find_model_dir,
     _geometry_summary,
+    _add_single_covalent_system,
     _molecule_key,
     _remove_atom_if_terminal,
     _score_molecule,
@@ -34,7 +35,7 @@ from experiments.freesolv_inverse_design import (
     write_result_molecule_files,
 )
 from moladt.chem.dietz import AtomId, mk_edge
-from moladt.chem.molecule import AtomicSymbol
+from moladt.chem.molecule import AtomicSymbol, molecule_edges
 from moladt.chem.mutable import MutableMolecule
 from moladt.chem.validate import ValidationError, validate_molecule
 from moladt.examples import diborane_pretty
@@ -276,11 +277,11 @@ def test_fixed_water_seed_run_is_deterministic() -> None:
     )
 
     first_summary = tuple(
-        (candidate.score, molecular_formula(candidate.molecule), len(candidate.molecule.local_bonds))
+        (candidate.score, molecular_formula(candidate.molecule), len(molecule_edges(candidate.molecule)))
         for candidate in first.top_candidates
     )
     second_summary = tuple(
-        (candidate.score, molecular_formula(candidate.molecule), len(candidate.molecule.local_bonds))
+        (candidate.score, molecular_formula(candidate.molecule), len(molecule_edges(candidate.molecule)))
         for candidate in second.top_candidates
     )
 
@@ -289,7 +290,7 @@ def test_fixed_water_seed_run_is_deterministic() -> None:
 
 def test_invalid_molecule_is_rejected_before_scoring() -> None:
     mutable = MutableMolecule.from_molecule(water)
-    mutable.local_bonds.add(mk_edge(AtomId(1), AtomId(3)))
+    _add_single_covalent_system(mutable, mk_edge(AtomId(1), AtomId(3)))
 
     with pytest.raises(ValidationError):
         _score_molecule(ExplodingPredictor(), mutable.freeze(), -5.0)
@@ -399,7 +400,6 @@ def test_result_writer_exports_importable_top_molecule_files(tmp_path) -> None:
     assert "molecule = Molecule(" in source
     assert "validate_molecule(" not in source
     assert "atoms = {" not in source
-    assert "local_bonds = " not in source
     assert "mk_edge(" not in source
     assert "Edge(AtomId(" in source
     payload = runpy.run_path(str(written.molecule_file_paths[0]))
@@ -419,7 +419,7 @@ def test_result_writer_exports_importable_top_molecule_files(tmp_path) -> None:
     assert generated_record["max_bond_length_angstrom"] >= generated_record["min_bond_length_angstrom"]
     assert "min_bond_angle_degrees" in generated_record
     assert "atoms" in generated_record["molecule"]
-    assert "local_bonds" in generated_record["molecule"]
+    assert "systems" in generated_record["molecule"]
 
 
 def test_result_writer_removes_stale_candidate_files(tmp_path) -> None:

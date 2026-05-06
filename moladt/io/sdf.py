@@ -10,7 +10,7 @@ from typing import Any, Iterator, Mapping
 from ..chem.constants import element_attributes
 from ..chem.coordinate import Coordinate, mk_angstrom
 from ..chem.dietz import AtomId, BondingSystem, Edge, NonNegative, SystemId, mk_bonding_system, mk_edge
-from ..chem.molecule import Atom, AtomicSymbol, Molecule
+from ..chem.molecule import Atom, AtomicSymbol, Molecule, molecule_edges
 from ..chem.molecule_ops import effective_order
 from .molecule_json import molecule_to_dict
 
@@ -110,14 +110,14 @@ def molecule_to_sdf(
         )
     bond_lines = [
         f"{edge.a.value:>3}{edge.b.value:>3}{_sdf_bond_order(molecule, edge):>3}  0  0  0  0"
-        for edge in sorted(molecule.local_bonds)
+        for edge in sorted(molecule_edges(molecule))
     ]
     charge_lines = _format_charge_lines(molecule)
     payload = [
         title,
         "",
         "",
-        f"{len(molecule.atoms):>3}{len(molecule.local_bonds):>3}  0  0  0  0  0  0  0  0  0  0 V2000",
+        f"{len(molecule.atoms):>3}{len(molecule_edges(molecule)):>3}  0  0  0  0  0  0  0  0  0  0 V2000",
         *atom_lines,
         *bond_lines,
         *charge_lines,
@@ -337,13 +337,13 @@ def _bond_electron_system(order: int, in_aromatic_ring: bool) -> tuple[int, str 
     if order == 3:
         return 6, None
     if order == 4:
-        return 2, None
+        return 8, None
     return 2, f"sdf_bond_type_{order}"
 
 
 def _sdf_bond_order(molecule: Molecule, edge: Edge) -> int:
     order = effective_order(molecule, edge)
-    for candidate in (1, 2, 3):
+    for candidate in (1, 2, 3, 4):
         if abs(order - candidate) <= 1e-9:
             return candidate
     return 1

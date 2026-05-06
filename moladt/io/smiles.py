@@ -9,6 +9,7 @@ from ..chem.molecule import (
     Atom,
     AtomicSymbol,
     Molecule,
+    molecule_edges,
     SmilesAtomStereo,
     SmilesAtomStereoClass,
     SmilesBondStereo,
@@ -23,6 +24,7 @@ _BOND_SYMBOLS: dict[str, BondKind] = {
     "-": "single",
     "=": "double",
     "#": "triple",
+    "$": "quadruple",
     ":": "aromatic",
 }
 
@@ -143,7 +145,7 @@ class _SMILESParser:
         self.index = 0
         self.next_atom_index = 1
         self.atoms: dict[AtomId, Atom] = {}
-        self.local_bonds: set[Edge] = set()
+        self.bond_edges: set[Edge] = set()
         self.systems: list[BondingSystem] = []
         self.atom_stereo: list[SmilesAtomStereo] = []
         self.bond_stereo: list[SmilesBondStereo] = []
@@ -208,20 +210,18 @@ class _SMILESParser:
             raise ValueError("SMILES ended after a bond symbol")
 
         systems = _normalize_smiles_systems(
-            self.local_bonds,
+            self.bond_edges,
             self.systems,
             self.aromatic_candidate_edges,
             self.aromatic_atoms,
         )
-        atoms, local_bonds = _infer_implicit_hydrogens(
+        atoms, systems = _infer_implicit_hydrogens(
             self.atoms,
-            self.local_bonds,
             systems,
             self.implicit_hydrogen_hosts,
         )
         return Molecule(
             atoms=atoms,
-            local_bonds=frozenset(local_bonds),
             systems=tuple((SystemId(index), system) for index, system in enumerate(systems, start=1)),
             smiles_stereochemistry=SmilesStereochemistry(
                 atom_stereo=tuple(self.atom_stereo),
@@ -341,13 +341,15 @@ class _SMILESParser:
 
     def _add_bond(self, left: AtomId, right: AtomId, bond_kind: BondKind) -> None:
         edge = mk_edge(left, right)
-        self.local_bonds.add(edge)
+        self.bond_edges.add(edge)
         if bond_kind == "single":
             self.systems.append(mk_bonding_system(NonNegative(2), frozenset({edge})))
         elif bond_kind == "double":
             self.systems.append(mk_bonding_system(NonNegative(4), frozenset({edge})))
         elif bond_kind == "triple":
             self.systems.append(mk_bonding_system(NonNegative(6), frozenset({edge})))
+        elif bond_kind == "quadruple":
+            self.systems.append(mk_bonding_system(NonNegative(8), frozenset({edge})))
         elif bond_kind == "aromatic":
             self.systems.append(mk_bonding_system(NonNegative(2), frozenset({edge})))
             self.aromatic_candidate_edges.add(edge)
@@ -507,13 +509,13 @@ def _extend_bond_spec(
 
 
 def _normalize_smiles_systems(
-    local_bonds: set[Edge],
+    bond_edges: set[Edge],
     systems: list[BondingSystem],
     aromatic_candidate_edges: set[Edge],
     aromatic_atoms: set[AtomId],
 ) -> list[BondingSystem]:
     pi_rings = {ring for ring in _detect_aromatic_six_rings(aromatic_candidate_edges)}
-    pi_rings.update(_detect_lowercase_aromatic_six_rings(local_bonds, aromatic_candidate_edges, aromatic_atoms))
+    pi_rings.update(_detect_lowercase_aromatic_six_rings(bond_edges, aromatic_candidate_edges, aromatic_atoms))
     ring_edges = {edge for ring in pi_rings for edge in ring}
 
     normalized = list(systems)
@@ -556,12 +558,12 @@ def _detect_aromatic_six_rings(edges: set[Edge]) -> list[frozenset[Edge]]:
 
 
 def _detect_lowercase_aromatic_six_rings(
-    local_bonds: set[Edge],
+    bond_edges: set[Edge],
     aromatic_candidate_edges: set[Edge],
     aromatic_atoms: set[AtomId],
 ) -> set[frozenset[Edge]]:
     adjacency: dict[AtomId, list[AtomId]] = {}
-    for edge in local_bonds:
+    for edge in bond_edges:
         adjacency.setdefault(edge.a, []).append(edge.b)
         adjacency.setdefault(edge.b, []).append(edge.a)
     for atom_id in adjacency:
@@ -598,10 +600,9 @@ def _ring_sort_key(ring: frozenset[Edge]) -> tuple[tuple[int, int], ...]:
 
 def _infer_implicit_hydrogens(
     atoms: dict[AtomId, Atom],
-    local_bonds: set[Edge],
     systems: list[BondingSystem],
     hosts: set[AtomId],
-) -> tuple[dict[AtomId, Atom], set[Edge]]:
+) -> tuple[dict[AtomId, Atom], list[BondingSystem]]:
     system_contributions = {atom_id: 0.0 for atom_id in atoms}
     for system in systems:
         edge_count = len(system.member_edges)
@@ -613,7 +614,7 @@ def _infer_implicit_hydrogens(
             system_contributions[edge.b] = system_contributions.get(edge.b, 0.0) + contribution
 
     enriched_atoms = dict(atoms)
-    enriched_bonds = set(local_bonds)
+    enriched_systems = list(systems)
     next_atom_index = max((atom_id.value for atom_id in atoms), default=0) + 1
 
     for host in sorted(hosts):
@@ -631,9 +632,10 @@ def _infer_implicit_hydrogens(
                 coordinate=_inferred_hydrogen_coordinate(atom, hydrogen_offset),
                 formal_charge=0,
             )
-            enriched_bonds.add(mk_edge(host, hydrogen_id))
+            edge = mk_edge(host, hydrogen_id)
+            enriched_systems.append(mk_bonding_system(NonNegative(2), frozenset({edge})))
 
-    return enriched_atoms, enriched_bonds
+    return enriched_atoms, enriched_systems
 
 
 def _implicit_hydrogen_count(missing_valence: float) -> int:
@@ -678,7 +680,7 @@ def _collapse_terminal_hydrogens(molecule: Molecule) -> tuple[dict[AtomId, Atom]
             continue
         if atom_id in system_atoms:
             continue
-        incident = [edge for edge in molecule.local_bonds if edge.a == atom_id or edge.b == atom_id]
+        incident = [edge for edge in molecule_edges(molecule) if edge.a == atom_id or edge.b == atom_id]
         if len(incident) != 1:
             continue
         edge = incident[0]
@@ -703,7 +705,7 @@ def _render_bond_orders(molecule: Molecule, rendered_atoms: dict[AtomId, Atom]) 
     rendered_ids = frozenset(rendered_atoms)
     bond_orders = {
         edge: 1
-        for edge in molecule.local_bonds
+        for edge in molecule_edges(molecule)
         if edge.a in rendered_ids and edge.b in rendered_ids
     }
 
@@ -712,7 +714,7 @@ def _render_bond_orders(molecule: Molecule, rendered_atoms: dict[AtomId, Atom]) 
         if system.tag == "pi_ring" and system.shared_electrons.value == 6 and len(system.member_edges) == 6:
             pi_rings.append(system.member_edges)
             continue
-        if len(system.member_edges) == 1 and system.shared_electrons.value in {2, 4, 6}:
+        if len(system.member_edges) == 1 and system.shared_electrons.value in {2, 4, 6, 8}:
             edge = next(iter(system.member_edges))
             if edge not in bond_orders:
                 continue
@@ -892,8 +894,10 @@ def _bond_symbol(order: int) -> str:
         return "="
     if order == 3:
         return "#"
+    if order == 4:
+        return "$"
     raise ValueError(f"Unsupported SMILES bond order: {order}")
 
 
 def _is_conventional_single_edge_system(system: BondingSystem) -> bool:
-    return len(system.member_edges) == 1 and system.shared_electrons.value in {2, 4, 6}
+    return len(system.member_edges) == 1 and system.shared_electrons.value in {2, 4, 6, 8}

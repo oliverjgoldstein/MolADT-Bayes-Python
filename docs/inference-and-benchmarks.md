@@ -80,7 +80,7 @@ The generator builds molecules under conservative rules:
 - connected
 - neutral
 - CHONFCl only
-- no H-H local bonds
+- no H-H edges
 - closed valence shells
 - terminal H/F/Cl rules
 - valid Dietz bonding systems

@@ -10,7 +10,7 @@ The SMILES layer is conservative by design. It should accept what it can represe
 - implicit terminal hydrogens on supported bare atoms
 - branches
 - ring digits `1-9`
-- single, double, and triple bonds
+- single, double, triple, and quadruple bonds
 - aromatic six-membered ring recovery into `pi_ring`
 - atom-centered `@` / `@@`
 - bond directions `/` and `\`

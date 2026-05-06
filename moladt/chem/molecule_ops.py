@@ -4,17 +4,16 @@ from math import sqrt
 
 from .coordinate import Angstrom, mk_angstrom
 from .dietz import AtomId, Edge, NonNegative, SystemId, mk_bonding_system, mk_edge
-from .molecule import Atom, Molecule
+from .molecule import Atom, Molecule, molecule_edges
 
 
 def add_sigma(atom_a: AtomId, atom_b: AtomId, molecule: Molecule) -> Molecule:
     edge = mk_edge(atom_a, atom_b)
-    if edge in molecule.local_bonds:
+    if edge in molecule_edges(molecule):
         return molecule
     next_system_id = max((system_id.value for system_id, _ in molecule.systems), default=0) + 1
     return Molecule(
         atoms=molecule.atoms,
-        local_bonds=molecule.local_bonds | {edge},
         systems=molecule.systems
         + (
             (
@@ -35,7 +34,7 @@ def distance_angstrom(atom_a: Atom, atom_b: Atom) -> Angstrom:
 
 def neighbors_sigma(molecule: Molecule, atom_id: AtomId) -> tuple[AtomId, ...]:
     neighbors: list[AtomId] = []
-    for edge in molecule.local_bonds:
+    for edge in molecule_edges(molecule):
         if edge.a == atom_id:
             neighbors.append(edge.b)
         elif edge.b == atom_id:

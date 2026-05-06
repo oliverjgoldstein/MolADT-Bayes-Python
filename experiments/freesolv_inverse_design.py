@@ -19,7 +19,7 @@ import pandas as pd
 from moladt.chem.constants import element_attributes, equilibrium_bond_length
 from moladt.chem.coordinate import Coordinate, mk_angstrom
 from moladt.chem.dietz import AtomId, BondingSystem, Edge, NonNegative, SystemId, mk_bonding_system, mk_edge
-from moladt.chem.molecule import Atom, AtomicSymbol, Molecule
+from moladt.chem.molecule import Atom, AtomicSymbol, Molecule, molecule_edges
 from moladt.chem.molecule_ops import effective_order, neighbors_sigma
 from moladt.chem.mutable import MutableMolecule
 from moladt.chem.validate import ValidationError, used_electrons_at
@@ -892,7 +892,7 @@ def add_terminal_atom(molecule: Molecule, rng: random.Random) -> Molecule | None
     mutable = MutableMolecule.from_molecule(molecule)
     _free_one_valence_slot(mutable, parent_id)
     mutable.atoms[new_id] = _new_atom(new_id, new_symbol, parent_id, mutable.freeze())
-    mutable.local_bonds.add(mk_edge(parent_id, new_id))
+    _add_single_covalent_system(mutable, mk_edge(parent_id, new_id))
     return _complete_generated_candidate(mutable.freeze())
 
 
@@ -908,7 +908,7 @@ def add_sigma_edge(molecule: Molecule, rng: random.Random) -> Molecule | None:
     for left_index, left in enumerate(atom_ids):
         for right in atom_ids[left_index + 1 :]:
             edge = mk_edge(left, right)
-            if edge in molecule.local_bonds or _has_localized_singleton_system(molecule, edge):
+            if edge in molecule_edges(molecule):
                 continue
             if not _is_geometrically_linkable(molecule, edge):
                 continue
@@ -926,7 +926,7 @@ def add_sigma_edge(molecule: Molecule, rng: random.Random) -> Molecule | None:
     mutable = MutableMolecule.from_molecule(molecule)
     _free_one_valence_slot(mutable, left)
     _free_one_valence_slot(mutable, right)
-    mutable.local_bonds.add(mk_edge(left, right))
+    _add_single_covalent_system(mutable, mk_edge(left, right))
     return _complete_generated_candidate(mutable.freeze())
 
 
@@ -1035,7 +1035,7 @@ def print_candidate(rank: int, candidate: Candidate, target: float, *, stream: T
     print(f"  score: {candidate.score:.3f}", file=stream)
     print(f"  atoms: {len(molecule.atoms)}", file=stream)
     print(f"  heavy atoms: {heavy_atom_count(molecule)}", file=stream)
-    print(f"  local bonds: {len(molecule.local_bonds)}", file=stream)
+    print(f"  edges: {len(molecule_edges(molecule))}", file=stream)
     print(f"  Dietz bonding systems: {len(molecule.systems)}", file=stream)
     print(f"  formula: {molecular_formula(molecule)}", file=stream)
     geometry = _geometry_summary(molecule)
@@ -1060,13 +1060,6 @@ def format_dietz_molecule(molecule: Molecule) -> str:
     for atom_id in sorted(molecule.atoms):
         atom = molecule.atoms[atom_id]
         lines.append(f"    {atom_id.value} {atom.attributes.symbol.value}")
-
-    lines.append("  local_bonds:")
-    if molecule.local_bonds:
-        for edge in sorted(molecule.local_bonds):
-            lines.append(f"    {{{edge.a.value},{edge.b.value}}}")
-    else:
-        lines.append("    (none)")
 
     lines.append("  bonding_systems:")
     if molecule.systems:
@@ -1230,7 +1223,7 @@ def _write_generated_candidate_bundle(
             "score",
             "atoms",
             "heavy_atoms",
-            "local_bonds",
+            "edges",
             "dietz_bonding_systems",
             "min_bond_length_angstrom",
             "max_bond_length_angstrom",
@@ -1275,7 +1268,7 @@ def _generated_candidate_metadata(
         "score": candidate.score,
         "atoms": len(molecule.atoms),
         "heavy_atoms": heavy_atom_count(molecule),
-        "local_bonds": len(molecule.local_bonds),
+        "edges": len(molecule_edges(molecule)),
         "dietz_bonding_systems": len(molecule.systems),
         "min_bond_length_angstrom": _optional_float(geometry["min_bond_length_angstrom"]),
         "max_bond_length_angstrom": _optional_float(geometry["max_bond_length_angstrom"]),
@@ -1551,11 +1544,6 @@ def _candidate_python_source(rank: int, candidate: Candidate, target: float, see
             "    atoms={",
             *_atom_literal_lines(molecule),
             "    },",
-            "    local_bonds=frozenset(",
-            "        {",
-            *_edge_literal_lines(molecule.local_bonds),
-            "        }",
-            "    ),",
             "    systems=(",
             *_system_literal_lines(molecule),
             "    ),",
@@ -1793,10 +1781,16 @@ def _seed_molecule(
     systems: Sequence[tuple[SystemId, BondingSystem]] = (),
 ) -> Molecule:
     atom_map = {atom.atom_id: atom for atom in atoms}
+    sigma_systems = tuple(
+        (
+            SystemId(index),
+            mk_bonding_system(NonNegative(2), frozenset({mk_edge(AtomId(left), AtomId(right))})),
+        )
+        for index, (left, right) in enumerate(bonds, start=1)
+    )
     return Molecule(
         atoms=atom_map,
-        local_bonds=frozenset(mk_edge(AtomId(left), AtomId(right)) for left, right in bonds),
-        systems=tuple(systems),
+        systems=sigma_systems + tuple(systems),
     )
 
 
@@ -1985,13 +1979,11 @@ def _free_one_valence_slot(mutable: MutableMolecule, atom_id: AtomId) -> None:
     _remove_atom_from_mutable(mutable, hydrogens[0])
 
 
-def _has_localized_singleton_system(molecule: Molecule, edge: Edge) -> bool:
-    return any(
-        len(system.member_edges) == 1
-        and system.shared_electrons.value == 2
-        and edge in system.member_edges
-        for _, system in molecule.systems
-    )
+def _add_single_covalent_system(mutable: MutableMolecule, edge: Edge) -> None:
+    if edge in mutable.edges:
+        return
+    next_system_id = max((system_id.value for system_id, _ in mutable.systems), default=0) + 1
+    mutable.systems.append((SystemId(next_system_id), mk_bonding_system(NonNegative(2), frozenset({edge}))))
 
 
 def _removable_terminal_atoms(molecule: Molecule) -> tuple[AtomId, ...]:
@@ -2024,11 +2016,10 @@ def _remove_atom_if_terminal(molecule: Molecule, atom_id: AtomId) -> Molecule | 
 def _remove_atom_from_mutable(mutable: MutableMolecule, atom_id: AtomId) -> None:
     incident_edges = {
         edge
-        for edge in mutable.local_bonds
+        for edge in mutable.edges
         if edge.a == atom_id or edge.b == atom_id
     }
     mutable.atoms.pop(atom_id, None)
-    mutable.local_bonds.difference_update(incident_edges)
     mutable.systems = [
         (system_id, system)
         for system_id, system in mutable.systems
@@ -2039,7 +2030,7 @@ def _remove_atom_from_mutable(mutable: MutableMolecule, atom_id: AtomId) -> None
 
 def _detect_carbon_six_rings(molecule: Molecule) -> tuple[frozenset[Edge], ...]:
     adjacency: dict[AtomId, list[AtomId]] = {}
-    for edge in molecule.local_bonds:
+    for edge in molecule_edges(molecule):
         adjacency.setdefault(edge.a, []).append(edge.b)
         adjacency.setdefault(edge.b, []).append(edge.a)
     for atom_id in adjacency:
@@ -2086,7 +2077,7 @@ def _is_valid_pi_ring(molecule: Molecule, system: BondingSystem) -> bool:
         return False
     if any(molecule.atoms[atom_id].attributes.symbol is not AtomicSymbol.C for atom_id in ring_atoms):
         return False
-    if any(edge not in molecule.local_bonds for edge in system.member_edges):
+    if any(edge not in molecule_edges(molecule) for edge in system.member_edges):
         return False
     ring_degree = {atom_id: 0 for atom_id in ring_atoms}
     for edge in system.member_edges:
@@ -2115,12 +2106,12 @@ def _enforce_generation_contract(molecule: Molecule) -> Molecule:
         raise ValidationError("Molecule is disconnected")
     _ensure_supported_symbols(molecule)
     _ensure_neutral_formal_charges(molecule)
-    _ensure_no_hydrogen_hydrogen_local_bonds(molecule)
+    _ensure_no_hydrogen_hydrogen_edges(molecule)
     _ensure_terminal_atom_rules(molecule)
     _ensure_conservative_generator_valence(molecule)
     _ensure_closed_valence_shells(molecule)
     _ensure_sound_bonding_systems(molecule)
-    for edge in molecule.local_bonds:
+    for edge in molecule_edges(molecule):
         effective_order(molecule, edge)
     return molecule
 
@@ -2161,13 +2152,13 @@ def _ensure_neutral_formal_charges(molecule: Molecule) -> None:
         raise ValidationError(f"FreeSolv generated candidates must be neutral; charged atoms: {formatted}")
 
 
-def _ensure_no_hydrogen_hydrogen_local_bonds(molecule: Molecule) -> None:
-    for edge in molecule.local_bonds:
+def _ensure_no_hydrogen_hydrogen_edges(molecule: Molecule) -> None:
+    for edge in molecule_edges(molecule):
         if (
             molecule.atoms[edge.a].attributes.symbol is AtomicSymbol.H
             and molecule.atoms[edge.b].attributes.symbol is AtomicSymbol.H
         ):
-            raise ValidationError("Generated molecules may not contain H-H local bonds")
+            raise ValidationError("Generated molecules may not contain H-H edges")
 
 
 def _ensure_terminal_atom_rules(molecule: Molecule) -> None:
@@ -2189,7 +2180,7 @@ def _ensure_terminal_atom_rules(molecule: Molecule) -> None:
         if symbol is AtomicSymbol.H:
             neighbor = molecule.atoms[sigma_neighbors[0]]
             if neighbor.attributes.symbol is AtomicSymbol.H:
-                raise ValidationError("Generated molecules may not contain H-H local bonds")
+                raise ValidationError("Generated molecules may not contain H-H edges")
 
 
 def _ensure_conservative_generator_valence(molecule: Molecule) -> None:
@@ -2227,9 +2218,9 @@ def _ensure_sound_bonding_systems(molecule: Molecule) -> None:
 
 def _ensure_plausible_freesolv_geometry(molecule: Molecule) -> None:
     _ensure_no_coordinate_collisions(molecule)
-    _ensure_local_bond_lengths(molecule)
+    _ensure_bond_lengths(molecule)
     _ensure_nonbonded_clearance(molecule)
-    _ensure_local_bond_angles(molecule)
+    _ensure_bond_angles(molecule)
 
 
 def _ensure_no_coordinate_collisions(molecule: Molecule) -> None:
@@ -2244,10 +2235,10 @@ def _ensure_no_coordinate_collisions(molecule: Molecule) -> None:
                 )
 
 
-def _ensure_local_bond_lengths(molecule: Molecule) -> None:
-    for edge in molecule.local_bonds:
+def _ensure_bond_lengths(molecule: Molecule) -> None:
+    for edge in molecule_edges(molecule):
         distance = _atom_distance(molecule, edge.a, edge.b)
-        expected = _expected_local_bond_length(molecule, edge)
+        expected = _expected_bond_length(molecule, edge)
         lower = expected * MIN_BOND_LENGTH_RATIO
         upper = expected * MAX_BOND_LENGTH_RATIO
         if distance < lower or distance > upper:
@@ -2278,7 +2269,7 @@ def _ensure_nonbonded_clearance(molecule: Molecule) -> None:
                 )
 
 
-def _ensure_local_bond_angles(molecule: Molecule) -> None:
+def _ensure_bond_angles(molecule: Molecule) -> None:
     for center in sorted(molecule.atoms):
         neighbors = tuple(sorted(neighbors_sigma(molecule, center)))
         for left_index, left in enumerate(neighbors):
@@ -2294,13 +2285,13 @@ def _ensure_local_bond_angles(molecule: Molecule) -> None:
 
 
 def _is_geometrically_linkable(molecule: Molecule, edge: Edge) -> bool:
-    expected = _expected_local_bond_length(molecule, edge)
+    expected = _expected_bond_length(molecule, edge)
     distance = _atom_distance(molecule, edge.a, edge.b)
     return expected * MIN_BOND_LENGTH_RATIO <= distance <= expected * MAX_BOND_LENGTH_RATIO
 
 
 def _geometry_summary(molecule: Molecule) -> dict[str, float | None]:
-    bond_lengths = [_atom_distance(molecule, edge.a, edge.b) for edge in molecule.local_bonds]
+    bond_lengths = [_atom_distance(molecule, edge.a, edge.b) for edge in molecule_edges(molecule)]
     nonbonded_distances: list[float] = []
     bonded_pairs = {frozenset((edge.a, edge.b)) for edge in _all_edges(molecule)}
     atom_ids = tuple(sorted(molecule.atoms))
@@ -2324,7 +2315,7 @@ def _geometry_summary(molecule: Molecule) -> dict[str, float | None]:
     }
 
 
-def _expected_local_bond_length(molecule: Molecule, edge: Edge) -> float:
+def _expected_bond_length(molecule: Molecule, edge: Edge) -> float:
     left_symbol = molecule.atoms[edge.a].attributes.symbol
     right_symbol = molecule.atoms[edge.b].attributes.symbol
     if _edge_participates_in_pi_ring(molecule, edge) and left_symbol is AtomicSymbol.C and right_symbol is AtomicSymbol.C:
@@ -2449,7 +2440,7 @@ def _complete_terminal_hydrogens(molecule: Molecule) -> Molecule:
             hydrogen_id = AtomId(next_atom_id)
             next_atom_id += 1
             mutable.atoms[hydrogen_id] = _new_atom(hydrogen_id, AtomicSymbol.H, atom_id, mutable.freeze())
-            mutable.local_bonds.add(mk_edge(atom_id, hydrogen_id))
+            _add_single_covalent_system(mutable, mk_edge(atom_id, hydrogen_id))
 
     return mutable.freeze()
 
@@ -2465,10 +2456,6 @@ def _canonicalize_atom_ids(molecule: Molecule) -> Molecule:
         atom_id_map[old_id]: replace(atom, atom_id=atom_id_map[old_id])
         for old_id, atom in molecule.atoms.items()
     }
-    local_bonds = frozenset(
-        mk_edge(atom_id_map[edge.a], atom_id_map[edge.b])
-        for edge in molecule.local_bonds
-    )
     systems = tuple(
         (
             SystemId(index),
@@ -2480,7 +2467,7 @@ def _canonicalize_atom_ids(molecule: Molecule) -> Molecule:
         )
         for index, (_, system) in enumerate(molecule.systems, start=1)
     )
-    return Molecule(atoms=atoms, local_bonds=local_bonds, systems=systems)
+    return Molecule(atoms=atoms, systems=systems)
 
 
 def _is_connected(molecule: Molecule) -> bool:
@@ -2505,10 +2492,7 @@ def _is_connected(molecule: Molecule) -> bool:
 
 
 def _all_edges(molecule: Molecule) -> set[Edge]:
-    edges = set(molecule.local_bonds)
-    for _, system in molecule.systems:
-        edges.update(system.member_edges)
-    return edges
+    return set(molecule_edges(molecule))
 
 
 def _weighted_choice(weighted_names: tuple[tuple[str, float], ...], rng: random.Random) -> str:
@@ -2532,7 +2516,7 @@ def _molecule_key(molecule: Molecule) -> bytes:
             (atom_id.value, atom.attributes.symbol.value, atom.formal_charge)
             for atom_id, atom in sorted(molecule.atoms.items(), key=lambda item: item[0].value)
         ],
-        "local_bonds": [(edge.a.value, edge.b.value) for edge in sorted(molecule.local_bonds)],
+        "edges": [(edge.a.value, edge.b.value) for edge in sorted(molecule_edges(molecule))],
         "systems": [
             (
                 system_id.value,

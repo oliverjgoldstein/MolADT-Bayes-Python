@@ -20,7 +20,6 @@ def relabel_molecule(molecule: Molecule, permutation: list[AtomId]) -> Molecule:
         )
         for atom_id, atom in molecule.atoms.items()
     }
-    local_bonds = frozenset(mk_edge(mapping[edge.a], mapping[edge.b]) for edge in molecule.local_bonds)
     systems = tuple(
         (
             system_id,
@@ -32,7 +31,7 @@ def relabel_molecule(molecule: Molecule, permutation: list[AtomId]) -> Molecule:
         )
         for system_id, bonding_system in molecule.systems
     )
-    return Molecule(atoms=atoms, local_bonds=local_bonds, systems=systems)
+    return Molecule(atoms=atoms, systems=systems)
 
 
 def test_validation_is_invariant_under_relabeling() -> None:

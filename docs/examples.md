@@ -41,17 +41,15 @@ make molecule-viewer VIEWER_EXAMPLES=ferrocene
 - Checked-in examples are expanded as literal `AtomId`, `Edge`, and `BondingSystem` values. They do not hide their atoms or bonding systems behind loops.
 - The canonical normal form is sorted and fully explicit: atoms by `AtomId`, normalized edges with the lower `AtomId` first, and systems by `SystemId`.
 
-The examples can still show a `local_bonds` input for readability, but molecule
-construction normalizes those edges into unnamed one-edge bonding systems with
-two shared electrons.
-Benzene also keeps the aromatic `pi_ring` system:
+Examples list conventional edges as unnamed one-edge bonding systems with two
+shared electrons. Benzene also keeps the aromatic `pi_ring` system:
 
 ```python
 from __future__ import annotations
 
 from ..chem.dietz import AtomId, Edge, NonNegative, SystemId, mk_bonding_system
 from ..chem.molecule import AtomicSymbol, Molecule
-from ._literal import atom
+from ._literal import atom, single_covalent_systems
 
 
 benzene = Molecule(
@@ -69,8 +67,9 @@ benzene = Molecule(
         AtomId(11): atom(11, AtomicSymbol.H, 4.269, -0.810, 0.000),
         AtomId(12): atom(12, AtomicSymbol.H, 2.866, -1.620, 0.000),
     },
-    local_bonds=frozenset(
-        {
+    systems=single_covalent_systems(
+        1,
+        (
             Edge(AtomId(1), AtomId(2)),
             Edge(AtomId(1), AtomId(3)),
             Edge(AtomId(1), AtomId(7)),
@@ -83,11 +82,11 @@ benzene = Molecule(
             Edge(AtomId(5), AtomId(6)),
             Edge(AtomId(5), AtomId(11)),
             Edge(AtomId(6), AtomId(12)),
-        }
-    ),
-    systems=(
+        ),
+    )
+    + (
         (
-            SystemId(1),
+            SystemId(13),
             mk_bonding_system(
                 NonNegative(6),
                 frozenset(

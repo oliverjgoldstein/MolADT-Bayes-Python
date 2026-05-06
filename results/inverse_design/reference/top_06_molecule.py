@@ -22,13 +22,6 @@ molecule = Molecule(
             AtomId(3): atom(3, AtomicSymbol.H, 0.999, 0.963, 0.007),
             AtomId(4): atom(4, AtomicSymbol.H, -0.011, 1.973, 0.007),
     },
-    local_bonds=frozenset(
-        {
-                Edge(AtomId(1), AtomId(2)),
-                Edge(AtomId(1), AtomId(3)),
-                Edge(AtomId(1), AtomId(4)),
-        }
-    ),
     systems=(
             (
                 SystemId(1),

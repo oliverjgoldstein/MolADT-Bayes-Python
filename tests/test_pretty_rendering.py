@@ -6,6 +6,7 @@ from moladt.chem.pretty import pretty_text
 from moladt.examples import DIBORANE_MANUSCRIPT, FERROCENE_MANUSCRIPT, MORPHINE_MANUSCRIPT
 from moladt.examples import diborane_pretty, ferrocene_pretty, morphine_pretty
 from moladt.io.sdf import read_sdf
+from moladt.io.smiles import parse_smiles
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -54,6 +55,13 @@ def test_benzene_pretty_rendering_omits_empty_stereochemistry_section() -> None:
     assert "SMILES Stereochemistry" not in rendered
     assert "shared=3e  order=1.50" in rendered
     assert "#13[pi_ring]:1e/edge from 6e" in rendered
+
+
+def test_quadruple_covalent_bond_pretty_rendering_uses_conventional_label() -> None:
+    rendered = pretty_text(parse_smiles("C$C"))
+
+    assert "quadruple covalent" in rendered
+    assert ":8e" in rendered
 
 
 def test_manuscript_examples_render_titles_and_notes() -> None:

@@ -2,7 +2,7 @@
 
 MolADT is a molecule ADT.
 
-The central object is not a SMILES string, a plain graph, or an untyped hypergraph. It is a record: atoms, Dietz bonding systems, coordinates, charges, optional shell data, and a derived edge index all have their own fields.
+The central object is not a SMILES string, a plain graph, or an untyped hypergraph. It is a record: atoms, Dietz bonding systems, coordinates, charges, and optional shell data all have their own fields. The edge network is derived from bonding-system member edges.
 
 ## Molecule ADT
 
@@ -11,8 +11,8 @@ The sibling Haskell repo writes the core representation directly as an algebraic
 ```haskell
 data Molecule = Molecule
   { atoms      :: Map AtomId Atom
-  , localBonds :: Set Edge
   , systems    :: [(SystemId, BondingSystem)]
+  , smilesStereochemistry :: SmilesStereochemistry
   }
 ```
 
@@ -22,21 +22,20 @@ Python mirrors the same shape with typed dataclasses and snake-case names:
 @dataclass(frozen=True, slots=True)
 class Molecule:
     atoms: Mapping[AtomId, Atom]
-    local_bonds: frozenset[Edge] = frozenset()
     systems: tuple[tuple[SystemId, BondingSystem], ...] = ()
+    smiles_stereochemistry: SmilesStereochemistry = field(default_factory=SmilesStereochemistry)
 ```
 
 | Haskell field | Python field | Meaning |
 | --- | --- | --- |
 | `atoms` | `atoms` | Atom table keyed by stable ids. |
 | `systems` | `systems` | Canonical Dietz electron-sharing systems. |
-| `localBonds` | `local_bonds` | Compatibility edge index derived from bonding-system member edges. |
+| `smilesStereochemistry` | `smiles_stereochemistry` | Optional SMILES stereo annotations. |
 
-Every edge is represented by a bonding system. Conventional single, double, and
-triple bonds are one-edge systems sharing `2`, `4`, and `6` electrons,
-respectively, displayed as `single covalent`, `double covalent`, and `triple covalent`.
-Legacy values that only provide `local_bonds` are normalized by
-adding two-electron `single covalent` systems.
+Every edge is represented by a bonding system. Conventional single, double,
+triple, and quadruple bonds are one-edge systems sharing `2`, `4`, `6`, and `8`
+electrons, respectively, displayed as `single covalent`, `double covalent`,
+`triple covalent`, and `quadruple covalent`.
 
 ## Atom ADT
 

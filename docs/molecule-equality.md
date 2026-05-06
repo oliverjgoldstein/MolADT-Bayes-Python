@@ -11,7 +11,6 @@ equality for serialized molecules.
 `same_molecule` ignores incidental ordering in:
 
 - atom mappings
-- local edge sets
 - bonding-system tuples
 - `member_edges` inside each `BondingSystem`
 - stereochemistry annotation tuples
@@ -42,12 +41,6 @@ molecule = Molecule(
         AtomId(2): atom(2, AtomicSymbol.H, 0.0, 0.8, 0.0),
         AtomId(3): atom(3, AtomicSymbol.H, 0.8, 0.0, 0.0),
     },
-    local_bonds=frozenset(
-        {
-            Edge(AtomId(1), AtomId(2)),
-            Edge(AtomId(1), AtomId(3)),
-        }
-    ),
     systems=(
         (
             SystemId(1),
@@ -74,34 +67,27 @@ reordered = Molecule(
         AtomId(2): molecule.atoms[AtomId(2)],
         AtomId(1): molecule.atoms[AtomId(1)],
     },
-    local_bonds=frozenset(
-        {
-            Edge(AtomId(2), AtomId(1)),
-            Edge(AtomId(3), AtomId(1)),
-        }
-    ),
     systems=(molecule.systems[1], molecule.systems[0]),
 )
 
 assert same_molecule(molecule, reordered)
 ```
 
-The two values serialize differently, but they carry the same atoms, local
-bonds, system IDs, and bonding systems.
+The two values serialize differently, but they carry the same atoms, system
+IDs, and bonding systems.
 
 ## Structural Changes Still Fail
 
 ```python
 changed = Molecule(
     atoms=molecule.atoms,
-    local_bonds=frozenset({Edge(AtomId(1), AtomId(2))}),
-    systems=molecule.systems,
+    systems=(molecule.systems[0],),
 )
 
 assert not same_molecule(molecule, changed)
 ```
 
-Removing a local bond changes the molecule, so the equality check fails.
+Removing a bonding system changes the molecule, so the equality check fails.
 
 ## Canonical Keys
 

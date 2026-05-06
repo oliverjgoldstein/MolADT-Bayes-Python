@@ -2,7 +2,7 @@
 
 MolADT represents molecules as typed data for Bayesian modelling, feature generation, inverse design, validation, and viewing.
 
-The core object is not just a string and not just a graph. It keeps atoms, coordinates, bonding systems, formal charge, and optional shell/orbital data in explicit fields that can be inspected, mutated, scored, serialized, and shared with the Haskell repo. The edge set is derived from bonding systems and kept as a compatibility index.
+The core object is not just a string and not just a graph. It keeps atoms, coordinates, bonding systems, formal charge, and optional shell/orbital data in explicit fields that can be inspected, mutated, scored, serialized, and shared with the Haskell repo. The edge set is derived from bonding-system member edges.
 
 [Quickstart](docs/quickstart.md) · [Representation](docs/representation.md) · [Examples](docs/examples.md) · [Equality](docs/molecule-equality.md) · [CLI](docs/cli.md) · [Models](docs/models.md) · [Benchmarks](docs/inference-and-benchmarks.md) · [Outputs](docs/outputs.md)
 
@@ -49,8 +49,8 @@ The core molecule shape mirrors the sibling Haskell repo:
 ```haskell
 data Molecule = Molecule
   { atoms      :: Map AtomId Atom
-  , localBonds :: Set Edge
   , systems    :: [(SystemId, BondingSystem)]
+  , smilesStereochemistry :: SmilesStereochemistry
   }
 ```
 
@@ -58,17 +58,15 @@ data Molecule = Molecule
 @dataclass(frozen=True, slots=True)
 class Molecule:
     atoms: Mapping[AtomId, Atom]
-    local_bonds: frozenset[Edge] = frozenset()
     systems: tuple[tuple[SystemId, BondingSystem], ...] = ()
+    smiles_stereochemistry: SmilesStereochemistry = field(default_factory=SmilesStereochemistry)
 ```
 
 The canonical bonding layer is `systems`: every edge is an instance of a
-`BondingSystem`. A conventional single, double, or triple bond is a one-edge
-system with `2`, `4`, or `6` shared electrons respectively. Pretty printers and
-viewers display those as `single covalent`, `double covalent`, or `triple covalent`.
-`local_bonds` is retained for older callers and graph traversal;
-constructing a molecule from bare edges automatically lifts them into
-two-electron `single covalent` systems.
+`BondingSystem`. A conventional single, double, triple, or quadruple bond is a
+one-edge system with `2`, `4`, `6`, or `8` shared electrons respectively.
+Pretty printers and viewers display those as `single covalent`,
+`double covalent`, `triple covalent`, or `quadruple covalent`.
 
 Pretty printers derive their edge rows from the bonding systems. They show the
 total electrons shared over each edge, then the effective order. For example, a
@@ -77,8 +75,8 @@ unnamed one-edge system plus `1e/edge` from the six-electron `pi_ring`
 system. The viewer lists the same explicit bonding systems.
 
 Use [`same_molecule`](docs/molecule-equality.md) when you want equality modulo
-container ordering, such as atom maps, edge sets, system tuples, and annotation
-tuples. It keeps atom and system identifiers meaningful.
+container ordering, such as atom maps, system tuples, member-edge sets, and
+annotation tuples. It keeps atom and system identifiers meaningful.
 
 An atom carries element data, position, formal charge, and shell data:
 

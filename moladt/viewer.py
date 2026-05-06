@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from .chem.dietz import AtomId, BondingSystem, Edge
-from .chem.molecule import Molecule
+from .chem.molecule import Molecule, molecule_edges
 from .chem.molecule_ops import effective_order
 
 
@@ -68,7 +68,7 @@ def molecule_viewer_payload(molecule: Molecule, *, title: str = "MolADT 3D Viewe
             "kind": "sigma",
             "length": _edge_length(molecule, edge),
         }
-        for edge in sorted(molecule.local_bonds)
+        for edge in sorted(molecule_edges(molecule))
     ]
     systems = [
         {
@@ -98,7 +98,7 @@ def _system_label(system_id: int, system: BondingSystem) -> str:
 
 
 def _system_display_label(system: BondingSystem) -> str | None:
-    if system.tag not in {None, "single", "double", "triple"}:
+    if system.tag not in {None, "single", "double", "triple", "quadruple"}:
         return system.tag
     if len(system.member_edges) == 1:
         if system.shared_electrons.value == 2:
@@ -107,6 +107,8 @@ def _system_display_label(system: BondingSystem) -> str | None:
             return "double covalent"
         if system.shared_electrons.value == 6:
             return "triple covalent"
+        if system.shared_electrons.value == 8:
+            return "quadruple covalent"
     return system.tag
 
 
@@ -209,9 +211,7 @@ def _atom_distance(molecule: Molecule, atom_a: AtomId, atom_b: AtomId) -> float:
 
 
 def _angle_payloads(molecule: Molecule) -> list[dict[str, int | float]]:
-    geometry_edges = set(molecule.local_bonds)
-    for _, system in molecule.systems:
-        geometry_edges.update(system.member_edges)
+    geometry_edges = set(molecule_edges(molecule))
     neighbors: dict[AtomId, set[AtomId]] = {atom_id: set() for atom_id in molecule.atoms}
     for edge in geometry_edges:
         if edge.a in neighbors and edge.b in neighbors:
@@ -682,7 +682,7 @@ _HTML_TEMPLATE = """<!doctype html>
         </header>
         <section class="metric-grid" aria-label="Molecule summary">
           <div class="metric"><strong id="atom-count">0</strong><span>atoms</span></div>
-          <div class="metric"><strong id="bond-count">0</strong><span>sigma bonds</span></div>
+          <div class="metric"><strong id="bond-count">0</strong><span>edges</span></div>
           <div class="metric"><strong id="system-count">0</strong><span>systems</span></div>
         </section>
         <section id="molecule-section">
@@ -937,9 +937,13 @@ _HTML_TEMPLATE = """<!doctype html>
           systemContrib.set(edgeKey(edge), (systemContrib.get(edgeKey(edge)) || 0) + perEdge);
         });
       });
-      const bonds = (raw.local_bonds || []).map(edgeFromMoladt).map((edge) => ({
+      const edgeMap = new Map();
+      systems.forEach((system) => {
+        system.edges.forEach((edge) => edgeMap.set(edgeKey(edge), edge));
+      });
+      const bonds = Array.from(edgeMap.values()).map((edge) => ({
         ...edge,
-        order: 1 + (systemContrib.get(edgeKey(edge)) || 0),
+        order: systemContrib.get(edgeKey(edge)) || 0,
         kind: "sigma",
         length: null
       }));
@@ -1062,11 +1066,12 @@ _HTML_TEMPLATE = """<!doctype html>
       }
 
     function covalentLabel(tag, sharedElectrons, edges) {
-      if (tag && tag !== "single" && tag !== "double" && tag !== "triple") return null;
+      if (tag && tag !== "single" && tag !== "double" && tag !== "triple" && tag !== "quadruple") return null;
       if (!edges || edges.length !== 1) return null;
         if (sharedElectrons === 2) return "single covalent";
         if (sharedElectrons === 4) return "double covalent";
         if (sharedElectrons === 6) return "triple covalent";
+        if (sharedElectrons === 8) return "quadruple covalent";
         return null;
       }
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ..chem.dietz import AtomId, Edge, NonNegative, SystemId, mk_bonding_system
 from ..chem.molecule import AtomicSymbol, Molecule
-from ._literal import atom
+from ._literal import atom, single_covalent_systems
 
 
 benzene = Molecule(
@@ -20,8 +20,9 @@ benzene = Molecule(
         AtomId(11): atom(11, AtomicSymbol.H, 4.269, -0.810, 0.000),
         AtomId(12): atom(12, AtomicSymbol.H, 2.866, -1.620, 0.000),
     },
-    local_bonds=frozenset(
-        {
+    systems=single_covalent_systems(
+        1,
+        (
             Edge(AtomId(1), AtomId(2)),
             Edge(AtomId(1), AtomId(3)),
             Edge(AtomId(1), AtomId(7)),
@@ -34,11 +35,11 @@ benzene = Molecule(
             Edge(AtomId(5), AtomId(6)),
             Edge(AtomId(5), AtomId(11)),
             Edge(AtomId(6), AtomId(12)),
-        }
-    ),
-    systems=(
+        ),
+    )
+    + (
         (
-            SystemId(1),
+            SystemId(13),
             mk_bonding_system(
                 NonNegative(6),
                 frozenset(

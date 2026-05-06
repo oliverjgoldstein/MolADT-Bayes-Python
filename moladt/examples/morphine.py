@@ -8,7 +8,7 @@ from ..chem.molecule import (
     SmilesAtomStereoClass,
     SmilesStereochemistry,
 )
-from ._literal import atom
+from ._literal import atom, single_covalent_systems
 
 
 MORPHINE_RING_CLOSURE_SMILES = "CN1CC[C@]23C4=C5C=CC(O)=C4O[C@H]2[C@@H](O)C=C[C@H]3[C@H]1C5"
@@ -37,35 +37,6 @@ morphine_pretty = Molecule(
         AtomId(20): atom(20, AtomicSymbol.C, 8.200, 2.400, -1.100),
         AtomId(21): atom(21, AtomicSymbol.C, 6.000, 2.800, -0.350),
     },
-    local_bonds=frozenset(
-        {
-            Edge(AtomId(1), AtomId(2)),
-            Edge(AtomId(1), AtomId(11)),
-            Edge(AtomId(2), AtomId(3)),
-            Edge(AtomId(2), AtomId(8)),
-            Edge(AtomId(3), AtomId(4)),
-            Edge(AtomId(3), AtomId(5)),
-            Edge(AtomId(5), AtomId(6)),
-            Edge(AtomId(6), AtomId(7)),
-            Edge(AtomId(7), AtomId(8)),
-            Edge(AtomId(7), AtomId(18)),
-            Edge(AtomId(8), AtomId(9)),
-            Edge(AtomId(8), AtomId(10)),
-            Edge(AtomId(9), AtomId(21)),
-            Edge(AtomId(10), AtomId(11)),
-            Edge(AtomId(10), AtomId(16)),
-            Edge(AtomId(11), AtomId(12)),
-            Edge(AtomId(12), AtomId(13)),
-            Edge(AtomId(12), AtomId(14)),
-            Edge(AtomId(14), AtomId(15)),
-            Edge(AtomId(15), AtomId(16)),
-            Edge(AtomId(16), AtomId(17)),
-            Edge(AtomId(17), AtomId(18)),
-            Edge(AtomId(18), AtomId(19)),
-            Edge(AtomId(19), AtomId(20)),
-            Edge(AtomId(19), AtomId(21)),
-        }
-    ),
     systems=(
         (
             SystemId(1),
@@ -95,6 +66,36 @@ morphine_pretty = Molecule(
                 ),
                 "phenyl_pi_ring",
             ),
+        ),
+    )
+    + single_covalent_systems(
+        3,
+        (
+            Edge(AtomId(1), AtomId(2)),
+            Edge(AtomId(1), AtomId(11)),
+            Edge(AtomId(2), AtomId(3)),
+            Edge(AtomId(2), AtomId(8)),
+            Edge(AtomId(3), AtomId(4)),
+            Edge(AtomId(3), AtomId(5)),
+            Edge(AtomId(5), AtomId(6)),
+            Edge(AtomId(6), AtomId(7)),
+            Edge(AtomId(7), AtomId(8)),
+            Edge(AtomId(7), AtomId(18)),
+            Edge(AtomId(8), AtomId(9)),
+            Edge(AtomId(8), AtomId(10)),
+            Edge(AtomId(9), AtomId(21)),
+            Edge(AtomId(10), AtomId(11)),
+            Edge(AtomId(10), AtomId(16)),
+            Edge(AtomId(11), AtomId(12)),
+            Edge(AtomId(12), AtomId(13)),
+            Edge(AtomId(12), AtomId(14)),
+            Edge(AtomId(14), AtomId(15)),
+            Edge(AtomId(15), AtomId(16)),
+            Edge(AtomId(16), AtomId(17)),
+            Edge(AtomId(17), AtomId(18)),
+            Edge(AtomId(18), AtomId(19)),
+            Edge(AtomId(19), AtomId(20)),
+            Edge(AtomId(19), AtomId(21)),
         ),
     ),
     smiles_stereochemistry=SmilesStereochemistry(

@@ -15,6 +15,7 @@ from moladt.chem.dietz import mk_edge
 from moladt.chem.molecule import AtomicSymbol, Molecule
 from moladt.chem.molecule_ops import effective_order
 from moladt.inference import compute_descriptors as compute_moladt_descriptors
+from moladt.chem.molecule import molecule_edges
 from moladt.inference.descriptors import coordinate_descriptors, legacy_bonding_system_shared_electrons, legacy_bonding_systems
 from moladt.io.sdf import parse_sdf_record
 from moladt.io.smiles import molecule_to_smiles, parse_smiles
@@ -769,10 +770,7 @@ def _ordered_moladt_atoms(molecule: Molecule):
 
 
 def _unique_moladt_edges(molecule: Molecule):
-    edges = set(molecule.local_bonds)
-    for _, system in molecule.systems:
-        edges.update(system.member_edges)
-    return tuple(sorted(edges))
+    return tuple(sorted(molecule_edges(molecule)))
 
 
 def _coordinate_vector(atom: Any) -> np.ndarray:

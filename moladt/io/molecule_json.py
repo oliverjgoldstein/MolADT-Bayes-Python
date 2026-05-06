@@ -5,7 +5,7 @@ from typing import Any, Protocol, cast
 
 from ..chem.coordinate import Coordinate
 from ..chem.constants import element_attributes
-from ..chem.dietz import AtomId, BondingSystem, Edge, SystemId
+from ..chem.dietz import AtomId, BondingSystem, SystemId
 from ..chem.molecule import (
     Atom,
     AtomicSymbol,
@@ -135,7 +135,6 @@ def molecule_to_dict(molecule: Molecule) -> dict[str, Any]:
             {"atom_id": atom_id.to_dict(), "atom": atom_to_dict(atom)}
             for atom_id, atom in molecule.atoms.items()
         ],
-        "local_bonds": [edge.to_dict() for edge in sorted(molecule.local_bonds)],
         "systems": [
             {"system_id": system_id.to_dict(), "bonding_system": bonding_system.to_dict()}
             for system_id, bonding_system in molecule.systems
@@ -149,17 +148,13 @@ def molecule_from_dict(data: dict[str, Any]) -> Molecule:
         AtomId.from_dict(item["atom_id"]): atom_from_dict(item["atom"])
         for item in data["atoms"]
     }
-    local_bonds = frozenset(Edge.from_dict(item) for item in data.get("local_bonds", []))
     systems = tuple(
         (SystemId.from_dict(item["system_id"]), BondingSystem.from_dict(item["bonding_system"]))
         for item in data["systems"]
     )
-    system_edges = frozenset(edge for _, system in systems for edge in system.member_edges)
-    legacy_local_bonds = local_bonds - system_edges
     smiles_stereochemistry = smiles_stereochemistry_from_dict(data.get("smiles_stereochemistry", {}))
     return Molecule(
         atoms=atoms,
-        local_bonds=legacy_local_bonds,
         systems=systems,
         smiles_stereochemistry=smiles_stereochemistry,
     )

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ..chem.dietz import AtomId, Edge, NonNegative, SystemId, mk_bonding_system
 from ..chem.molecule import AtomicSymbol, Molecule
-from ._literal import atom
+from ._literal import atom, single_covalent_systems
 
 
 ferrocene_pretty = Molecule(
@@ -29,30 +29,6 @@ ferrocene_pretty = Molecule(
         AtomId(20): atom(20, AtomicSymbol.H, -0.704559, -2.168409, -1.565),
         AtomId(21): atom(21, AtomicSymbol.H, 1.844559, -1.340150, -1.565),
     },
-    local_bonds=frozenset(
-        {
-            Edge(AtomId(2), AtomId(3)),
-            Edge(AtomId(2), AtomId(6)),
-            Edge(AtomId(2), AtomId(12)),
-            Edge(AtomId(3), AtomId(4)),
-            Edge(AtomId(3), AtomId(13)),
-            Edge(AtomId(4), AtomId(5)),
-            Edge(AtomId(4), AtomId(14)),
-            Edge(AtomId(5), AtomId(6)),
-            Edge(AtomId(5), AtomId(15)),
-            Edge(AtomId(6), AtomId(16)),
-            Edge(AtomId(7), AtomId(8)),
-            Edge(AtomId(7), AtomId(11)),
-            Edge(AtomId(7), AtomId(17)),
-            Edge(AtomId(8), AtomId(9)),
-            Edge(AtomId(8), AtomId(18)),
-            Edge(AtomId(9), AtomId(10)),
-            Edge(AtomId(9), AtomId(19)),
-            Edge(AtomId(10), AtomId(11)),
-            Edge(AtomId(10), AtomId(20)),
-            Edge(AtomId(11), AtomId(21)),
-        }
-    ),
     systems=(
         (
             SystemId(1),
@@ -106,6 +82,31 @@ ferrocene_pretty = Molecule(
                 ),
                 "fe_cp_coordination",
             ),
+        ),
+    )
+    + single_covalent_systems(
+        4,
+        (
+            Edge(AtomId(2), AtomId(3)),
+            Edge(AtomId(2), AtomId(6)),
+            Edge(AtomId(2), AtomId(12)),
+            Edge(AtomId(3), AtomId(4)),
+            Edge(AtomId(3), AtomId(13)),
+            Edge(AtomId(4), AtomId(5)),
+            Edge(AtomId(4), AtomId(14)),
+            Edge(AtomId(5), AtomId(6)),
+            Edge(AtomId(5), AtomId(15)),
+            Edge(AtomId(6), AtomId(16)),
+            Edge(AtomId(7), AtomId(8)),
+            Edge(AtomId(7), AtomId(11)),
+            Edge(AtomId(7), AtomId(17)),
+            Edge(AtomId(8), AtomId(9)),
+            Edge(AtomId(8), AtomId(18)),
+            Edge(AtomId(9), AtomId(10)),
+            Edge(AtomId(9), AtomId(19)),
+            Edge(AtomId(10), AtomId(11)),
+            Edge(AtomId(10), AtomId(20)),
+            Edge(AtomId(11), AtomId(21)),
         ),
     ),
 )

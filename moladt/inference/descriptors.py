@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from math import log, pi, sqrt
 
 from ..chem.dietz import AtomId, BondingSystem, Edge
-from ..chem.molecule import Atom, AtomicSymbol, Molecule
+from ..chem.molecule import Atom, AtomicSymbol, Molecule, molecule_edges
 from ..chem.molecule_ops import effective_order
 
 @dataclass(frozen=True, slots=True)
@@ -115,10 +115,7 @@ def hetero_atom_count(molecule: Molecule) -> float:
 
 
 def molecule_bond_order(molecule: Molecule) -> float:
-    edge_set = set(molecule.local_bonds)
-    for _, system in molecule.systems:
-        edge_set.update(system.member_edges)
-    return sum(effective_order(molecule, edge) for edge in edge_set)
+    return sum(effective_order(molecule, edge) for edge in molecule_edges(molecule))
 
 
 def hydrogen_bond_acceptor_count(molecule: Molecule) -> float:
@@ -163,7 +160,7 @@ def aromatic_atom_fraction(molecule: Molecule) -> float:
 
 def build_adjacency(molecule: Molecule) -> dict[AtomId, list[AtomId]]:
     adjacency: dict[AtomId, list[AtomId]] = {}
-    for edge in molecule.local_bonds:
+    for edge in molecule_edges(molecule):
         adjacency.setdefault(edge.a, []).append(edge.b)
         adjacency.setdefault(edge.b, []).append(edge.a)
     return adjacency
@@ -200,7 +197,7 @@ def rotatable_bond_count(molecule: Molecule) -> float:
         return sum(1 for neighbor in adjacency.get(atom_id, []) if is_heavy(neighbor))
 
     total = 0.0
-    for edge in molecule.local_bonds:
+    for edge in molecule_edges(molecule):
         both_heavy = is_heavy(edge.a) and is_heavy(edge.b)
         not_terminal = heavy_degree(edge.a) > 1 and heavy_degree(edge.b) > 1
         single_bond = effective_order(molecule, edge) <= 1.1
@@ -232,7 +229,7 @@ def negative_charge_count(molecule: Molecule) -> float:
 def is_conventional_one_edge_system(system: BondingSystem) -> bool:
     return (
         len(system.member_edges) == 1
-        and system.shared_electrons.value in {2, 4, 6}
+        and system.shared_electrons.value in {2, 4, 6, 8}
     )
 
 
@@ -248,7 +245,7 @@ def legacy_bonding_systems(molecule: Molecule) -> tuple[BondingSystem, ...]:
 
 
 def legacy_bonding_system_shared_electrons(system: BondingSystem) -> float:
-    if is_conventional_one_edge_system(system) and system.shared_electrons.value in {4, 6}:
+    if is_conventional_one_edge_system(system) and system.shared_electrons.value in {4, 6, 8}:
         return float(system.shared_electrons.value - 2)
     return float(system.shared_electrons.value)
 
@@ -266,14 +263,11 @@ def zero_electron_system_count(molecule: Molecule) -> float:
 
 
 def sigma_edge_count(molecule: Molecule) -> float:
-    return float(len(molecule.local_bonds))
+    return float(len(molecule_edges(molecule)))
 
 
 def unique_bond_edges(molecule: Molecule) -> tuple[Edge, ...]:
-    edges = set(molecule.local_bonds)
-    for _, system in molecule.systems:
-        edges.update(system.member_edges)
-    return tuple(sorted(edges))
+    return tuple(sorted(molecule_edges(molecule)))
 
 
 def effective_bond_order_summary(molecule: Molecule) -> dict[str, float]:
@@ -365,7 +359,7 @@ def compute_descriptors(molecule: Molecule) -> MolecularDescriptors:
 
 def _neighbors_sigma(molecule: Molecule, atom_id: AtomId) -> tuple[AtomId, ...]:
     neighbors = []
-    for edge in molecule.local_bonds:
+    for edge in molecule_edges(molecule):
         if edge.a == atom_id:
             neighbors.append(edge.b)
         elif edge.b == atom_id:

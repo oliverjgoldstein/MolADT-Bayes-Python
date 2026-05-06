@@ -7,7 +7,7 @@ from typing import Iterable
 from .coordinate import Coordinate
 from .dietz import AtomId, BondingSystem, Edge
 from .dietz import SystemId
-from .molecule import Atom, Molecule, SmilesAtomStereo, SmilesBondStereo
+from .molecule import Atom, Molecule, SmilesAtomStereo, SmilesBondStereo, molecule_edges
 from .molecule_ops import effective_order, neighbors_sigma
 from .validate import used_electrons_at
 from .orbital import (
@@ -261,7 +261,7 @@ def _edge_network_edges(
     molecule: Molecule,
     system_items: list[tuple[SystemId, BondingSystem]],
 ) -> list[Edge]:
-    edges = set(molecule.local_bonds)
+    edges = set(molecule_edges(molecule))
     for _, system in system_items:
         edges.update(system.member_edges)
     return sorted(edges)
@@ -369,7 +369,7 @@ def _format_system_label(system_id: int, system: BondingSystem) -> str:
 def _format_edge_system_ref(system_id: SystemId, system: BondingSystem) -> str:
     label = _format_system_label(system_id.value, system)
     edge_electrons = _system_electrons_per_edge(system)
-    if len(system.member_edges) == 1 and system.shared_electrons.value in {2, 4, 6}:
+    if len(system.member_edges) == 1 and system.shared_electrons.value in {2, 4, 6, 8}:
         return f"{label}:{_format_electrons(edge_electrons)}"
     return f"{label}:{_format_electrons(edge_electrons)}/edge from {_format_electrons(system.shared_electrons.value)}"
 
@@ -392,7 +392,7 @@ def _system_display_label(system: BondingSystem) -> str | None:
 
 
 def _covalent_label(system: BondingSystem) -> str | None:
-    if system.tag not in {None, "single", "double", "triple"}:
+    if system.tag not in {None, "single", "double", "triple", "quadruple"}:
         return None
     if len(system.member_edges) != 1:
         return None
@@ -402,6 +402,8 @@ def _covalent_label(system: BondingSystem) -> str | None:
         return "double covalent"
     if system.shared_electrons.value == 6:
         return "triple covalent"
+    if system.shared_electrons.value == 8:
+        return "quadruple covalent"
     return None
 
 

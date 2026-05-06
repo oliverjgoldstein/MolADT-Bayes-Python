@@ -37,7 +37,6 @@ def test_to_json_cli_outputs_moladt_json(capsys) -> None:
 
     assert result == 0
     assert payload["atoms"]
-    assert payload["local_bonds"]
     assert payload["systems"]
 
 

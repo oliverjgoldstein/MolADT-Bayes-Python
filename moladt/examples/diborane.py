@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ..chem.dietz import AtomId, Edge, NonNegative, SystemId, mk_bonding_system
 from ..chem.molecule import AtomicSymbol, Molecule
-from ._literal import atom
+from ._literal import atom, single_covalent_systems
 
 
 diborane_pretty = Molecule(
@@ -16,15 +16,6 @@ diborane_pretty = Molecule(
         AtomId(7): atom(7, AtomicSymbol.H, 0.885, 1.190, 0.000),
         AtomId(8): atom(8, AtomicSymbol.H, 0.885, -1.190, 0.000),
     },
-    local_bonds=frozenset(
-        {
-            Edge(AtomId(1), AtomId(2)),
-            Edge(AtomId(1), AtomId(5)),
-            Edge(AtomId(1), AtomId(6)),
-            Edge(AtomId(2), AtomId(7)),
-            Edge(AtomId(2), AtomId(8)),
-        }
-    ),
     systems=(
         (
             SystemId(1),
@@ -51,6 +42,16 @@ diborane_pretty = Molecule(
                 ),
                 "bridge_h4_3c2e",
             ),
+        ),
+    )
+    + single_covalent_systems(
+        3,
+        (
+            Edge(AtomId(1), AtomId(2)),
+            Edge(AtomId(1), AtomId(5)),
+            Edge(AtomId(1), AtomId(6)),
+            Edge(AtomId(2), AtomId(7)),
+            Edge(AtomId(2), AtomId(8)),
         ),
     ),
 )

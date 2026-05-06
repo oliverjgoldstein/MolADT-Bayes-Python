@@ -8,7 +8,7 @@ import pytest
 from scripts.features import compute_moladt_featurized_descriptors
 
 from moladt.chem.dietz import AtomId, Edge, NonNegative, SystemId, mk_bonding_system
-from moladt.chem.molecule import AtomicSymbol, Molecule
+from moladt.chem.molecule import AtomicSymbol, Molecule, molecule_edges
 from moladt.chem.validate import validate_molecule
 from moladt.cli import DEFAULT_VIEW_EXAMPLES, EXAMPLE_VIEWER_MOLECULES
 from moladt.examples import benzene_pretty, diborane_pretty, ferrocene_pretty, morphine_pretty
@@ -33,7 +33,7 @@ def _rounded_coordinates(molecule):
 
 
 def _edge_pairs(molecule):
-    return sorted((edge.a.value, edge.b.value) for edge in molecule.local_bonds)
+    return sorted((edge.a.value, edge.b.value) for edge in molecule_edges(molecule))
 
 
 def _distance(molecule, atom_a: int, atom_b: int) -> float:
@@ -172,7 +172,7 @@ def test_checked_examples_are_canonical_expanded_molecules() -> None:
         assert [atom_id.value for atom_id in molecule.atoms] == sorted(
             atom_id.value for atom_id in molecule.atoms
         )
-        assert all(edge.a.value < edge.b.value for edge in molecule.local_bonds)
+        assert all(edge.a.value < edge.b.value for edge in molecule_edges(molecule))
         assert [system_id.value for system_id, _ in molecule.systems] == sorted(
             system_id.value for system_id, _ in molecule.systems
         )
@@ -186,7 +186,6 @@ def test_python_literal_export_is_the_canonical_normal_form() -> None:
             AtomId(2): atom(2, AtomicSymbol.H, 0.0, 0.0, 0.9),
             AtomId(1): atom(1, AtomicSymbol.O, 0.0, 0.0, 0.0),
         },
-        local_bonds=frozenset({Edge(AtomId(2), AtomId(1))}),
         systems=(
             (
                 SystemId(2),
