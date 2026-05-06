@@ -6,11 +6,12 @@ The SMILES layer is conservative by design. It should accept what it can represe
 
 - atoms and bracket atoms
 - formal charges
+- charged sodium-halide style ionic contacts such as `[Na+][Cl-]`
 - explicit bracket hydrogens
 - implicit terminal hydrogens on supported bare atoms
 - branches
 - ring digits `1-9`
-- single, double, triple, and quadruple bonds
+- single, double, triple, and quadruple covalent bonds
 - aromatic six-membered ring recovery into `pi_ring`
 - atom-centered `@` / `@@`
 - bond directions `/` and `\`
@@ -39,6 +40,9 @@ Validation catches:
 ## Practical Rule
 
 Use SMILES for classical molecules. Use MolADT directly when the bonding structure needs more than a string can say.
+
+Ionic SMILES in the supported charge pattern is still represented as MolADT:
+the edge is an `ionic` 0e bonding system and the charge stays atom-local.
 
 Related files:
 

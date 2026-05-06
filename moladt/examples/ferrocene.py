@@ -7,13 +7,13 @@ from ._literal import atom
 
 ferrocene_pretty = Molecule(
     atoms={
-        AtomId(1): atom(1, AtomicSymbol.Fe, 0.000, 0.000, 0.000),
-        AtomId(2): atom(2, AtomicSymbol.C, 1.194, 0.000, 1.660),
+        AtomId(1): atom(1, AtomicSymbol.Fe, 0.000, 0.000, 0.000, formal_charge=2),
+        AtomId(2): atom(2, AtomicSymbol.C, 1.194, 0.000, 1.660, formal_charge=-1),
         AtomId(3): atom(3, AtomicSymbol.C, 0.369, 1.136, 1.660),
         AtomId(4): atom(4, AtomicSymbol.C, -0.966, 0.702, 1.660),
         AtomId(5): atom(5, AtomicSymbol.C, -0.966, -0.702, 1.660),
         AtomId(6): atom(6, AtomicSymbol.C, 0.369, -1.136, 1.660),
-        AtomId(7): atom(7, AtomicSymbol.C, 0.966, 0.702, -1.660),
+        AtomId(7): atom(7, AtomicSymbol.C, 0.966, 0.702, -1.660, formal_charge=-1),
         AtomId(8): atom(8, AtomicSymbol.C, -0.369, 1.136, -1.660),
         AtomId(9): atom(9, AtomicSymbol.C, -1.194, 0.000, -1.660),
         AtomId(10): atom(10, AtomicSymbol.C, -0.369, -1.136, -1.660),

@@ -92,6 +92,19 @@ _IMPLICIT_HYDROGEN_VALENCE: dict[AtomicSymbol, float] = {
     AtomicSymbol.Si: 4.0,
 }
 
+_IONIC_CATIONS = frozenset({AtomicSymbol.Na})
+_IONIC_ANIONS = frozenset(
+    {
+        AtomicSymbol.F,
+        AtomicSymbol.Cl,
+        AtomicSymbol.Br,
+        AtomicSymbol.I,
+        AtomicSymbol.O,
+        AtomicSymbol.N,
+        AtomicSymbol.S,
+    }
+)
+
 
 @dataclass(frozen=True, slots=True)
 class _AtomRef:
@@ -343,7 +356,10 @@ class _SMILESParser:
         edge = mk_edge(left, right)
         self.bond_edges.add(edge)
         if bond_kind == "single":
-            self.systems.append(mk_bonding_system(NonNegative(2), frozenset({edge})))
+            if _is_ionic_edge(self.atoms, edge):
+                self.systems.append(mk_bonding_system(NonNegative(0), frozenset({edge}), "ionic"))
+            else:
+                self.systems.append(mk_bonding_system(NonNegative(2), frozenset({edge})))
         elif bond_kind == "double":
             self.systems.append(mk_bonding_system(NonNegative(4), frozenset({edge})))
         elif bond_kind == "triple":
@@ -713,6 +729,8 @@ def _render_bond_orders(molecule: Molecule, rendered_atoms: dict[AtomId, Atom]) 
         if system.tag == "pi_ring" and system.shared_electrons.value == 6 and len(system.member_edges) == 6:
             pi_rings.append(system.member_edges)
             continue
+        if system.tag == "ionic" and len(system.member_edges) == 1 and system.shared_electrons.value == 0:
+            continue
         if len(system.member_edges) == 1 and system.shared_electrons.value in {2, 4, 6, 8}:
             edge = next(iter(system.member_edges))
             if edge not in bond_orders:
@@ -900,3 +918,20 @@ def _bond_symbol(order: int) -> str:
 
 def _is_conventional_single_edge_system(system: BondingSystem) -> bool:
     return len(system.member_edges) == 1 and system.shared_electrons.value in {2, 4, 6, 8}
+
+
+def _is_ionic_edge(atom_map: dict[AtomId, Atom], edge: Edge) -> bool:
+    left = atom_map.get(edge.a)
+    right = atom_map.get(edge.b)
+    if left is None or right is None:
+        return False
+    return _is_ionic_pair(left, right) or _is_ionic_pair(right, left)
+
+
+def _is_ionic_pair(cation: Atom, anion: Atom) -> bool:
+    return (
+        cation.formal_charge > 0
+        and anion.formal_charge < 0
+        and cation.attributes.symbol in _IONIC_CATIONS
+        and anion.attributes.symbol in _IONIC_ANIONS
+    )

@@ -6,7 +6,9 @@ Most generated files are ignored. Small reference artifacts can be checked in wh
 
 Molecule references use the current MolADT shape: atoms plus bonding systems,
 with each generated edge represented by a shared-electron system rather than an
-edge-only bond order.
+edge-only bond order. Conventional generated covalent edges are one-edge
+2/4/6/8e systems; ionic contacts, when present, are one-edge 0e systems with
+formal charge on the atoms.
 
 ## Main Folders
 

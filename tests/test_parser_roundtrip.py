@@ -78,6 +78,24 @@ M  END
 $$$$
 """
 
+V3000_SODIUM_CHLORIDE = """sodium chloride
+MolADT
+generated
+  0  0  0  0  0  0            999 V3000
+M  V30 BEGIN CTAB
+M  V30 COUNTS 2 1 0 0 0
+M  V30 BEGIN ATOM
+M  V30 1 Na 0.0000 0.0000 0.0000 0 CHG=1
+M  V30 2 Cl 2.3600 0.0000 0.0000 0 CHG=-1
+M  V30 END ATOM
+M  V30 BEGIN BOND
+M  V30 1 1 1 2
+M  V30 END BOND
+M  V30 END CTAB
+M  END
+$$$$
+"""
+
 
 def test_benzene_round_trip_preserves_atom_count_and_sigma_bonds() -> None:
     molecule = read_sdf(PROJECT_ROOT / "molecules" / "benzene.sdf")
@@ -104,6 +122,7 @@ def test_water_smoke_parse() -> None:
 def test_small_sample_sdfs_smoke_parse() -> None:
     hydrogen = read_sdf(PROJECT_ROOT / "molecules" / "hydrogen.sdf")
     oxygen = read_sdf(PROJECT_ROOT / "molecules" / "oxygen.sdf")
+    sodium_chloride = read_sdf(PROJECT_ROOT / "molecules" / "sodium_chloride.sdf")
     methane = read_sdf(PROJECT_ROOT / "molecules" / "methane.sdf")
 
     assert len(hydrogen.atoms) == 2
@@ -112,6 +131,11 @@ def test_small_sample_sdfs_smoke_parse() -> None:
     assert len(oxygen.atoms) == 2
     assert len(molecule_edges(oxygen)) == 1
     assert _count_unnamed_edge_systems(oxygen, 4) == 1
+    assert len(sodium_chloride.atoms) == 2
+    assert len(molecule_edges(sodium_chloride)) == 1
+    assert sodium_chloride.atoms[AtomId(1)].formal_charge == 1
+    assert sodium_chloride.atoms[AtomId(2)].formal_charge == -1
+    assert _count_tag(sodium_chloride, "ionic") == 1
     assert len(methane.atoms) == 5
     assert len(molecule_edges(methane)) == 4
     assert _count_unnamed_edge_systems(methane, 2) == 4
@@ -156,6 +180,17 @@ def test_sdf_quadruple_bond_becomes_eight_electron_covalent_system() -> None:
     assert _count_unnamed_edge_systems(round_tripped, 8) == 1
 
 
+def test_sdf_charged_sodium_halide_single_bond_becomes_ionic_system() -> None:
+    molecule = parse_sdf(V3000_SODIUM_CHLORIDE)
+    round_tripped = parse_sdf(molecule_to_sdf(molecule))
+
+    assert molecule.atoms[AtomId(1)].formal_charge == 1
+    assert molecule.atoms[AtomId(2)].formal_charge == -1
+    assert _count_tag(molecule, "ionic") == 1
+    assert molecule.systems[0][1].shared_electrons.value == 0
+    assert _count_tag(round_tripped, "ionic") == 1
+
+
 def test_smiles_parse_recovers_benzene_pi_ring() -> None:
     molecule = parse_smiles("c1ccccc1")
     counts = Counter(atom.attributes.symbol.value for atom in molecule.atoms.values())
@@ -194,6 +229,16 @@ def test_smiles_parse_and_render_supports_quadruple_bonds() -> None:
 
     assert _count_unnamed_edge_systems(molecule, 8) == 1
     assert "$" in smiles
+
+
+def test_smiles_charged_sodium_halide_single_bond_becomes_ionic_system() -> None:
+    molecule = parse_smiles("[Na+][Cl-]")
+
+    assert molecule.atoms[AtomId(1)].formal_charge == 1
+    assert molecule.atoms[AtomId(2)].formal_charge == -1
+    assert _count_tag(molecule, "ionic") == 1
+    assert molecule.systems[0][1].shared_electrons.value == 0
+    assert molecule_to_smiles(molecule) == "[Na+][Cl-]"
 
 
 def test_bare_atoms_infer_terminal_hydrogens() -> None:

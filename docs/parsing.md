@@ -11,6 +11,11 @@ MolADT can start from SDF, SMILES, or MolADT JSON.
 
 The parser accepts SDF V2000 and a core V3000 CTAB subset: atom coordinates, bond tables, atom-local charges, and property blocks. Bond table entries become bonding systems: single, double, triple, and non-aromatic quadruple bonds are one-edge systems sharing 2, 4, 6, and 8 electrons, displayed as `single covalent`, `double covalent`, `triple covalent`, and `quadruple covalent`.
 
+When an SDF single edge connects a charged sodium cation to a charged anion in
+the supported set (`F`, `Cl`, `Br`, `I`, `O`, `N`, or `S`), the parser stores
+that edge as one `ionic` bonding system with `0` shared electrons. The atom
+formal charges remain on the atoms.
+
 ## MolADT JSON
 
 ```bash
@@ -57,6 +62,9 @@ print(molecule_to_smiles(round_tripped))
 ```
 
 The SMILES path is conservative. It covers the classical subset used by tests and examples. It emits the same `single covalent`, `double covalent`, `triple covalent`, and `quadruple covalent` one-edge systems, adds `pi_ring` systems for supported aromatic six-rings, and does not try to encode every MolADT molecule.
+
+Bracket charges are retained. `[Na+][Cl-]` parses as two charged atoms plus one
+zero-electron `ionic` bonding system and renders back to `[Na+][Cl-]`.
 
 ## Viewer
 

@@ -14,6 +14,19 @@ from ..chem.molecule import Atom, AtomicSymbol, Molecule, molecule_edges
 from ..chem.molecule_ops import effective_order
 from .molecule_json import molecule_to_dict
 
+_IONIC_CATIONS = frozenset({AtomicSymbol.Na})
+_IONIC_ANIONS = frozenset(
+    {
+        AtomicSymbol.F,
+        AtomicSymbol.Cl,
+        AtomicSymbol.Br,
+        AtomicSymbol.I,
+        AtomicSymbol.O,
+        AtomicSymbol.N,
+        AtomicSymbol.S,
+    }
+)
+
 
 @dataclass(frozen=True, slots=True)
 class SDFRecord:
@@ -321,13 +334,20 @@ def _build_molecule(atoms: list[Atom], bonds: list[tuple[Edge, int]]) -> Molecul
         systems.append((SystemId(system_index), mk_bonding_system(NonNegative(6), ring_edges, "pi_ring")))
         system_index += 1
     for edge, order in bonds:
-        shared_electrons, tag = _bond_electron_system(order, edge in aromatic_ring_edges)
+        shared_electrons, tag = _bond_electron_system(atom_map, edge, order, edge in aromatic_ring_edges)
         systems.append((SystemId(system_index), mk_bonding_system(NonNegative(shared_electrons), frozenset({edge}), tag)))
         system_index += 1
     return Molecule(atoms=atom_map, systems=tuple(systems))
 
 
-def _bond_electron_system(order: int, in_aromatic_ring: bool) -> tuple[int, str | None]:
+def _bond_electron_system(
+    atom_map: Mapping[AtomId, Atom],
+    edge: Edge,
+    order: int,
+    in_aromatic_ring: bool,
+) -> tuple[int, str | None]:
+    if order == 1 and _is_ionic_edge(atom_map, edge):
+        return 0, "ionic"
     if in_aromatic_ring and order in {1, 2, 4}:
         return 2, None
     if order == 1:
@@ -339,6 +359,23 @@ def _bond_electron_system(order: int, in_aromatic_ring: bool) -> tuple[int, str 
     if order == 4:
         return 8, None
     return 2, f"sdf_bond_type_{order}"
+
+
+def _is_ionic_edge(atom_map: Mapping[AtomId, Atom], edge: Edge) -> bool:
+    left = atom_map.get(edge.a)
+    right = atom_map.get(edge.b)
+    if left is None or right is None:
+        return False
+    return _is_ionic_pair(left, right) or _is_ionic_pair(right, left)
+
+
+def _is_ionic_pair(cation: Atom, anion: Atom) -> bool:
+    return (
+        cation.formal_charge > 0
+        and anion.formal_charge < 0
+        and cation.attributes.symbol in _IONIC_CATIONS
+        and anion.attributes.symbol in _IONIC_ANIONS
+    )
 
 
 def _sdf_bond_order(molecule: Molecule, edge: Edge) -> int:

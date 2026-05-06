@@ -49,7 +49,7 @@ diborane_pretty = Molecule(
                 NonNegative(2),
                 frozenset(
                     {
-                        Edge(AtomId(1), AtomId(2)),
+                        Edge(AtomId(1), AtomId(5)),
                     }
                 ),
                 None,
@@ -61,7 +61,7 @@ diborane_pretty = Molecule(
                 NonNegative(2),
                 frozenset(
                     {
-                        Edge(AtomId(1), AtomId(5)),
+                        Edge(AtomId(1), AtomId(6)),
                     }
                 ),
                 None,
@@ -73,18 +73,6 @@ diborane_pretty = Molecule(
                 NonNegative(2),
                 frozenset(
                     {
-                        Edge(AtomId(1), AtomId(6)),
-                    }
-                ),
-                None,
-            ),
-        ),
-        (
-            SystemId(6),
-            mk_bonding_system(
-                NonNegative(2),
-                frozenset(
-                    {
                         Edge(AtomId(2), AtomId(7)),
                     }
                 ),
@@ -92,7 +80,7 @@ diborane_pretty = Molecule(
             ),
         ),
         (
-            SystemId(7),
+            SystemId(6),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(

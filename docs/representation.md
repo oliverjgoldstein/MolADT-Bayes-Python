@@ -36,6 +36,8 @@ Every edge is represented by a bonding system. Conventional single, double,
 triple, and quadruple bonds are one-edge systems sharing `2`, `4`, `6`, and `8`
 electrons, respectively, displayed as `single covalent`, `double covalent`,
 `triple covalent`, and `quadruple covalent`.
+Ionic contacts use the same edge rule: they are one-edge systems with `0`
+shared electrons, tag `ionic`, and formal charge on the atoms.
 
 System identifiers are stable display IDs. Parsers and checked examples assign
 them to named or multi-edge systems first, then to the ordinary one-edge
@@ -149,8 +151,9 @@ non-classical bonding in one layer. Examples:
 | Molecule | What the ADT stores explicitly |
 | --- | --- |
 | Benzene | six `single covalent` one-edge systems plus a six-electron `pi_ring` system |
-| Diborane | terminal `single covalent` systems plus two `3c-2e` bridge systems |
-| Ferrocene | Cp/C-H `single covalent` systems plus separate Cp pi and Fe-Cp coordination systems |
+| Diborane | four terminal B-H `single covalent` systems plus two `3c-2e` bridge systems |
+| Ferrocene | Cp/C-H `single covalent` systems plus separate Cp pi and Fe-Cp coordination systems; `Fe#1` is `+2`, with one representative `-1` carbon per Cp ring |
+| Sodium chloride | `Na+` and `Cl-` atoms plus one zero-electron `ionic` system over the Na-Cl edge |
 | Morphine | every graph edge as a system plus named delocalisation systems |
 
 ## Orbital Layer

@@ -23,11 +23,12 @@ This creates `./.cmdstan`.
 ```bash
 make python-parse
 make python-pretty-example EXAMPLE=morphine
+make python-pretty-example EXAMPLE=sodium_chloride
 make view
 make molecule-viewer VIEWER_EXAMPLES=ferrocene
 ```
 
-Those commands check SDF parsing, built-in examples, validation, and the standalone molecule viewer. `make view` clears repo Python bytecode caches, overwrites the viewer HTML, and opens six built-in ADT examples in one browser page, preserving explicit bonding systems such as diborane bridges and ferrocene Fe-Cp coordination. In the viewer, clicking an atom shows coordinates, 3D edge lengths, effective orders, bonding systems, and bond angles calculated from the molecule's coordinate data; the canvas also shows coordinate axes with Angstrom tick labels.
+Those commands check SDF parsing, built-in examples, validation, and the standalone molecule viewer. `make view` clears repo Python bytecode caches, overwrites the viewer HTML, and opens seven built-in ADT examples in one browser page, preserving explicit bonding systems such as diborane bridges, ferrocene Fe-Cp coordination, and sodium chloride ionic contact. In the viewer, clicking an atom shows coordinates, 3D edge lengths, effective orders, bonding systems, and bond angles calculated from the molecule's coordinate data; the canvas also shows coordinate axes with Angstrom tick labels.
 
 `make test-molecule-viewer` runs the viewer tests and then opens the configured viewer HTML in the default browser.
 

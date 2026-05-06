@@ -269,9 +269,13 @@ def test_makefile_view_target_opens_example_collection(tmp_path: Path) -> None:
 
     assert "Opening MolADT example molecule viewer." in result.stdout
     assert "command: moladt.cli view-examples" in result.stdout
-    assert "examples: benzene diborane ferrocene morphine methane water" in result.stdout
+    assert "examples: benzene diborane ferrocene morphine methane water sodium_chloride" in result.stdout
     assert 'rm -f "results/viewer/examples.viewer.html"' in result.stdout
-    assert "PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python -m moladt.cli view-examples benzene diborane ferrocene morphine methane water" in result.stdout
+    assert (
+        "PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python -m moladt.cli view-examples "
+        "benzene diborane ferrocene morphine methane water sodium_chloride"
+        in result.stdout
+    )
     assert '--output "results/viewer/examples.viewer.html" --title "MolADT example molecules" --open-viewer' in result.stdout
 
 

@@ -13,7 +13,7 @@ from moladt.chem.validate import validate_molecule
 from moladt.cli import DEFAULT_VIEW_EXAMPLES, EXAMPLE_VIEWER_MOLECULES
 from moladt.examples import benzene_pretty, diborane_pretty, ferrocene_pretty, morphine_pretty
 from moladt.examples._literal import atom
-from moladt.examples.sample_molecules import hydrogen, methane, oxygen, water
+from moladt.examples.sample_molecules import hydrogen, methane, oxygen, sodium_chloride, water
 from moladt.io import molecule_to_python_literal
 
 
@@ -55,7 +55,7 @@ def test_diborane_example_has_two_3c2e_bridge_systems() -> None:
     assert [system.tag for system in bridges] == ["bridge_h3_3c2e", "bridge_h4_3c2e"]
     assert [system.shared_electrons.value for system in bridges] == [2, 2]
     assert [len(system.member_edges) for system in bridges] == [2, 2]
-    assert _count_unnamed_edge_systems(diborane_pretty, 2) == 5
+    assert _count_unnamed_edge_systems(diborane_pretty, 2) == 4
 
 
 def test_ferrocene_constructs_a_valid_molecule() -> None:
@@ -72,6 +72,10 @@ def test_ferrocene_example_has_pi_and_coordination_systems() -> None:
     assert [system.shared_electrons.value for system in named] == [6, 6, 12]
     assert [len(system.member_edges) for system in named] == [5, 5, 10]
     assert _count_unnamed_edge_systems(ferrocene_pretty, 2) == 20
+    assert ferrocene_pretty.atoms[AtomId(1)].formal_charge == 2
+    assert ferrocene_pretty.atoms[AtomId(2)].formal_charge == -1
+    assert ferrocene_pretty.atoms[AtomId(7)].formal_charge == -1
+    assert sum(atom.formal_charge for atom in ferrocene_pretty.atoms.values()) == 0
 
 
 def test_ferrocene_typed_descriptors_use_canonical_dietz_edges() -> None:
@@ -136,6 +140,7 @@ def test_all_examples_include_orbital_shells() -> None:
         morphine_pretty,
         hydrogen,
         oxygen,
+        sodium_chloride,
         water,
         methane,
     )
@@ -164,6 +169,7 @@ def test_checked_examples_are_canonical_expanded_molecules() -> None:
         morphine_pretty,
         hydrogen,
         oxygen,
+        sodium_chloride,
         water,
         methane,
     )
@@ -222,7 +228,6 @@ def test_explicit_examples_keep_expected_sigma_edges() -> None:
         (6, 12),
     ]
     assert _edge_pairs(diborane_pretty) == [
-        (1, 2),
         (1, 3),
         (1, 4),
         (1, 5),
@@ -309,6 +314,14 @@ def test_small_example_molecules_are_explicit_adt_values() -> None:
     assert _edge_pairs(hydrogen) == [(1, 2)]
     assert _rounded_coordinates(oxygen) == {1: ("O", 0.0, 0.0, -0.605), 2: ("O", 0.0, 0.0, 0.605)}
     assert _edge_pairs(oxygen) == [(1, 2)]
+    assert _rounded_coordinates(sodium_chloride) == {1: ("Na", 0.0, 0.0, 0.0), 2: ("Cl", 2.36, 0.0, 0.0)}
+    assert _edge_pairs(sodium_chloride) == [(1, 2)]
+    assert sodium_chloride.atoms[AtomId(1)].formal_charge == 1
+    assert sodium_chloride.atoms[AtomId(2)].formal_charge == -1
+    assert [
+        (system_id.value, system.shared_electrons.value, system.tag)
+        for system_id, system in sodium_chloride.systems
+    ] == [(1, 0, "ionic")]
     assert _rounded_coordinates(water) == {
         1: ("H", 0.002, -0.004, 0.002),
         2: ("O", -0.011, 0.963, 0.007),

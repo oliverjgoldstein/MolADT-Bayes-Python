@@ -17,6 +17,7 @@ from .examples import (
     methane,
     morphine_pretty,
     oxygen,
+    sodium_chloride,
     water,
 )
 from .io.molecule_json import molecule_from_json, molecule_to_json
@@ -34,10 +35,11 @@ EXAMPLE_VIEWER_MOLECULES: dict[str, tuple[str, Molecule]] = {
     "methane": ("Methane", methane),
     "morphine": ("Morphine", morphine_pretty),
     "oxygen": ("Oxygen", oxygen),
+    "sodium_chloride": ("Sodium chloride (NaCl)", sodium_chloride),
     "water": ("Water", water),
 }
 
-DEFAULT_VIEW_EXAMPLES = ("benzene", "diborane", "ferrocene", "morphine", "methane", "water")
+DEFAULT_VIEW_EXAMPLES = ("benzene", "diborane", "ferrocene", "morphine", "methane", "water", "sodium_chloride")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -97,7 +99,10 @@ def build_parser() -> argparse.ArgumentParser:
         "names",
         nargs="*",
         choices=tuple(sorted(EXAMPLE_VIEWER_MOLECULES)),
-        help="Built-in examples to include. Defaults to benzene, diborane, ferrocene, morphine, methane, water.",
+        help=(
+            "Built-in examples to include. Defaults to benzene, diborane, ferrocene, morphine, "
+            "methane, water, sodium_chloride."
+        ),
     )
     view_examples_parser.add_argument("-o", "--output", help="Output HTML path")
     view_examples_parser.add_argument("--title", help="Viewer title")

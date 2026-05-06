@@ -150,7 +150,3 @@ def get_max_bonds_symbol(symbol: AtomicSymbol) -> float:
 
 def element_attributes(symbol: AtomicSymbol) -> ElementAttributes:
     return _ELEMENT_ATTRIBUTES[symbol]
-
-
-def element_shells(symbol: AtomicSymbol) -> orbital.Shells | None:
-    return element_attributes(symbol).shells

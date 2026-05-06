@@ -3,8 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from moladt.chem.pretty import pretty_text
-from moladt.examples import DIBORANE_MANUSCRIPT, FERROCENE_MANUSCRIPT, MORPHINE_MANUSCRIPT
-from moladt.examples import diborane_pretty, ferrocene_pretty, morphine_pretty
+from moladt.examples import (
+    DIBORANE_MANUSCRIPT,
+    FERROCENE_MANUSCRIPT,
+    MORPHINE_MANUSCRIPT,
+    SODIUM_CHLORIDE_MANUSCRIPT,
+)
+from moladt.examples import diborane_pretty, ferrocene_pretty, morphine_pretty, sodium_chloride
 from moladt.io.sdf import read_sdf
 from moladt.io.smiles import parse_smiles
 
@@ -64,13 +69,25 @@ def test_quadruple_covalent_bond_pretty_rendering_uses_conventional_label() -> N
     assert ":8e" in rendered
 
 
+def test_ionic_bond_pretty_rendering_uses_ionic_label() -> None:
+    rendered = pretty_text(sodium_chloride)
+
+    assert "net charge       +0" in rendered
+    assert "[#1] ionic" in rendered
+    assert "shared=0e  order=0.00" in rendered
+    assert "#1[ionic]:0e" in rendered
+
+
 def test_manuscript_examples_render_titles_and_notes() -> None:
     ferrocene_text = FERROCENE_MANUSCRIPT.render()
     diborane_text = DIBORANE_MANUSCRIPT.render()
     morphine_text = MORPHINE_MANUSCRIPT.render()
+    sodium_chloride_text = SODIUM_CHLORIDE_MANUSCRIPT.render()
     assert "Ferrocene (Fe(C5H5)2)" in ferrocene_text
     assert "Fe-Cp coordination system" in ferrocene_text
     assert "Diborane (B2H6)" in diborane_text
     assert "3c-2e bridging hydrogen bonding systems" in diborane_text
     assert "Morphine (explicit Dietz skeleton)" in morphine_text
     assert "phenyl ring as an explicit pi system" in morphine_text
+    assert "Sodium chloride (NaCl)" in sodium_chloride_text
+    assert "0e ionic bonding system" in sodium_chloride_text

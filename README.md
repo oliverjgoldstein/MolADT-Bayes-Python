@@ -67,6 +67,10 @@ The canonical bonding layer is `systems`: every edge is an instance of a
 one-edge system with `2`, `4`, `6`, or `8` shared electrons respectively.
 Pretty printers and viewers display those as `single covalent`,
 `double covalent`, `triple covalent`, or `quadruple covalent`.
+An ionic contact is also a one-edge `BondingSystem`, but it shares `0`
+electrons, carries tag `ionic`, and keeps the formal charge on the atoms.
+For example, sodium chloride stores `Na#1` as `+1`, `Cl#2` as `-1`, and the
+Na-Cl edge as one `ionic` system.
 
 Pretty printers derive their edge rows from the bonding systems. They show the
 total electrons shared over each edge, then the effective order. For example, a
@@ -95,8 +99,8 @@ class Atom:
 ```
 
 `ElementAttributes` also carries the default shell data, so simple atom
-builders can use `element_attributes(symbol)` and omit `shells`. The older
-`element_shells(symbol)` helper remains as a compatibility wrapper.
+builders can use `element_attributes(symbol)` and omit `shells`; there is no
+separate shell lookup layer.
 
 Delocalised and multicentre bonding is represented explicitly:
 
@@ -114,8 +118,9 @@ Examples:
 | Molecule | What MolADT stores |
 | --- | --- |
 | Benzene | `single covalent` one-edge systems on each edge plus a six-electron `pi_ring`; each C-C edge displays as `shared=3e` |
-| Diborane | terminal `single covalent` systems plus two explicit `3c-2e` bridge systems |
-| Ferrocene | Cp/C-H `single covalent` systems plus two Cp pi systems and one Fe-Cp coordination system |
+| Diborane | four terminal B-H `single covalent` systems plus two explicit `3c-2e` bridge systems; no direct B-B singleton |
+| Ferrocene | Cp/C-H `single covalent` systems plus two Cp pi systems and one Fe-Cp coordination system; Fe is `+2` and one representative carbon on each Cp ring is `-1` |
+| Sodium chloride | `Na+` and `Cl-` atoms plus one zero-electron `ionic` edge system |
 | Morphine | every graph edge as a system plus named delocalised systems |
 
 Ferrocene is a useful example because the metallocene structure is explicit
@@ -140,7 +145,7 @@ make molecule-viewer VIEWER_EXAMPLES="benzene diborane ferrocene"
 make python-pretty-example EXAMPLE=morphine
 ```
 
-`make view` opens six built-in examples in one browser page. Click an atom to see coordinates, 3D edge lengths, effective orders, bonding systems, and bond angles from the molecule coordinates.
+`make view` opens seven built-in examples in one browser page, including sodium chloride's charged 0e ionic edge. Click an atom to see coordinates, 3D edge lengths, effective orders, bonding systems, and bond angles from the molecule coordinates.
 
 Use `OPEN_VIEWER=1` to open generated viewer pages automatically:
 

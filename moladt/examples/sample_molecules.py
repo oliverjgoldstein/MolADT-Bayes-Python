@@ -49,6 +49,28 @@ oxygen = Molecule(
 )
 
 
+sodium_chloride = Molecule(
+    atoms={
+        AtomId(1): atom(1, AtomicSymbol.Na, 0.000, 0.000, 0.000, formal_charge=1),
+        AtomId(2): atom(2, AtomicSymbol.Cl, 2.360, 0.000, 0.000, formal_charge=-1),
+    },
+    systems=(
+        (
+            SystemId(1),
+            mk_bonding_system(
+                NonNegative(0),
+                frozenset(
+                    {
+                        Edge(AtomId(1), AtomId(2)),
+                    }
+                ),
+                "ionic",
+            ),
+        ),
+    ),
+)
+
+
 water = Molecule(
     atoms={
         AtomId(1): atom(1, AtomicSymbol.H, 0.002, -0.004, 0.002),

@@ -8,6 +8,7 @@ from .benzene import benzene_pretty
 from .diborane import diborane_pretty
 from .ferrocene import ferrocene_pretty
 from .morphine import morphine_pretty
+from .sample_molecules import sodium_chloride
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,11 +53,19 @@ MORPHINE_MANUSCRIPT = ManuscriptExample(
     molecule=morphine_pretty,
 )
 
+SODIUM_CHLORIDE_MANUSCRIPT = ManuscriptExample(
+    slug="sodium_chloride",
+    title="Sodium chloride (NaCl)",
+    note="Dietz-style ADT with Na+ and Cl- formal charges plus one 0e ionic bonding system over the Na-Cl edge.",
+    molecule=sodium_chloride,
+)
+
 MANUSCRIPT_EXAMPLES: dict[str, ManuscriptExample] = {
     BENZENE_MANUSCRIPT.slug: BENZENE_MANUSCRIPT,
     FERROCENE_MANUSCRIPT.slug: FERROCENE_MANUSCRIPT,
     DIBORANE_MANUSCRIPT.slug: DIBORANE_MANUSCRIPT,
     MORPHINE_MANUSCRIPT.slug: MORPHINE_MANUSCRIPT,
+    SODIUM_CHLORIDE_MANUSCRIPT.slug: SODIUM_CHLORIDE_MANUSCRIPT,
 }
 
 

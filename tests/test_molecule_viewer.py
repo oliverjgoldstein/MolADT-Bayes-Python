@@ -58,7 +58,7 @@ def test_molecule_viewer_payload_includes_bonding_system_annotations() -> None:
     assert payload["format"] == "moladt-viewer-v1"
     assert payload["title"] == "Diborane"
     assert len(payload["atoms"]) == 8
-    assert len(payload["bonds"]) == 9
+    assert len(payload["bonds"]) == 8
     bridge_systems = [system for system in payload["systems"] if system["tag"] and system["tag"].startswith("bridge_")]
     assert [system["tag"] for system in bridge_systems] == ["bridge_h3_3c2e", "bridge_h4_3c2e"]
     assert [(edge["a"], edge["b"]) for edge in bridge_systems[0]["edges"]] == [(1, 3), (2, 3)]

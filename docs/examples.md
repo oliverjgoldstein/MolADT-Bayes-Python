@@ -10,6 +10,9 @@ Example molecules live as explicit Python ADTs in `moladt/examples/`. The `molec
 ./.venv/bin/python -m moladt.cli pretty-example diborane
 ./.venv/bin/python -m moladt.cli pretty-example ferrocene
 ./.venv/bin/python -m moladt.cli pretty-example morphine
+./.venv/bin/python -m moladt.cli pretty-example sodium_chloride
+./.venv/bin/python -m moladt.cli parse molecules/sodium_chloride.sdf
+./.venv/bin/python -m moladt.cli parse-smiles '[Na+][Cl-]'
 make molecule-viewer VIEWER_EXAMPLES=ferrocene
 ```
 
@@ -21,6 +24,7 @@ make molecule-viewer VIEWER_EXAMPLES=ferrocene
 | Water | Small parser, validation, and SMILES sanity check. |
 | Diborane | Terminal `single covalent` systems plus two explicit `3c-2e` bridge systems. |
 | Ferrocene | Cp/C-H `single covalent` systems plus Cp pi and Fe-Cp coordination systems. |
+| Sodium chloride | Formal charges plus one zero-electron `ionic` edge system. |
 | Morphine | Every graph edge as a system plus named delocalization systems. |
 
 ## Where They Live
@@ -31,6 +35,7 @@ make molecule-viewer VIEWER_EXAMPLES=ferrocene
 | Water | `moladt/examples/sample_molecules.py` |
 | Diborane | `moladt/examples/diborane.py` |
 | Ferrocene | `moladt/examples/ferrocene.py` |
+| Sodium chloride | `moladt/examples/sample_molecules.py`, `molecules/sodium_chloride.sdf` |
 | Morphine | `moladt/examples/morphine.py` |
 
 ## What To Notice
@@ -43,7 +48,9 @@ make molecule-viewer VIEWER_EXAMPLES=ferrocene
 - The canonical normal form is sorted and fully explicit: atoms by `AtomId`, normalized edges with the lower `AtomId` first, and systems by `SystemId`.
 
 Examples list conventional edges as unnamed one-edge bonding systems with two
-shared electrons. Benzene also keeps the aromatic `pi_ring` system:
+shared electrons. Ionic examples use an `ionic` one-edge bonding system with
+zero shared electrons and atom-local formal charges. Benzene also keeps the
+aromatic `pi_ring` system:
 
 ```python
 from __future__ import annotations
@@ -234,6 +241,28 @@ benzene = Molecule(
 )
 
 benzene_pretty = benzene
+```
+
+The ionic fixture is deliberately smaller: `Na#1` carries `+1`, `Cl#2`
+carries `-1`, and the only edge is a 0e `ionic` bonding system:
+
+```python
+sodium_chloride = Molecule(
+    atoms={
+        AtomId(1): atom(1, AtomicSymbol.Na, 0.000, 0.000, 0.000, formal_charge=1),
+        AtomId(2): atom(2, AtomicSymbol.Cl, 2.360, 0.000, 0.000, formal_charge=-1),
+    },
+    systems=(
+        (
+            SystemId(1),
+            mk_bonding_system(
+                NonNegative(0),
+                frozenset({Edge(AtomId(1), AtomId(2))}),
+                "ionic",
+            ),
+        ),
+    ),
+)
 ```
 
 Inspect one built-in example:

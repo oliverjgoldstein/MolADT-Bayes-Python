@@ -98,6 +98,8 @@ def _system_label(system_id: int, system: BondingSystem) -> str:
 
 
 def _system_display_label(system: BondingSystem) -> str | None:
+    if system.tag == "ionic" and len(system.member_edges) == 1 and system.shared_electrons.value == 0:
+        return "ionic"
     if system.tag not in {None, "single", "double", "triple", "quadruple"}:
         return system.tag
     if len(system.member_edges) == 1:
@@ -1066,6 +1068,7 @@ _HTML_TEMPLATE = """<!doctype html>
       }
 
     function covalentLabel(tag, sharedElectrons, edges) {
+      if (tag === "ionic" && edges && edges.length === 1 && sharedElectrons === 0) return "ionic";
       if (tag && tag !== "single" && tag !== "double" && tag !== "triple" && tag !== "quadruple") return null;
       if (!edges || edges.length !== 1) return null;
         if (sharedElectrons === 2) return "single covalent";

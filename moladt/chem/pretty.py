@@ -369,6 +369,8 @@ def _format_system_label(system_id: int, system: BondingSystem) -> str:
 def _format_edge_system_ref(system_id: SystemId, system: BondingSystem) -> str:
     label = _format_system_label(system_id.value, system)
     edge_electrons = _system_electrons_per_edge(system)
+    if _is_ionic_system(system):
+        return f"{label}:{_format_electrons(edge_electrons)}"
     if len(system.member_edges) == 1 and system.shared_electrons.value in {2, 4, 6, 8}:
         return f"{label}:{_format_electrons(edge_electrons)}"
     return f"{label}:{_format_electrons(edge_electrons)}/edge from {_format_electrons(system.shared_electrons.value)}"
@@ -385,10 +387,16 @@ def _edge_shared_electrons(system_items: Iterable[tuple[SystemId, BondingSystem]
 
 
 def _system_display_label(system: BondingSystem) -> str | None:
+    if _is_ionic_system(system):
+        return "ionic"
     covalent_label = _covalent_label(system)
     if covalent_label is not None:
         return covalent_label
     return system.tag
+
+
+def _is_ionic_system(system: BondingSystem) -> bool:
+    return system.tag == "ionic" and len(system.member_edges) == 1 and system.shared_electrons.value == 0
 
 
 def _covalent_label(system: BondingSystem) -> str | None:

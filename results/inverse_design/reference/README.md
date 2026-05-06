@@ -23,6 +23,8 @@ The molecule files are explicit MolADT values: atoms plus bonding systems. A
 generated single, double, triple, or quadruple edge is stored as a one-edge
 system sharing 2, 4, 6, or 8 electrons, so pretty-printing the files shows
 electron sharing over the edge rather than a separate bond-order field.
+Ionic contacts use the same system layer: the edge is a one-edge `ionic` system
+with 0 shared electrons, and the formal charges live on the atoms.
 
 Run `make freesolv` first when these molecules should be paired with a fresh FreeSolv benchmark.
 

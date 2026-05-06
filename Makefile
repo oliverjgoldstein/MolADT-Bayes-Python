@@ -26,7 +26,7 @@ BENCHMARK_VERBOSE ?= 1
 EXAMPLE ?= ferrocene
 VIEWER_EXAMPLES ?= ferrocene
 VIEWER_OUTPUT ?= results/viewer/$(firstword $(VIEWER_EXAMPLES)).viewer.html
-VIEW_EXAMPLES ?= benzene diborane ferrocene morphine methane water
+VIEW_EXAMPLES ?= benzene diborane ferrocene morphine methane water sodium_chloride
 VIEW_OUTPUT ?= results/viewer/examples.viewer.html
 OPEN_VIEWER ?= 0
 VIEWER_COUNT ?= 10
@@ -149,7 +149,7 @@ help:
 	"  make python-parse-smiles    Parse c1ccccc1" \
 		"  make python-to-smiles       Render molecules/benzene.sdf to SMILES" \
 		"  make python-pretty-example  Render EXAMPLE=ferrocene or EXAMPLE=diborane; add OPEN_VIEWER=1 to open HTML" \
-		"  make view                   Open six example molecules in one browser viewer" \
+		"  make view                   Open seven example molecules in one browser viewer" \
 		"  make molecule-viewer        Export a standalone 3D molecule viewer HTML file; add OPEN_VIEWER=1 to open it" \
 		"  make test-molecule-viewer   Run the molecule viewer tests, then open the viewer" \
 		"  make freesolv              Run the long FreeSolv MolADT-vs-MoleculeNet comparison" \

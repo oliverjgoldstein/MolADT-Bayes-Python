@@ -10,10 +10,11 @@ from .manuscript import (
     MANUSCRIPT_EXAMPLES,
     MORPHINE_MANUSCRIPT,
     ManuscriptExample,
+    SODIUM_CHLORIDE_MANUSCRIPT,
     get_manuscript_example,
 )
 from .morphine import MORPHINE_RING_CLOSURE_SMILES, morphine_pretty
-from .sample_molecules import hydrogen, methane, oxygen, water
+from .sample_molecules import hydrogen, methane, oxygen, sodium_chloride, water
 
 __all__ = [
     "BENZENE_MANUSCRIPT",
@@ -23,6 +24,7 @@ __all__ = [
     "MORPHINE_MANUSCRIPT",
     "MORPHINE_RING_CLOSURE_SMILES",
     "ManuscriptExample",
+    "SODIUM_CHLORIDE_MANUSCRIPT",
     "benzene",
     "benzene_pretty",
     "diborane_pretty",
@@ -32,5 +34,6 @@ __all__ = [
     "hydrogen",
     "methane",
     "oxygen",
+    "sodium_chloride",
     "water",
 ]
