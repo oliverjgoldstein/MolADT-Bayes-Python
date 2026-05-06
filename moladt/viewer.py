@@ -12,15 +12,18 @@ from .chem.molecule import Molecule, molecule_edges
 from .chem.molecule_ops import effective_order
 
 
-_SYSTEM_COLORS = (
-    "#f05a3f",
-    "#008f87",
-    "#7b5cff",
-    "#d89b00",
-    "#2f73d9",
-    "#c43b78",
-    "#258a45",
-    "#94552b",
+_COVALENT_BOND_COLOR = "#374151"
+_IONIC_SYSTEM_COLOR = "#0f766e"
+
+_EXTRA_SYSTEM_COLORS = (
+    "#0891b2",
+    "#db2777",
+    "#ca8a04",
+    "#475569",
+    "#0d9488",
+    "#4f46e5",
+    "#a16207",
+    "#be185d",
 )
 
 _ELEMENT_STYLES: dict[str, dict[str, object]] = {
@@ -77,7 +80,7 @@ def molecule_viewer_payload(molecule: Molecule, *, title: str = "MolADT 3D Viewe
             "label": _system_label(system_id.value, system),
             "tag": system.tag,
             "sharedElectrons": system.shared_electrons.value,
-            "color": _SYSTEM_COLORS[(system_id.value - 1) % len(_SYSTEM_COLORS)],
+            "color": _system_color(system_id.value, system),
             "atoms": [atom_id.value for atom_id in sorted(system.member_atoms)],
             "edges": [_edge_payload(edge, molecule=molecule) for edge in sorted(system.member_edges)],
         }
@@ -113,6 +116,34 @@ def _system_display_label(system: BondingSystem) -> str | None:
         if system.shared_electrons.value == 8:
             return "quadruple covalent"
     return system.tag
+
+
+def _system_color(system_id: int, system: BondingSystem) -> str:
+    standard_key = _standard_system_key(system)
+    if standard_key == "ionic":
+        return _IONIC_SYSTEM_COLOR
+    if standard_key is not None:
+        return _COVALENT_BOND_COLOR
+    return _EXTRA_SYSTEM_COLORS[(system_id - 1) % len(_EXTRA_SYSTEM_COLORS)]
+
+
+def _standard_system_key(system: BondingSystem) -> str | None:
+    if _is_ionic_system(system):
+        return "ionic"
+    if system.tag not in {None, "single", "double", "triple", "quadruple"}:
+        return None
+    if len(system.member_edges) != 1:
+        return None
+    shared_electrons = system.shared_electrons.value
+    if shared_electrons == 2:
+        return "single"
+    if shared_electrons == 4:
+        return "double"
+    if shared_electrons == 6:
+        return "triple"
+    if shared_electrons == 8:
+        return "quadruple"
+    return None
 
 
 def _ionic_edge_keys(molecule: Molecule) -> frozenset[tuple[int, int]]:
@@ -752,7 +783,9 @@ _HTML_TEMPLATE = """<!doctype html>
       default: { color: "#7b8794", edge: "#485260", radius: 0.82 }
     };
 
-    const SYSTEM_COLORS = ["#f05a3f", "#008f87", "#7b5cff", "#d89b00", "#2f73d9", "#c43b78", "#258a45", "#94552b"];
+    const COVALENT_BOND_COLOR = "#374151";
+    const IONIC_SYSTEM_COLOR = "#0f766e";
+    const EXTRA_SYSTEM_COLORS = ["#0891b2", "#db2777", "#ca8a04", "#475569", "#0d9488", "#4f46e5", "#a16207", "#be185d"];
     const POSITIVE_CHARGE_COLOR = "#2563eb";
     const NEGATIVE_CHARGE_COLOR = "#dc2626";
     const canvas = document.getElementById("molecule-canvas");
@@ -935,7 +968,7 @@ _HTML_TEMPLATE = """<!doctype html>
           label: systemLabel(id, system.tag || null, sharedElectrons, edges),
           tag: system.tag || null,
           sharedElectrons,
-          color: SYSTEM_COLORS[index % SYSTEM_COLORS.length],
+          color: systemColor(id, system.tag || null, sharedElectrons, edges, index),
           atoms: (system.member_atoms || []).map(atomIdValue),
           edges
         };
@@ -1063,7 +1096,7 @@ _HTML_TEMPLATE = """<!doctype html>
         id: Number(system.id),
         label: system.label || systemLabel(Number(system.id), system.tag || null, Number(system.sharedElectrons || 0), system.edges || []),
         sharedElectrons: Number(system.sharedElectrons || 0),
-        color: system.color || SYSTEM_COLORS[index % SYSTEM_COLORS.length],
+        color: system.color || systemColor(Number(system.id), system.tag || null, Number(system.sharedElectrons || 0), system.edges || [], index),
         atoms: (system.atoms || []).map(Number),
         edges: (system.edges || []).map((edge) => ({
           a: Number(edge.a),
@@ -1108,8 +1141,57 @@ _HTML_TEMPLATE = """<!doctype html>
         if (sharedElectrons === 4) return "double covalent";
         if (sharedElectrons === 6) return "triple covalent";
         if (sharedElectrons === 8) return "quadruple covalent";
-        return null;
-      }
+      return null;
+    }
+
+    function standardSystemKey(tag, sharedElectrons, edges) {
+      if (tag === "ionic" && edges && edges.length === 1 && sharedElectrons === 0) return "ionic";
+      if (tag && tag !== "single" && tag !== "double" && tag !== "triple" && tag !== "quadruple") return null;
+      if (!edges || edges.length !== 1) return null;
+      if (sharedElectrons === 2) return "single";
+      if (sharedElectrons === 4) return "double";
+      if (sharedElectrons === 6) return "triple";
+      if (sharedElectrons === 8) return "quadruple";
+      return null;
+    }
+
+    function systemColor(id, tag, sharedElectrons, edges, index) {
+      const key = standardSystemKey(tag, sharedElectrons, edges);
+      if (key === "ionic") return IONIC_SYSTEM_COLOR;
+      if (key) return COVALENT_BOND_COLOR;
+      const offset = Number.isFinite(index) ? index : Number(id || 1) - 1;
+      return EXTRA_SYSTEM_COLORS[((offset % EXTRA_SYSTEM_COLORS.length) + EXTRA_SYSTEM_COLORS.length) % EXTRA_SYSTEM_COLORS.length];
+    }
+
+    function isStandardCovalentSystem(system) {
+      return !!standardCovalentLineCount(system);
+    }
+
+    function standardCovalentLineCount(system) {
+      if (!system) return 0;
+      const key = standardSystemKey(system.tag || null, Number(system.sharedElectrons || 0), system.edges || []);
+      if (key === "single") return 1;
+      if (key === "double") return 2;
+      if (key === "triple") return 3;
+      if (key === "quadruple") return 4;
+      return 0;
+    }
+
+    function standardSystemByEdge(systems) {
+      const byEdge = new Map();
+      (systems || []).forEach((system) => {
+        const lineCount = standardCovalentLineCount(system);
+        if (lineCount) {
+          (system.edges || []).forEach((edge) => byEdge.set(edgeKey(edge), system));
+        }
+      });
+      return byEdge;
+    }
+
+    function lineCountFromBond(bond, standardByEdge) {
+      const standard = standardByEdge.get(edgeKey(bond));
+      return standardCovalentLineCount(standard) || Math.max(1, Math.min(4, Math.round(Number(bond.order || 1))));
+    }
 
     function isIonicSystem(system) {
       return system && system.tag === "ionic" && system.sharedElectrons === 0 && system.edges && system.edges.length === 1;
@@ -1129,6 +1211,15 @@ _HTML_TEMPLATE = """<!doctype html>
       if (Number(charge) > 0) return POSITIVE_CHARGE_COLOR;
       if (Number(charge) < 0) return NEGATIVE_CHARGE_COLOR;
       return "#535b63";
+    }
+
+    function chargeGradientForEdge(atomMap, edge) {
+      const atomA = atomMap.get(Number(edge.a));
+      const atomB = atomMap.get(Number(edge.b));
+      return {
+        colorA: chargeColor(atomA ? atomA.charge : 0),
+        colorB: chargeColor(atomB ? atomB.charge : 0)
+      };
     }
 
       function resizeCanvas() {
@@ -1240,6 +1331,27 @@ _HTML_TEMPLATE = """<!doctype html>
       ctx.lineTo(bx, by);
       ctx.stroke();
       ctx.restore();
+    }
+
+    function bondLineOffsets(lineCount, spacing) {
+      if (lineCount <= 1) return [0];
+      const center = (lineCount - 1) / 2;
+      return Array.from({ length: lineCount }, (_, index) => (index - center) * spacing);
+    }
+
+    function drawBondLines(a, b, options) {
+      const lineCount = Math.max(1, Math.min(4, Math.round(Number(options.lineCount || 1))));
+      const spacing = Number(options.spacing || 5);
+      bondLineOffsets(lineCount, spacing).forEach((offset) => {
+        drawLine(a, b, {
+          width: options.width,
+          color: options.color,
+          colorA: options.colorA || options.color,
+          colorB: options.colorB || options.color,
+          alpha: options.alpha,
+          offset: Number(options.offset || 0) + offset
+        });
+      });
     }
 
     function drawChargeField(points) {
@@ -1750,31 +1862,64 @@ _HTML_TEMPLATE = """<!doctype html>
         a: points.get(bond.a),
         b: points.get(bond.b)
       })).filter((item) => item.a && item.b).sort((left, right) => ((left.a.z + left.b.z) - (right.a.z + right.b.z)));
+      const standardByEdge = standardSystemByEdge(molecule.systems);
 
       drawCoordinateAxes();
       drawChargeField(points);
       bondDraws.forEach(({ bond, a, b }) => {
-        const width = Math.max(3.5, 4.2 + Math.min(2.5, bond.order - 1) * 2.2) * ((a.p + b.p) / 2) * state.zoom;
-        drawLine(a, b, {
-          width,
-          colorA: "rgba(83, 91, 99, 0.78)",
-          colorB: "rgba(83, 91, 99, 0.78)",
-          alpha: bond.kind === "ionic" ? 0.58 : 0.78
+        const perspective = ((a.p + b.p) / 2) * state.zoom;
+        const width = Math.max(1.8, 2.4 * perspective);
+        const spacing = Math.max(4, 5.2 * perspective);
+        const gradient = bond.kind === "ionic" ? chargeGradientForEdge(molecule.atomMap, bond) : null;
+        drawBondLines(a, b, {
+          lineCount: gradient ? 1 : lineCountFromBond(bond, standardByEdge),
+          width: gradient ? Math.max(2.6, width + 0.8) : width,
+          spacing,
+          color: COVALENT_BOND_COLOR,
+          colorA: gradient ? gradient.colorA : COVALENT_BOND_COLOR,
+          colorB: gradient ? gradient.colorB : COVALENT_BOND_COLOR,
+          alpha: gradient ? 0.92 : 0.86
         });
       });
 
       if (state.systems) {
-        const lanes = systemEdgeLaneMap(molecule.systems);
+        const lanes = systemEdgeLaneMap(molecule.systems.filter((system) => !isStandardCovalentSystem(system)));
         molecule.systems.forEach((system) => {
-          const active = state.activeSystem === null || state.activeSystem === system.id;
+          const selected = state.activeSystem === system.id;
+          const active = state.activeSystem === null || selected;
           system.edges.forEach((edge) => {
             const a = points.get(edge.a);
             const b = points.get(edge.b);
             if (a && b) {
+              const perspective = ((a.p + b.p) / 2) * state.zoom;
+              if (isIonicSystem(system)) {
+                const gradient = chargeGradientForEdge(molecule.atomMap, edge);
+                drawBondLines(a, b, {
+                  lineCount: 1,
+                  width: active ? Math.max(3.2, 3.4 * perspective) : Math.max(2.2, 2.4 * perspective),
+                  spacing: Math.max(4, 5.2 * perspective),
+                  colorA: gradient.colorA,
+                  colorB: gradient.colorB,
+                  alpha: active ? 0.95 : 0.22
+                });
+                return;
+              }
+              const covalentLines = standardCovalentLineCount(system);
+              if (covalentLines) {
+                if (!selected) return;
+                drawBondLines(a, b, {
+                  lineCount: covalentLines,
+                  width: Math.max(2.2, 2.8 * perspective),
+                  spacing: Math.max(4.4, 5.6 * perspective),
+                  color: COVALENT_BOND_COLOR,
+                  alpha: 0.98
+                });
+                return;
+              }
               const lane = lanes.get(edgeKey(edge) + ":" + Number(system.id)) || { index: 0, count: 1 };
               const width = active ? 6.2 : 3.8;
               const laneOffset = lane.count > 1 ? (lane.index - (lane.count - 1) / 2) * (width + 2.0) : 0;
-              const edgeColor = isIonicSystem(system) ? "rgba(83, 91, 99, 0.62)" : system.color;
+              const edgeColor = system.color;
               drawLine(a, b, {
                 width,
                 color: edgeColor,

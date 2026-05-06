@@ -8,8 +8,8 @@ import pytest
 
 from moladt.cli import main
 import moladt.cli as cli
-from moladt.examples import diborane_pretty, ferrocene_pretty, sodium_chloride
-from moladt.io import molecule_to_json
+from moladt.examples import benzene_pretty, diborane_pretty, ferrocene_pretty, sodium_chloride
+from moladt.io import molecule_to_json, parse_smiles
 from moladt.viewer import (
     molecule_viewer_collection_html,
     molecule_viewer_collection_payload,
@@ -81,8 +81,9 @@ def test_molecule_viewer_payload_marks_ionic_edges_and_draws_charge_field() -> N
     assert "POSITIVE_CHARGE_COLOR" in html
     assert "NEGATIVE_CHARGE_COLOR" in html
     assert "drawChargeField" in html
+    assert "drawBondLines" in html
+    assert "chargeGradientForEdge" in html
     assert '"kind":"ionic"' in html
-    assert "chargeGradientForEdge" not in html
     assert "setLineDash" not in html
 
 
@@ -133,6 +134,27 @@ def test_molecule_viewer_payload_keeps_overlapping_system_colours_distinct() -> 
 
     assert edge_to_colours[(7, 11)] == {cp2_colour, single_colour}
     assert cp2_colour != single_colour
+
+
+def test_molecule_viewer_payload_uses_grey_covalent_and_coloured_nonstandard_systems() -> None:
+    covalent_colour = "#374151"
+    single_payload = molecule_viewer_payload(parse_smiles("CC"), title="Ethane")
+    double_payload = molecule_viewer_payload(parse_smiles("C=C"), title="Ethene")
+    triple_payload = molecule_viewer_payload(parse_smiles("C#N"), title="Hydrogen cyanide")
+    quadruple_payload = molecule_viewer_payload(parse_smiles("C$C"), title="Quadruple covalent")
+    ionic_payload = molecule_viewer_payload(sodium_chloride, title="Sodium chloride")
+    benzene_payload = molecule_viewer_payload(benzene_pretty, title="Benzene")
+
+    assert {system["color"] for system in single_payload["systems"] if "single covalent" in system["label"]} == {
+        covalent_colour
+    }
+    assert next(system["color"] for system in double_payload["systems"] if "double covalent" in system["label"]) == covalent_colour
+    assert next(system["color"] for system in triple_payload["systems"] if "triple covalent" in system["label"]) == covalent_colour
+    assert next(system["color"] for system in quadruple_payload["systems"] if "quadruple covalent" in system["label"]) == covalent_colour
+    assert next(system["color"] for system in ionic_payload["systems"] if system["label"].endswith("ionic")) == "#0f766e"
+
+    pi_ring_colour = next(system["color"] for system in benzene_payload["systems"] if system["tag"] == "pi_ring")
+    assert pi_ring_colour not in {covalent_colour, "#0f766e"}
 
 
 def test_molecule_viewer_payload_includes_atom_orbitals() -> None:
