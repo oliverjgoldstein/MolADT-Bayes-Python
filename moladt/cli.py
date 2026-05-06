@@ -24,7 +24,12 @@ from .io.molecule_json import molecule_from_json, molecule_to_json
 from .io.python_literal import molecule_to_python_literal
 from .io.sdf import read_sdf_record
 from .io.smiles import molecule_to_smiles, parse_smiles
-from .viewer import open_molecule_viewer, write_molecule_viewer_collection_html, write_molecule_viewer_html
+from .viewer import (
+    molecule_viewer_uri,
+    open_molecule_viewer,
+    write_molecule_viewer_collection_html,
+    write_molecule_viewer_html,
+)
 
 
 EXAMPLE_VIEWER_MOLECULES: dict[str, tuple[str, Molecule]] = {
@@ -249,10 +254,9 @@ def _handle_view_html(
             resolved_output,
             title=title or f"{len(entries)} MolADT molecules",
         )
-    print(written)
+    _print_viewer_location(written)
     if open_viewer:
-        open_molecule_viewer(written)
-        print(f"Opened viewer: {written.resolve().as_uri()}")
+        _open_viewer_with_fallback(written)
     return 0
 
 
@@ -272,10 +276,9 @@ def _handle_view_examples(
         resolved_output,
         title=title or "MolADT example molecules",
     )
-    print(written)
+    _print_viewer_location(written)
     if open_viewer:
-        open_molecule_viewer(written)
-        print(f"Opened viewer: {written.resolve().as_uri()}")
+        _open_viewer_with_fallback(written)
     return 0
 
 
@@ -295,10 +298,23 @@ def _handle_pretty_example(name: str, *, viewer_output: Path | None = None, open
         output_path = viewer_output or Path("results") / "viewer" / f"{example.slug}.viewer.html"
         written = write_molecule_viewer_html(example.molecule, output_path, title=example.title)
         print(f"Viewer: {written}")
+        print(f"Viewer URL: {molecule_viewer_uri(written)}")
         if open_viewer:
-            open_molecule_viewer(written)
-            print(f"Opened viewer: {written.resolve().as_uri()}")
+            _open_viewer_with_fallback(written)
     return 0
+
+
+def _print_viewer_location(path: Path) -> None:
+    print(path)
+    print(f"Viewer URL: {molecule_viewer_uri(path)}")
+
+
+def _open_viewer_with_fallback(path: Path) -> None:
+    uri = molecule_viewer_uri(path)
+    if open_molecule_viewer(path):
+        print(f"Opened viewer: {uri}")
+    else:
+        print(f"Viewer open request failed; open this URL manually: {uri}")
 
 
 if __name__ == "__main__":

@@ -48,6 +48,7 @@ Run:
 - `to-python` and `to-example` emit the canonical explicit form: sorted `AtomId(...)` atoms, normalized sorted `Edge(...)` entries, sorted systems, and no generated loops in the output.
 - `view-html` accepts MolADT JSON. Pass multiple JSON files to write one HTML page with a scrollable molecule list.
 - `view-examples` defaults to benzene, diborane, ferrocene, morphine, methane, water, and sodium chloride, preserving each molecule's bonding systems.
+- Viewer commands print both the HTML path and a portable `file://` URL. With `--open-viewer`, a failed OS auto-open request reports the same URL as the manual fallback.
 - `--open-viewer` opens the written HTML viewer in the default browser.
 - `pretty-example --open-viewer` still prints the report, then writes and opens `results/viewer/<example>.viewer.html`.
 - `to-smiles` is intentionally conservative. It supports localized covalent systems, supported six-edge pi rings, and the supported zero-electron ionic edge pattern, but it does not cover non-classical multicenter examples such as diborane or ferrocene.

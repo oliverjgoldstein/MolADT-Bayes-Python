@@ -73,7 +73,7 @@ make molecule-viewer VIEWER_EXAMPLES=ferrocene
 ./.venv/bin/python -m moladt.cli view-html benzene.moladt.json --output benzene.viewer.html
 ```
 
-This writes a standalone HTML viewer under `results/viewer/`. The Make target uses built-in explicit ADT examples. The direct `view-html` command accepts MolADT JSON. Click an atom in the viewer to show coordinates, 3D edge lengths, effective orders, bonding systems, and bond angles calculated from the molecule's coordinate data. Ionic edges are drawn as blue-to-red charge gradients, where blue marks the positive atom and red marks the negative atom.
+This writes a standalone HTML viewer under `results/viewer/`. The Make target uses built-in explicit ADT examples. The direct `view-html` command accepts MolADT JSON. Viewer commands print a portable `file://` URL for manual opening on any OS if auto-open fails. Click an atom in the viewer to show coordinates, 3D edge lengths, effective orders, bonding systems, and bond angles calculated from the molecule's coordinate data. Charge is shown as blue/red halos around charged atoms rather than as colour on the ionic edge itself.
 
 ## Rule Of Thumb
 

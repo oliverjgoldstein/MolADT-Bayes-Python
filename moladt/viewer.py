@@ -208,8 +208,13 @@ def write_molecule_viewer_collection_html(
 def open_molecule_viewer(path: str | Path) -> bool:
     """Open a written molecule viewer HTML file in the default browser."""
 
-    output_path = Path(path).resolve()
-    return webbrowser.open(output_path.as_uri())
+    return webbrowser.open(molecule_viewer_uri(path))
+
+
+def molecule_viewer_uri(path: str | Path) -> str:
+    """Return the portable file URI for a written molecule viewer HTML file."""
+
+    return Path(path).resolve().as_uri()
 
 
 def _edge_payload(edge: Edge, *, molecule: Molecule | None = None) -> dict[str, int | float]:
@@ -1120,19 +1125,10 @@ _HTML_TEMPLATE = """<!doctype html>
       return keys;
     }
 
-    function chargeGradientForEdge(atomMap, edge) {
-      const atomA = atomMap.get(Number(edge.a));
-      const atomB = atomMap.get(Number(edge.b));
-      return {
-        colorA: chargeColor(atomA ? atomA.charge : 0),
-        colorB: chargeColor(atomB ? atomB.charge : 0)
-      };
-    }
-
     function chargeColor(charge) {
       if (Number(charge) > 0) return POSITIVE_CHARGE_COLOR;
       if (Number(charge) < 0) return NEGATIVE_CHARGE_COLOR;
-      return "rgba(83, 91, 99, 0.78)";
+      return "#535b63";
     }
 
       function resizeCanvas() {
@@ -1219,9 +1215,6 @@ _HTML_TEMPLATE = """<!doctype html>
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.lineWidth = options.width;
-      if (options.dash) {
-        ctx.setLineDash(options.dash);
-      }
       const offset = Number(options.offset || 0);
       let ax = a.x;
       let ay = a.y;
@@ -1246,6 +1239,38 @@ _HTML_TEMPLATE = """<!doctype html>
       ctx.moveTo(ax, ay);
       ctx.lineTo(bx, by);
       ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawChargeField(points) {
+      const charged = Array.from(points.values())
+        .filter((point) => point.atom && Number(point.atom.charge || 0) !== 0)
+        .sort((left, right) => left.z - right.z);
+      if (!charged.length) {
+        return;
+      }
+      ctx.save();
+      charged.forEach((point) => {
+        const charge = Number(point.atom.charge || 0);
+        const magnitude = Math.min(3, Math.abs(charge));
+        const fieldRadius = Math.max(46, point.radius * (4.3 + magnitude * 0.7));
+        const color = chargeColor(charge);
+        const gradient = ctx.createRadialGradient(
+          point.x,
+          point.y,
+          Math.max(3, point.radius * 0.7),
+          point.x,
+          point.y,
+          fieldRadius
+        );
+        gradient.addColorStop(0, hexToRgba(color, 0.30));
+        gradient.addColorStop(0.48, hexToRgba(color, 0.13));
+        gradient.addColorStop(1, hexToRgba(color, 0));
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, fieldRadius, 0, Math.PI * 2);
+        ctx.fill();
+      });
       ctx.restore();
     }
 
@@ -1727,14 +1752,14 @@ _HTML_TEMPLATE = """<!doctype html>
       })).filter((item) => item.a && item.b).sort((left, right) => ((left.a.z + left.b.z) - (right.a.z + right.b.z)));
 
       drawCoordinateAxes();
+      drawChargeField(points);
       bondDraws.forEach(({ bond, a, b }) => {
         const width = Math.max(3.5, 4.2 + Math.min(2.5, bond.order - 1) * 2.2) * ((a.p + b.p) / 2) * state.zoom;
-        const chargeGradient = bond.kind === "ionic" ? chargeGradientForEdge(molecule.atomMap, bond) : null;
         drawLine(a, b, {
           width,
-          colorA: chargeGradient ? chargeGradient.colorA : "rgba(83, 91, 99, 0.78)",
-          colorB: chargeGradient ? chargeGradient.colorB : "rgba(83, 91, 99, 0.78)",
-          alpha: chargeGradient ? 0.92 : 0.78
+          colorA: "rgba(83, 91, 99, 0.78)",
+          colorB: "rgba(83, 91, 99, 0.78)",
+          alpha: bond.kind === "ionic" ? 0.58 : 0.78
         });
       });
 
@@ -1749,14 +1774,13 @@ _HTML_TEMPLATE = """<!doctype html>
               const lane = lanes.get(edgeKey(edge) + ":" + Number(system.id)) || { index: 0, count: 1 };
               const width = active ? 6.2 : 3.8;
               const laneOffset = lane.count > 1 ? (lane.index - (lane.count - 1) / 2) * (width + 2.0) : 0;
-              const chargeGradient = isIonicSystem(system) ? chargeGradientForEdge(molecule.atomMap, edge) : null;
+              const edgeColor = isIonicSystem(system) ? "rgba(83, 91, 99, 0.62)" : system.color;
               drawLine(a, b, {
                 width,
-                color: system.color,
-                colorA: chargeGradient ? chargeGradient.colorA : system.color,
-                colorB: chargeGradient ? chargeGradient.colorB : system.color,
+                color: edgeColor,
+                colorA: edgeColor,
+                colorB: edgeColor,
                 alpha: active ? 1 : 0.18,
-                dash: state.activeSystem === system.id ? [] : [10, 8],
                 offset: laneOffset
               });
             }
@@ -2027,6 +2051,7 @@ __all__ = [
     "molecule_viewer_collection_payload",
     "molecule_viewer_html",
     "molecule_viewer_payload",
+    "molecule_viewer_uri",
     "open_molecule_viewer",
     "write_molecule_viewer_collection_html",
     "write_molecule_viewer_html",

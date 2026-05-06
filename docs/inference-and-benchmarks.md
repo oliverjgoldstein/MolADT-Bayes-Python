@@ -22,6 +22,10 @@ python -m experiments.freesolv_inverse_design --target -5.0 --open-viewer
 python -m experiments.freesolv_inverse_design --view-results results/inverse_design/reference --open-viewer
 ```
 
+When viewer output is requested, the command prints a portable `file://` URL and
+uses that same URL as the manual fallback if the operating system does not open a
+browser automatically.
+
 ## FreeSolv Benchmark
 
 `make freesolv` runs:

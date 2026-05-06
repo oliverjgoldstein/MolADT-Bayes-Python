@@ -15,6 +15,7 @@ from moladt.viewer import (
     molecule_viewer_collection_payload,
     molecule_viewer_html,
     molecule_viewer_payload,
+    molecule_viewer_uri,
     write_molecule_viewer_html,
 )
 
@@ -65,7 +66,7 @@ def test_molecule_viewer_payload_includes_bonding_system_annotations() -> None:
     assert all("length" in edge for edge in bridge_systems[0]["edges"])
 
 
-def test_molecule_viewer_payload_marks_ionic_edges_for_charge_gradient() -> None:
+def test_molecule_viewer_payload_marks_ionic_edges_and_draws_charge_field() -> None:
     payload = molecule_viewer_payload(sodium_chloride, title="Sodium chloride")
 
     assert payload["atoms"][0]["charge"] == 1
@@ -79,7 +80,10 @@ def test_molecule_viewer_payload_marks_ionic_edges_for_charge_gradient() -> None
     html = molecule_viewer_html(sodium_chloride, title="Sodium chloride")
     assert "POSITIVE_CHARGE_COLOR" in html
     assert "NEGATIVE_CHARGE_COLOR" in html
+    assert "drawChargeField" in html
     assert '"kind":"ionic"' in html
+    assert "chargeGradientForEdge" not in html
+    assert "setLineDash" not in html
 
 
 def test_molecule_viewer_payload_lengths_come_from_3d_coordinates() -> None:
@@ -242,6 +246,7 @@ def test_view_html_cli_accepts_moladt_json(tmp_path: Path, capsys) -> None:
 
     assert result == 0
     assert str(html_path) in output
+    assert f"Viewer URL: {molecule_viewer_uri(html_path)}" in output
     assert "bridge_h4_3c2e" in html_path.read_text(encoding="utf-8")
 
 
@@ -266,6 +271,7 @@ def test_view_html_cli_accepts_multiple_inputs_in_one_viewer(tmp_path: Path, cap
 
     assert result == 0
     assert str(html_path) in output
+    assert f"Viewer URL: {molecule_viewer_uri(html_path)}" in output
     assert "moladt-viewer-collection-v1" in html
     assert "diborane" in html
     assert "ferrocene" in html
@@ -298,6 +304,7 @@ def test_view_examples_cli_uses_builtin_adt_examples_with_bonding_systems(tmp_pa
 
     assert result == 0
     assert str(html_path) in output
+    assert f"Viewer URL: {molecule_viewer_uri(html_path)}" in output
     assert "moladt-viewer-collection-v1" in html
     assert "bridge_h3_3c2e" in html
     assert "fe_cp_coordination" in html
@@ -326,6 +333,31 @@ def test_view_html_cli_can_open_written_viewer(tmp_path: Path, capsys, monkeypat
     assert result == 0
     assert opened == [html_path]
     assert "Opened viewer:" in output
+    assert molecule_viewer_uri(html_path) in output
+
+
+def test_view_html_cli_reports_url_when_auto_open_fails(tmp_path: Path, capsys, monkeypatch) -> None:
+    json_path = tmp_path / "diborane.moladt.json"
+    html_path = tmp_path / "diborane viewer.html"
+    json_path.write_text(molecule_to_json(diborane_pretty), encoding="utf-8")
+
+    monkeypatch.setattr(cli, "open_molecule_viewer", lambda path: False)
+
+    result = main(
+        [
+            "view-html",
+            str(json_path),
+            "--output",
+            str(html_path),
+            "--open-viewer",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert result == 0
+    assert "Viewer open request failed" in output
+    assert "diborane%20viewer.html" in output
+    assert molecule_viewer_uri(html_path) in output
 
 
 def test_pretty_example_cli_can_write_and_open_viewer(tmp_path: Path, capsys, monkeypatch) -> None:
@@ -348,5 +380,6 @@ def test_pretty_example_cli_can_write_and_open_viewer(tmp_path: Path, capsys, mo
     assert result == 0
     assert "Ferrocene (Fe(C5H5)2)" in output
     assert "Viewer:" in output
+    assert f"Viewer URL: {molecule_viewer_uri(html_path)}" in output
     assert opened == [html_path]
     assert "fe_cp_coordination" in html_path.read_text(encoding="utf-8")

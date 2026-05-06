@@ -25,7 +25,7 @@ from moladt.chem.mutable import MutableMolecule
 from moladt.chem.validate import ValidationError, used_electrons_at
 from moladt.examples.sample_molecules import methane, water
 from moladt.io import molecule_from_dict, molecule_to_json_bytes, read_sdf
-from moladt.viewer import open_molecule_viewer, write_molecule_viewer_collection_html
+from moladt.viewer import molecule_viewer_uri, open_molecule_viewer, write_molecule_viewer_collection_html
 from scripts.common import PROCESSED_DATA_DIR, PROJECT_ROOT, configured_results_dir, ensure_directory
 from scripts.features import compute_moladt_featurized_descriptors
 from scripts.stan_runner import GP_SCREENED_FEATURE_COUNT
@@ -1190,8 +1190,11 @@ def write_saved_inverse_design_viewer_file(
 
 def open_result_viewers(paths: Sequence[Path], *, stream: TextIO) -> None:
     for path in paths:
-        open_molecule_viewer(path)
-        print(f"Opened viewer: {path.resolve().as_uri()}", file=stream)
+        uri = molecule_viewer_uri(path)
+        if open_molecule_viewer(path):
+            print(f"Opened viewer: {uri}", file=stream)
+        else:
+            print(f"Viewer open request failed; open this URL manually: {uri}", file=stream)
 
 
 def _remove_stale_candidate_files(output_dir: Path) -> None:

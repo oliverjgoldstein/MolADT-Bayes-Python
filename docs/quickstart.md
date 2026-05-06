@@ -28,11 +28,11 @@ make view
 make molecule-viewer VIEWER_EXAMPLES=ferrocene
 ```
 
-Those commands check SDF parsing, built-in examples, validation, and the standalone molecule viewer. `make view` clears repo Python bytecode caches, overwrites the viewer HTML, and opens seven built-in ADT examples in one browser page, preserving explicit bonding systems such as diborane bridges, ferrocene Fe-Cp coordination, and sodium chloride ionic contact. Ionic edges appear as blue-to-red charge gradients from positive to negative atoms. In the viewer, clicking an atom shows coordinates, 3D edge lengths, effective orders, bonding systems, and bond angles calculated from the molecule's coordinate data; the canvas also shows coordinate axes with Angstrom tick labels.
+Those commands check SDF parsing, built-in examples, validation, and the standalone molecule viewer. `make view` clears repo Python bytecode caches, overwrites the viewer HTML, and opens seven built-in ADT examples in one browser page, preserving explicit bonding systems such as diborane bridges, ferrocene Fe-Cp coordination, and sodium chloride ionic contact. Charge appears as blue/red halos around charged atoms, while covalent and ionic edge lines stay solid. In the viewer, clicking an atom shows coordinates, 3D edge lengths, effective orders, bonding systems, and bond angles calculated from the molecule's coordinate data; the canvas also shows coordinate axes with Angstrom tick labels.
 
 `make test-molecule-viewer` runs the viewer tests and then opens the configured viewer HTML in the default browser.
 
-Use `OPEN_VIEWER=1` when you want the generated viewer HTML to open in the default browser:
+Use `OPEN_VIEWER=1` when you want the generated viewer HTML to open in the default browser. Viewer commands also print a portable `file://` URL, so if auto-open fails you can open the reported URL manually:
 
 ```bash
 OPEN_VIEWER=1 make python-pretty-example EXAMPLE=morphine
