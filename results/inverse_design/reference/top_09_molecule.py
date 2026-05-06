@@ -47,7 +47,7 @@ molecule = Molecule(
                             Edge(AtomId(1), AtomId(2)),
                         }
                     ),
-                    'single',
+                    None,
                 ),
             ),
             (
@@ -59,7 +59,7 @@ molecule = Molecule(
                             Edge(AtomId(1), AtomId(3)),
                         }
                     ),
-                    'single',
+                    None,
                 ),
             ),
             (
@@ -71,7 +71,7 @@ molecule = Molecule(
                             Edge(AtomId(3), AtomId(4)),
                         }
                     ),
-                    'single',
+                    None,
                 ),
             ),
             (
@@ -83,7 +83,7 @@ molecule = Molecule(
                             Edge(AtomId(3), AtomId(5)),
                         }
                     ),
-                    'single',
+                    None,
                 ),
             ),
             (
@@ -95,7 +95,7 @@ molecule = Molecule(
                             Edge(AtomId(5), AtomId(6)),
                         }
                     ),
-                    'single',
+                    None,
                 ),
             ),
             (
@@ -107,7 +107,7 @@ molecule = Molecule(
                             Edge(AtomId(5), AtomId(7)),
                         }
                     ),
-                    'single',
+                    None,
                 ),
             ),
             (
@@ -119,7 +119,7 @@ molecule = Molecule(
                             Edge(AtomId(5), AtomId(8)),
                         }
                     ),
-                    'single',
+                    None,
                 ),
             ),
     ),

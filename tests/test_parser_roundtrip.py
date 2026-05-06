@@ -70,7 +70,7 @@ def test_benzene_round_trip_preserves_atom_count_and_sigma_bonds() -> None:
 def test_benzene_detects_one_pi_ring() -> None:
     record = read_sdf_record(PROJECT_ROOT / "molecules" / "benzene.sdf")
     assert len(record.molecule.systems) == 13
-    assert _count_tag(record.molecule, "single") == 12
+    assert _count_unnamed_edge_systems(record.molecule, 2) == 12
     assert _count_tag(record.molecule, "pi_ring") == 1
 
 
@@ -127,7 +127,7 @@ def test_smiles_parse_recovers_benzene_pi_ring() -> None:
     assert counts == Counter({"C": 6, "H": 6})
     assert len(molecule.local_bonds) == 12
     assert len(molecule.systems) == 13
-    assert _count_tag(molecule, "single") == 12
+    assert _count_unnamed_edge_systems(molecule, 2) == 12
     assert _count_tag(molecule, "pi_ring") == 1
 
 
@@ -137,8 +137,8 @@ def test_morphine_ring_closure_smiles_parses_as_a_boundary_format_example() -> N
     assert counts == Counter({"C": 17, "H": 19, "N": 1, "O": 3})
     assert len(molecule.local_bonds) == 44
     assert len(molecule.systems) == 44
-    assert _count_tag(molecule, "single") == 40
-    assert _count_tag(molecule, "double") == 4
+    assert _count_unnamed_edge_systems(molecule, 2) == 40
+    assert _count_unnamed_edge_systems(molecule, 4) == 4
     assert [
         (item.center.value, item.stereo_class.value, item.configuration, item.token)
         for item in molecule.smiles_stereochemistry.atom_stereo
@@ -195,8 +195,8 @@ def test_benzene_kekule_smiles_round_trip_preserves_localized_double_bonds() -> 
     assert counts == Counter({"C": 6, "H": 6})
     assert len(round_tripped.local_bonds) == 12
     assert len(round_tripped.systems) == 12
-    assert _count_tag(round_tripped, "single") == 9
-    assert _count_tag(round_tripped, "double") == 3
+    assert _count_unnamed_edge_systems(round_tripped, 2) == 9
+    assert _count_unnamed_edge_systems(round_tripped, 4) == 3
 
 
 def test_smiles_parse_preserves_atom_centered_stereochemistry_annotations() -> None:
@@ -225,3 +225,13 @@ def test_smiles_stereochemistry_survives_json_round_trip() -> None:
 
 def _count_tag(molecule, expected: str) -> int:
     return sum(1 for _, system in molecule.systems if system.tag == expected)
+
+
+def _count_unnamed_edge_systems(molecule, electrons: int) -> int:
+    return sum(
+        1
+        for _, system in molecule.systems
+        if system.tag is None
+        and len(system.member_edges) == 1
+        and system.shared_electrons.value == electrons
+    )

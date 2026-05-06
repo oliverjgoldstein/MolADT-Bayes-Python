@@ -60,11 +60,6 @@ ferrocene_pretty = Molecule(
                 NonNegative(6),
                 frozenset(
                     {
-                        Edge(AtomId(1), AtomId(2)),
-                        Edge(AtomId(1), AtomId(3)),
-                        Edge(AtomId(1), AtomId(4)),
-                        Edge(AtomId(1), AtomId(5)),
-                        Edge(AtomId(1), AtomId(6)),
                         Edge(AtomId(2), AtomId(3)),
                         Edge(AtomId(2), AtomId(6)),
                         Edge(AtomId(3), AtomId(4)),
@@ -81,11 +76,6 @@ ferrocene_pretty = Molecule(
                 NonNegative(6),
                 frozenset(
                     {
-                        Edge(AtomId(1), AtomId(7)),
-                        Edge(AtomId(1), AtomId(8)),
-                        Edge(AtomId(1), AtomId(9)),
-                        Edge(AtomId(1), AtomId(10)),
-                        Edge(AtomId(1), AtomId(11)),
                         Edge(AtomId(7), AtomId(8)),
                         Edge(AtomId(7), AtomId(11)),
                         Edge(AtomId(8), AtomId(9)),
@@ -99,7 +89,7 @@ ferrocene_pretty = Molecule(
         (
             SystemId(3),
             mk_bonding_system(
-                NonNegative(6),
+                NonNegative(12),
                 frozenset(
                     {
                         Edge(AtomId(1), AtomId(2)),
@@ -114,7 +104,7 @@ ferrocene_pretty = Molecule(
                         Edge(AtomId(1), AtomId(11)),
                     }
                 ),
-                "fe_backdonation",
+                "fe_cp_coordination",
             ),
         ),
     ),

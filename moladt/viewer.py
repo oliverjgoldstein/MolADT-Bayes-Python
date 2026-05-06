@@ -7,7 +7,7 @@ from html import escape
 from pathlib import Path
 from typing import Any, Sequence
 
-from .chem.dietz import AtomId, Edge
+from .chem.dietz import AtomId, BondingSystem, Edge
 from .chem.molecule import Molecule
 from .chem.molecule_ops import effective_order
 
@@ -73,7 +73,7 @@ def molecule_viewer_payload(molecule: Molecule, *, title: str = "MolADT 3D Viewe
     systems = [
         {
             "id": system_id.value,
-            "label": f"#{system_id.value} {system.tag}" if system.tag else f"#{system_id.value}",
+            "label": _system_label(system_id.value, system),
             "tag": system.tag,
             "sharedElectrons": system.shared_electrons.value,
             "color": _SYSTEM_COLORS[(system_id.value - 1) % len(_SYSTEM_COLORS)],
@@ -90,6 +90,24 @@ def molecule_viewer_payload(molecule: Molecule, *, title: str = "MolADT 3D Viewe
         "systems": systems,
         "angles": _angle_payloads(molecule),
     }
+
+
+def _system_label(system_id: int, system: BondingSystem) -> str:
+    display = _system_display_label(system)
+    return f"#{system_id} {display}" if display else f"#{system_id}"
+
+
+def _system_display_label(system: BondingSystem) -> str | None:
+    if system.tag not in {None, "single", "double", "triple"}:
+        return system.tag
+    if len(system.member_edges) == 1:
+        if system.shared_electrons.value == 2:
+            return "single covalent"
+        if system.shared_electrons.value == 4:
+            return "double covalent"
+        if system.shared_electrons.value == 6:
+            return "triple covalent"
+    return system.tag
 
 
 def molecule_viewer_html(molecule: Molecule, *, title: str = "MolADT 3D Viewer") -> str:
@@ -881,14 +899,16 @@ _HTML_TEMPLATE = """<!doctype html>
       const systems = (raw.systems || []).map((item, index) => {
         const system = item.bonding_system;
         const id = atomIdValue(item.system_id);
+        const sharedElectrons = atomIdValue(system.shared_electrons);
+        const edges = (system.member_edges || []).map(edgeFromMoladt);
         return {
           id,
-          label: system.tag ? "#" + id + " " + system.tag : "#" + id,
+          label: systemLabel(id, system.tag || null, sharedElectrons, edges),
           tag: system.tag || null,
-          sharedElectrons: atomIdValue(system.shared_electrons),
+          sharedElectrons,
           color: SYSTEM_COLORS[index % SYSTEM_COLORS.length],
           atoms: (system.member_atoms || []).map(atomIdValue),
-          edges: (system.member_edges || []).map(edgeFromMoladt)
+          edges
         };
       });
       const atoms = (raw.atoms || []).map((item) => {
@@ -950,7 +970,7 @@ _HTML_TEMPLATE = """<!doctype html>
       };
     }
 
-    function normalizePayload(raw) {
+      function normalizePayload(raw) {
       const payload = raw && raw.format === "moladt-viewer-v1" ? raw : fromMoladtJson(raw);
       const atoms = payload.atoms.map((atom) => {
         const style = ELEMENT_STYLES[atom.symbol] || ELEMENT_STYLES.default;
@@ -1007,7 +1027,7 @@ _HTML_TEMPLATE = """<!doctype html>
       const systems = (payload.systems || []).map((system, index) => ({
         ...system,
         id: Number(system.id),
-        label: system.label || (system.tag ? "#" + system.id + " " + system.tag : "#" + system.id),
+        label: system.label || systemLabel(Number(system.id), system.tag || null, Number(system.sharedElectrons || 0), system.edges || []),
         sharedElectrons: Number(system.sharedElectrons || 0),
         color: system.color || SYSTEM_COLORS[index % SYSTEM_COLORS.length],
         atoms: (system.atoms || []).map(Number),
@@ -1031,11 +1051,26 @@ _HTML_TEMPLATE = """<!doctype html>
         angles,
         center,
         scale,
-        axes: buildAxes(center, bounds, maxSpan)
-      };
-    }
+          axes: buildAxes(center, bounds, maxSpan)
+        };
+      }
 
-    function resizeCanvas() {
+      function systemLabel(id, tag, sharedElectrons, edges) {
+      const covalent = covalentLabel(tag, sharedElectrons, edges);
+        const display = covalent || tag;
+        return display ? "#" + id + " " + display : "#" + id;
+      }
+
+    function covalentLabel(tag, sharedElectrons, edges) {
+      if (tag && tag !== "single" && tag !== "double" && tag !== "triple") return null;
+      if (!edges || edges.length !== 1) return null;
+        if (sharedElectrons === 2) return "single covalent";
+        if (sharedElectrons === 4) return "double covalent";
+        if (sharedElectrons === 6) return "triple covalent";
+        return null;
+      }
+
+      function resizeCanvas() {
       const rect = canvas.getBoundingClientRect();
       const dpr = Math.max(1, window.devicePixelRatio || 1);
       canvas.width = Math.max(1, Math.floor(rect.width * dpr));

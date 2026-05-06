@@ -26,7 +26,7 @@ class ManuscriptExample:
 FERROCENE_MANUSCRIPT = ManuscriptExample(
     slug="ferrocene",
     title="Ferrocene (Fe(C5H5)2)",
-    note="Dietz-style ADT with two cyclopentadienyl pi systems and an Fe back-donation-style pool.",
+    note="Dietz-style ADT with two cyclopentadienyl pi systems and an Fe-Cp coordination system.",
     molecule=ferrocene_pretty,
 )
 

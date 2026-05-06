@@ -7,13 +7,6 @@ from ..chem.dietz import AtomId, BondingSystem, Edge
 from ..chem.molecule import Atom, AtomicSymbol, Molecule
 from ..chem.molecule_ops import effective_order
 
-_CONVENTIONAL_ONE_EDGE_SYSTEM_ELECTRONS = {
-    "single": 2,
-    "double": 4,
-    "triple": 6,
-}
-
-
 @dataclass(frozen=True, slots=True)
 class MolecularDescriptors:
     weight: float
@@ -239,15 +232,14 @@ def negative_charge_count(molecule: Molecule) -> float:
 def is_conventional_one_edge_system(system: BondingSystem) -> bool:
     return (
         len(system.member_edges) == 1
-        and system.tag in _CONVENTIONAL_ONE_EDGE_SYSTEM_ELECTRONS
-        and system.shared_electrons.value == _CONVENTIONAL_ONE_EDGE_SYSTEM_ELECTRONS[system.tag]
+        and system.shared_electrons.value in {2, 4, 6}
     )
 
 
 def is_sigma_singleton_system(system: BondingSystem) -> bool:
     return (
         is_conventional_one_edge_system(system)
-        and system.tag == "single"
+        and system.shared_electrons.value == 2
     )
 
 
@@ -256,7 +248,7 @@ def legacy_bonding_systems(molecule: Molecule) -> tuple[BondingSystem, ...]:
 
 
 def legacy_bonding_system_shared_electrons(system: BondingSystem) -> float:
-    if is_conventional_one_edge_system(system) and system.tag in {"double", "triple"}:
+    if is_conventional_one_edge_system(system) and system.shared_electrons.value in {4, 6}:
         return float(system.shared_electrons.value - 2)
     return float(system.shared_electrons.value)
 

@@ -221,8 +221,8 @@ def _with_single_edge_systems(local_bonds: frozenset[Edge], systems: MoleculeSys
 
     The canonical Dietz layer stores electron sharing in bonding systems. The
     `local_bonds` field is retained as a compatibility edge index, so any edge
-    supplied there but not already covered by a system becomes a singleton
-    single-bond system with two shared electrons.
+    supplied there but not already covered by a system becomes an unnamed
+    singleton system with two shared electrons.
     """
 
     covered_edges = frozenset(
@@ -238,7 +238,7 @@ def _with_single_edge_systems(local_bonds: frozenset[Edge], systems: MoleculeSys
     additions = tuple(
         (
             SystemId(next_id + offset),
-            mk_bonding_system(NonNegative(2), frozenset({edge}), "single"),
+            mk_bonding_system(NonNegative(2), frozenset({edge})),
         )
         for offset, edge in enumerate(missing_edges)
     )

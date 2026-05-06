@@ -49,9 +49,14 @@ def test_mutable_molecule_system_edits_do_not_touch_original() -> None:
 
     mutable.systems.clear()
 
-    assert [system.tag for _, system in ferrocene_pretty.systems if system.tag != "single"] == [
+    assert [system.tag for _, system in ferrocene_pretty.systems if system.tag] == [
         "cp1_pi",
         "cp2_pi",
-        "fe_backdonation",
+        "fe_cp_coordination",
     ]
-    assert all(system.tag == "single" for _, system in mutable.freeze().systems)
+    assert all(
+        system.tag is None
+        and len(system.member_edges) == 1
+        and system.shared_electrons.value == 2
+        for _, system in mutable.freeze().systems
+    )

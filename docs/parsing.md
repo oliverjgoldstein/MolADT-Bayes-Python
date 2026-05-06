@@ -9,7 +9,7 @@ MolADT can start from SDF, SMILES, or MolADT JSON.
 ./.venv/bin/python -m moladt.cli parse --properties molecules/benzene.sdf
 ```
 
-The parser accepts SDF V2000 and a core V3000 CTAB subset: atom coordinates, bond tables, atom-local charges, and property blocks. Bond table entries become bonding systems: single, double, and triple bonds are one-edge systems sharing 2, 4, and 6 electrons.
+The parser accepts SDF V2000 and a core V3000 CTAB subset: atom coordinates, bond tables, atom-local charges, and property blocks. Bond table entries become bonding systems: single, double, and triple bonds are one-edge systems sharing 2, 4, and 6 electrons, displayed as `single covalent`, `double covalent`, and `triple covalent`.
 
 ## MolADT JSON
 
@@ -51,7 +51,7 @@ print(molecule_to_smiles(round_tripped))
 ./.venv/bin/python -m moladt.cli to-smiles molecules/benzene.sdf
 ```
 
-The SMILES path is conservative. It covers the classical subset used by tests and examples. It emits the same one-edge systems for single/double/triple bonds, adds `pi_ring` systems for supported aromatic six-rings, and does not try to encode every MolADT molecule.
+The SMILES path is conservative. It covers the classical subset used by tests and examples. It emits the same `single covalent`, `double covalent`, and `triple covalent` one-edge systems, adds `pi_ring` systems for supported aromatic six-rings, and does not try to encode every MolADT molecule.
 
 ## Viewer
 
@@ -60,7 +60,7 @@ make molecule-viewer VIEWER_EXAMPLES=ferrocene
 ./.venv/bin/python -m moladt.cli view-html benzene.moladt.json --output benzene.viewer.html
 ```
 
-This writes a standalone HTML viewer under `results/viewer/`. The Make target uses built-in explicit ADT examples. The direct `view-html` command accepts MolADT JSON. Click an atom in the viewer to show its stored shell and orbital glyphs, coordinates, 3D edge lengths, and bond angles calculated from the molecule's coordinate data.
+This writes a standalone HTML viewer under `results/viewer/`. The Make target uses built-in explicit ADT examples. The direct `view-html` command accepts MolADT JSON. Click an atom in the viewer to show coordinates, 3D edge lengths, effective orders, bonding systems, and bond angles calculated from the molecule's coordinate data.
 
 ## Rule Of Thumb
 

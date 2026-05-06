@@ -59,7 +59,7 @@ def test_molecule_viewer_payload_includes_bonding_system_annotations() -> None:
     assert payload["title"] == "Diborane"
     assert len(payload["atoms"]) == 8
     assert len(payload["bonds"]) == 9
-    bridge_systems = [system for system in payload["systems"] if system["tag"].startswith("bridge_")]
+    bridge_systems = [system for system in payload["systems"] if system["tag"] and system["tag"].startswith("bridge_")]
     assert [system["tag"] for system in bridge_systems] == ["bridge_h3_3c2e", "bridge_h4_3c2e"]
     assert [(edge["a"], edge["b"]) for edge in bridge_systems[0]["edges"]] == [(1, 3), (2, 3)]
     assert all("length" in edge for edge in bridge_systems[0]["edges"])
@@ -68,16 +68,16 @@ def test_molecule_viewer_payload_includes_bonding_system_annotations() -> None:
 def test_molecule_viewer_payload_lengths_come_from_3d_coordinates() -> None:
     payload = molecule_viewer_payload(ferrocene_pretty, title="Ferrocene")
     sigma_edges = {tuple(sorted((edge["a"], edge["b"]))): edge for edge in payload["bonds"]}
-    backdonation = next(system for system in payload["systems"] if system["tag"] == "fe_backdonation")
-    backdonation_edges = {
+    coordination = next(system for system in payload["systems"] if system["tag"] == "fe_cp_coordination")
+    coordination_edges = {
         tuple(sorted((edge["a"], edge["b"]))): edge
-        for edge in backdonation["edges"]
+        for edge in coordination["edges"]
     }
 
     assert sigma_edges[(2, 3)]["length"] == pytest.approx(_payload_distance(payload, 2, 3))
     assert sigma_edges[(2, 3)]["length"] == pytest.approx(1.404, abs=0.002)
-    assert backdonation_edges[(1, 2)]["length"] == pytest.approx(_payload_distance(payload, 1, 2))
-    assert backdonation_edges[(1, 2)]["length"] == pytest.approx(2.046, abs=0.002)
+    assert coordination_edges[(1, 2)]["length"] == pytest.approx(_payload_distance(payload, 1, 2))
+    assert coordination_edges[(1, 2)]["length"] == pytest.approx(2.046, abs=0.002)
 
 
 def test_molecule_viewer_payload_angles_come_from_3d_coordinates() -> None:
@@ -101,8 +101,17 @@ def test_molecule_viewer_payload_keeps_overlapping_system_colours_distinct() -> 
             key = tuple(sorted((edge["a"], edge["b"])))
             edge_to_colours.setdefault(key, set()).add(system["color"])
 
-    assert edge_to_colours[(1, 7)] == {payload["systems"][1]["color"], payload["systems"][2]["color"]}
-    assert payload["systems"][1]["color"] != payload["systems"][2]["color"]
+    cp2_colour = next(system["color"] for system in payload["systems"] if system["tag"] == "cp2_pi")
+    single_colour = next(
+        system["color"]
+        for system in payload["systems"]
+        if system["tag"] is None
+        and system["sharedElectrons"] == 2
+        and any(tuple(sorted((edge["a"], edge["b"]))) == (7, 11) for edge in system["edges"])
+    )
+
+    assert edge_to_colours[(7, 11)] == {cp2_colour, single_colour}
+    assert cp2_colour != single_colour
 
 
 def test_molecule_viewer_payload_includes_atom_orbitals() -> None:
@@ -274,7 +283,7 @@ def test_view_examples_cli_uses_builtin_adt_examples_with_bonding_systems(tmp_pa
     assert str(html_path) in output
     assert "moladt-viewer-collection-v1" in html
     assert "bridge_h3_3c2e" in html
-    assert "fe_backdonation" in html
+    assert "fe_cp_coordination" in html
     assert "phenyl_pi_ring" in html
 
 
@@ -323,4 +332,4 @@ def test_pretty_example_cli_can_write_and_open_viewer(tmp_path: Path, capsys, mo
     assert "Ferrocene (Fe(C5H5)2)" in output
     assert "Viewer:" in output
     assert opened == [html_path]
-    assert "fe_backdonation" in html_path.read_text(encoding="utf-8")
+    assert "fe_cp_coordination" in html_path.read_text(encoding="utf-8")

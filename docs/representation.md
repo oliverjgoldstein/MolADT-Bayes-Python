@@ -34,9 +34,9 @@ class Molecule:
 
 Every edge is represented by a bonding system. Conventional single, double, and
 triple bonds are one-edge systems sharing `2`, `4`, and `6` electrons,
-respectively, with tags `single`, `double`, and `triple`. Legacy values that
-only provide `local_bonds` are normalized by adding two-electron `single`
-systems.
+respectively, displayed as `single covalent`, `double covalent`, and `triple covalent`.
+Legacy values that only provide `local_bonds` are normalized by
+adding two-electron `single covalent` systems.
 
 ## Atom ADT
 
@@ -144,9 +144,9 @@ non-classical bonding in one layer. Examples:
 
 | Molecule | What the ADT stores explicitly |
 | --- | --- |
-| Benzene | six one-edge `single` systems plus a six-electron `pi_ring` system |
-| Diborane | terminal `single` systems plus two `3c-2e` bridge systems |
-| Ferrocene | one-edge Cp/C-H systems plus cyclopentadienyl pi systems and Fe/Cp electron pools |
+| Benzene | six `single covalent` one-edge systems plus a six-electron `pi_ring` system |
+| Diborane | terminal `single covalent` systems plus two `3c-2e` bridge systems |
+| Ferrocene | Cp/C-H `single covalent` systems plus separate Cp pi and Fe-Cp coordination systems |
 | Morphine | every graph edge as a system plus named delocalisation systems |
 
 ## Orbital Layer

@@ -343,13 +343,13 @@ class _SMILESParser:
         edge = mk_edge(left, right)
         self.local_bonds.add(edge)
         if bond_kind == "single":
-            self.systems.append(mk_bonding_system(NonNegative(2), frozenset({edge}), "single"))
+            self.systems.append(mk_bonding_system(NonNegative(2), frozenset({edge})))
         elif bond_kind == "double":
-            self.systems.append(mk_bonding_system(NonNegative(4), frozenset({edge}), "double"))
+            self.systems.append(mk_bonding_system(NonNegative(4), frozenset({edge})))
         elif bond_kind == "triple":
-            self.systems.append(mk_bonding_system(NonNegative(6), frozenset({edge}), "triple"))
+            self.systems.append(mk_bonding_system(NonNegative(6), frozenset({edge})))
         elif bond_kind == "aromatic":
-            self.systems.append(mk_bonding_system(NonNegative(2), frozenset({edge}), "single"))
+            self.systems.append(mk_bonding_system(NonNegative(2), frozenset({edge})))
             self.aromatic_candidate_edges.add(edge)
         elif bond_kind != "single":
             raise ValueError(f"Unsupported bond kind: {bond_kind}")

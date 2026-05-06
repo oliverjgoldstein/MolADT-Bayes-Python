@@ -37,7 +37,7 @@ molecule = Molecule(
                             Edge(AtomId(1), AtomId(2)),
                         }
                     ),
-                    'single',
+                    None,
                 ),
             ),
             (
@@ -49,7 +49,7 @@ molecule = Molecule(
                             Edge(AtomId(1), AtomId(3)),
                         }
                     ),
-                    'single',
+                    None,
                 ),
             ),
     ),

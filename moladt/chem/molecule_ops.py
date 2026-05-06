@@ -19,7 +19,7 @@ def add_sigma(atom_a: AtomId, atom_b: AtomId, molecule: Molecule) -> Molecule:
         + (
             (
                 SystemId(next_system_id),
-                mk_bonding_system(NonNegative(2), frozenset({edge}), "single"),
+                mk_bonding_system(NonNegative(2), frozenset({edge})),
             ),
         ),
         smiles_stereochemistry=molecule.smiles_stereochemistry,

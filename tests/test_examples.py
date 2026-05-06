@@ -55,26 +55,30 @@ def test_diborane_example_has_two_3c2e_bridge_systems() -> None:
     assert [system.tag for system in bridges] == ["bridge_h3_3c2e", "bridge_h4_3c2e"]
     assert [system.shared_electrons.value for system in bridges] == [2, 2]
     assert [len(system.member_edges) for system in bridges] == [2, 2]
-    assert _count_tag(diborane_pretty, "single") == 5
+    assert _count_unnamed_edge_systems(diborane_pretty, 2) == 5
 
 
 def test_ferrocene_constructs_a_valid_molecule() -> None:
     assert validate_molecule(ferrocene_pretty) == ferrocene_pretty
 
 
-def test_ferrocene_example_has_pi_and_backdonation_systems() -> None:
-    named = [system for _, system in ferrocene_pretty.systems if system.tag != "single"]
-    assert [system.tag for system in named] == ["cp1_pi", "cp2_pi", "fe_backdonation"]
-    assert [system.shared_electrons.value for system in named] == [6, 6, 6]
-    assert [len(system.member_edges) for system in named] == [10, 10, 10]
-    assert _count_tag(ferrocene_pretty, "single") == 20
+def test_ferrocene_example_has_pi_and_coordination_systems() -> None:
+    named = [system for _, system in ferrocene_pretty.systems if system.tag]
+    assert [system.tag for system in named] == [
+        "cp1_pi",
+        "cp2_pi",
+        "fe_cp_coordination",
+    ]
+    assert [system.shared_electrons.value for system in named] == [6, 6, 12]
+    assert [len(system.member_edges) for system in named] == [5, 5, 10]
+    assert _count_unnamed_edge_systems(ferrocene_pretty, 2) == 20
 
 
 def test_ferrocene_typed_descriptors_use_canonical_dietz_edges() -> None:
     descriptors = compute_moladt_featurized_descriptors(ferrocene_pretty)
 
     assert descriptors["bonding_system_count"] == 3.0
-    assert descriptors["system_shared_electrons_sum"] == 18.0
+    assert descriptors["system_shared_electrons_sum"] == 24.0
     assert descriptors["system_member_edges_max"] == 10.0
 
 
@@ -104,7 +108,11 @@ def test_default_view_examples_are_valid_adt_examples_with_systems_preserved() -
 
     assert tags_by_title["Benzene"] == ["pi_ring"]
     assert tags_by_title["Diborane (B2H6)"] == ["bridge_h3_3c2e", "bridge_h4_3c2e"]
-    assert tags_by_title["Ferrocene (Fe(C5H5)2)"] == ["cp1_pi", "cp2_pi", "fe_backdonation"]
+    assert tags_by_title["Ferrocene (Fe(C5H5)2)"] == [
+        "cp1_pi",
+        "cp2_pi",
+        "fe_cp_coordination",
+    ]
     assert tags_by_title["Morphine"] == ["alkene_bridge", "phenyl_pi_ring"]
 
 
@@ -319,8 +327,14 @@ def test_small_example_molecules_are_explicit_adt_values() -> None:
 
 
 def _special_tags(molecule: Molecule) -> list[str | None]:
-    return [system.tag for _, system in molecule.systems if system.tag != "single"]
+    return [system.tag for _, system in molecule.systems if system.tag]
 
 
-def _count_tag(molecule: Molecule, expected: str) -> int:
-    return sum(1 for _, system in molecule.systems if system.tag == expected)
+def _count_unnamed_edge_systems(molecule: Molecule, electrons: int) -> int:
+    return sum(
+        1
+        for _, system in molecule.systems
+        if system.tag is None
+        and len(system.member_edges) == 1
+        and system.shared_electrons.value == electrons
+    )

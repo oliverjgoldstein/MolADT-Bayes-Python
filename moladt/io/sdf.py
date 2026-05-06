@@ -327,17 +327,17 @@ def _build_molecule(atoms: list[Atom], bonds: list[tuple[Edge, int]]) -> Molecul
     return Molecule(atoms=atom_map, systems=tuple(systems))
 
 
-def _bond_electron_system(order: int, in_aromatic_ring: bool) -> tuple[int, str]:
+def _bond_electron_system(order: int, in_aromatic_ring: bool) -> tuple[int, str | None]:
     if in_aromatic_ring and order in {1, 2, 4}:
-        return 2, "single"
+        return 2, None
     if order == 1:
-        return 2, "single"
+        return 2, None
     if order == 2:
-        return 4, "double"
+        return 4, None
     if order == 3:
-        return 6, "triple"
+        return 6, None
     if order == 4:
-        return 2, "aromatic_edge"
+        return 2, None
     return 2, f"sdf_bond_type_{order}"
 
 

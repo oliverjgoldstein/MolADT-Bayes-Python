@@ -18,8 +18,8 @@ make molecule-viewer VIEWER_EXAMPLES=ferrocene
 | --- | --- |
 | Benzene | Classical ring plus a six-electron `pi_ring`. |
 | Water | Small parser, validation, and SMILES sanity check. |
-| Diborane | Terminal `single` systems plus two explicit `3c-2e` bridge systems. |
-| Ferrocene | One-edge Cp/C-H systems plus organometallic Cp/metal bonding systems. |
+| Diborane | Terminal `single covalent` systems plus two explicit `3c-2e` bridge systems. |
+| Ferrocene | Cp/C-H `single covalent` systems plus Cp pi and Fe-Cp coordination systems. |
 | Morphine | Every graph edge as a system plus named delocalization systems. |
 
 ## Where They Live
@@ -42,7 +42,8 @@ make molecule-viewer VIEWER_EXAMPLES=ferrocene
 - The canonical normal form is sorted and fully explicit: atoms by `AtomId`, normalized edges with the lower `AtomId` first, and systems by `SystemId`.
 
 The examples can still show a `local_bonds` input for readability, but molecule
-construction normalizes those edges into one-edge `single` bonding systems.
+construction normalizes those edges into unnamed one-edge bonding systems with
+two shared electrons.
 Benzene also keeps the aromatic `pi_ring` system:
 
 ```python

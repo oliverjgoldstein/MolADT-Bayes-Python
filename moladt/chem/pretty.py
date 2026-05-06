@@ -124,7 +124,8 @@ def _(atom: Atom) -> PrettyBlock:
 
 @pretty_block.register
 def _(system: BondingSystem) -> PrettyBlock:
-    tag_suffix = f" [{system.tag}]" if system.tag else ""
+    label = _system_display_label(system)
+    tag_suffix = f" [{label}]" if label else ""
     member_atoms = ", ".join(f"#{atom_id.value}" for atom_id in sorted(system.member_atoms)) or "none"
     edge_lines = [f"{edge.a.value}-{edge.b.value}" for edge in sorted(system.member_edges)]
     edge_electrons = _system_electrons_per_edge(system)
@@ -322,7 +323,8 @@ def _format_bond_line(molecule: Molecule, edge: Edge) -> str:
 
 
 def _format_system_block(molecule: Molecule, system_id: SystemId, system: BondingSystem) -> list[str]:
-    title = f"[#{system_id.value}] {system.tag}" if system.tag else f"[#{system_id.value}]"
+    label = _system_display_label(system)
+    title = f"[#{system_id.value}] {label}" if label else f"[#{system_id.value}]"
     lines = [
         title,
         f"  shared electrons: {_format_electrons(system.shared_electrons.value)} pool",
@@ -359,12 +361,13 @@ def _format_edge_short(molecule: Molecule, edge: Edge) -> str:
     return f"{left} <-> {right}"
 
 
-def _format_system_label(system_id: int, tag: str | None) -> str:
-    return f"#{system_id}[{tag}]" if tag else f"#{system_id}"
+def _format_system_label(system_id: int, system: BondingSystem) -> str:
+    label = _system_display_label(system)
+    return f"#{system_id}[{label}]" if label else f"#{system_id}"
 
 
 def _format_edge_system_ref(system_id: SystemId, system: BondingSystem) -> str:
-    label = _format_system_label(system_id.value, system.tag)
+    label = _format_system_label(system_id.value, system)
     edge_electrons = _system_electrons_per_edge(system)
     if len(system.member_edges) == 1 and system.shared_electrons.value in {2, 4, 6}:
         return f"{label}:{_format_electrons(edge_electrons)}"
@@ -381,6 +384,27 @@ def _edge_shared_electrons(system_items: Iterable[tuple[SystemId, BondingSystem]
     return sum(_system_electrons_per_edge(system) for _, system in system_items if edge in system.member_edges)
 
 
+def _system_display_label(system: BondingSystem) -> str | None:
+    covalent_label = _covalent_label(system)
+    if covalent_label is not None:
+        return covalent_label
+    return system.tag
+
+
+def _covalent_label(system: BondingSystem) -> str | None:
+    if system.tag not in {None, "single", "double", "triple"}:
+        return None
+    if len(system.member_edges) != 1:
+        return None
+    if system.shared_electrons.value == 2:
+        return "single covalent"
+    if system.shared_electrons.value == 4:
+        return "double covalent"
+    if system.shared_electrons.value == 6:
+        return "triple covalent"
+    return None
+
+
 def _format_electrons(value: float | int) -> str:
     numeric = float(value)
     rounded = round(numeric)
@@ -391,7 +415,7 @@ def _format_electrons(value: float | int) -> str:
 
 def _system_labels_for_atom(system_items: list[tuple[SystemId, BondingSystem]], atom_id: AtomId) -> list[str]:
     return [
-        f"{_format_system_label(system_id.value, system.tag)}:{_format_electrons(system.shared_electrons.value)}"
+        f"{_format_system_label(system_id.value, system)}:{_format_electrons(system.shared_electrons.value)}"
         for system_id, system in system_items
         if atom_id in system.member_atoms
     ]
