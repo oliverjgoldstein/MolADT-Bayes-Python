@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import json
 import math
+import os
+import shutil
+import subprocess
+import sys
 import webbrowser
 from html import escape
 from pathlib import Path
@@ -239,7 +243,43 @@ def write_molecule_viewer_collection_html(
 def open_molecule_viewer(path: str | Path) -> bool:
     """Open a written molecule viewer HTML file in the default browser."""
 
-    return webbrowser.open(molecule_viewer_uri(path))
+    uri = molecule_viewer_uri(path)
+    opener = os.environ.get("MOLADT_VIEWER_OPENER")
+    if opener:
+        return _run_viewer_opener([opener, uri])
+    if sys.platform == "darwin":
+        return _run_viewer_opener(["open", uri])
+    if os.name == "nt":
+        try:
+            os.startfile(uri)  # type: ignore[attr-defined]
+            return True
+        except OSError:
+            return False
+    xdg_open = shutil.which("xdg-open")
+    if xdg_open:
+        return _run_viewer_opener([xdg_open, uri])
+    gio = shutil.which("gio")
+    if gio:
+        return _run_viewer_opener([gio, "open", uri])
+    try:
+        return webbrowser.open(uri)
+    except Exception:
+        return False
+
+
+def _run_viewer_opener(command: Sequence[str]) -> bool:
+    try:
+        return (
+            subprocess.run(
+                command,
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            ).returncode
+            == 0
+        )
+    except (OSError, ValueError):
+        return False
 
 
 def molecule_viewer_uri(path: str | Path) -> str:
@@ -1211,6 +1251,19 @@ _HTML_TEMPLATE = """<!doctype html>
       return keys;
     }
 
+    function ionicAtomIdSet(systems) {
+      const ids = new Set();
+      (systems || []).forEach((system) => {
+        if (isIonicSystem(system)) {
+          system.edges.forEach((edge) => {
+            ids.add(Number(edge.a));
+            ids.add(Number(edge.b));
+          });
+        }
+      });
+      return ids;
+    }
+
     function chargeColor(charge) {
       if (Number(charge) > 0) return POSITIVE_CHARGE_COLOR;
       if (Number(charge) < 0) return NEGATIVE_CHARGE_COLOR;
@@ -1360,7 +1413,7 @@ _HTML_TEMPLATE = """<!doctype html>
       });
     }
 
-    function drawChargeField(points) {
+    function drawChargeField(points, ionicAtomIds) {
       const charged = Array.from(points.values())
         .filter((point) => point.atom && Number(point.atom.charge || 0) !== 0)
         .sort((left, right) => left.z - right.z);
@@ -1371,7 +1424,10 @@ _HTML_TEMPLATE = """<!doctype html>
       charged.forEach((point) => {
         const charge = Number(point.atom.charge || 0);
         const magnitude = Math.min(3, Math.abs(charge));
-        const fieldRadius = Math.max(46, point.radius * (4.3 + magnitude * 0.7));
+        const ionic = ionicAtomIds && ionicAtomIds.has(point.atom.id);
+        const fieldRadius = ionic
+          ? Math.max(120, point.radius * (9.8 + magnitude * 1.2))
+          : Math.max(46, point.radius * (4.3 + magnitude * 0.7));
         const color = chargeColor(charge);
         const gradient = ctx.createRadialGradient(
           point.x,
@@ -1381,8 +1437,9 @@ _HTML_TEMPLATE = """<!doctype html>
           point.y,
           fieldRadius
         );
-        gradient.addColorStop(0, hexToRgba(color, 0.30));
-        gradient.addColorStop(0.48, hexToRgba(color, 0.13));
+        gradient.addColorStop(0, hexToRgba(color, ionic ? 0.58 : 0.30));
+        gradient.addColorStop(0.48, hexToRgba(color, ionic ? 0.30 : 0.13));
+        gradient.addColorStop(0.82, hexToRgba(color, ionic ? 0.11 : 0.035));
         gradient.addColorStop(1, hexToRgba(color, 0));
         ctx.fillStyle = gradient;
         ctx.beginPath();
@@ -1868,9 +1925,10 @@ _HTML_TEMPLATE = """<!doctype html>
         b: points.get(bond.b)
       })).filter((item) => item.a && item.b).sort((left, right) => ((left.a.z + left.b.z) - (right.a.z + right.b.z)));
       const standardByEdge = standardSystemByEdge(molecule.systems);
+      const ionicAtomIds = ionicAtomIdSet(molecule.systems);
 
       drawCoordinateAxes();
-      drawChargeField(points);
+      drawChargeField(points, ionicAtomIds);
       bondDraws.forEach(({ bond, a, b }) => {
         const perspective = ((a.p + b.p) / 2) * state.zoom;
         const width = Math.max(1.8, 2.4 * perspective);

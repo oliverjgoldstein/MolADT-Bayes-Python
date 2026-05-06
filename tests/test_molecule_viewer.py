@@ -18,6 +18,7 @@ from moladt.viewer import (
     molecule_viewer_html,
     molecule_viewer_payload,
     molecule_viewer_uri,
+    open_molecule_viewer,
     write_molecule_viewer_html,
 )
 
@@ -164,6 +165,10 @@ def test_molecule_viewer_payload_marks_ionic_edges_and_draws_charge_field() -> N
     assert "POSITIVE_CHARGE_COLOR" in html
     assert "NEGATIVE_CHARGE_COLOR" in html
     assert "drawChargeField" in html
+    assert "function ionicAtomIdSet" in html
+    assert "ionicAtomIds.has(point.atom.id)" in html
+    assert "Math.max(120, point.radius * (9.8 + magnitude * 1.2))" in html
+    assert "hexToRgba(color, ionic ? 0.58 : 0.30)" in html
     assert "drawBondLines" in html
     assert "chargeGradientForEdge" in html
     assert '"kind":"ionic"' in html
@@ -492,8 +497,17 @@ def test_view_html_cli_reports_url_when_auto_open_fails(tmp_path: Path, capsys, 
 
     assert result == 0
     assert "Viewer open request failed" in output
+    assert "\nOpen this URL manually: " in output
     assert "diborane%20viewer.html" in output
     assert molecule_viewer_uri(html_path) in output
+
+
+def test_open_molecule_viewer_returns_false_for_unavailable_override(tmp_path: Path, monkeypatch) -> None:
+    html_path = tmp_path / "viewer with space.html"
+    html_path.write_text("<!doctype html>", encoding="utf-8")
+    monkeypatch.setenv("MOLADT_VIEWER_OPENER", "definitely-not-a-viewer-opener")
+
+    assert open_molecule_viewer(html_path) is False
 
 
 def test_pretty_example_cli_can_write_and_open_viewer(tmp_path: Path, capsys, monkeypatch) -> None:

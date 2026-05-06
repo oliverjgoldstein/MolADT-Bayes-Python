@@ -305,8 +305,11 @@ def _handle_pretty_example(name: str, *, viewer_output: Path | None = None, open
 
 
 def _print_viewer_location(path: Path) -> None:
+    uri = molecule_viewer_uri(path)
     print(path)
-    print(f"Viewer URL: {molecule_viewer_uri(path)}")
+    print("")
+    print(f"Viewer URL: {uri}")
+    print("")
 
 
 def _open_viewer_with_fallback(path: Path) -> None:
@@ -314,7 +317,10 @@ def _open_viewer_with_fallback(path: Path) -> None:
     if open_molecule_viewer(path):
         print(f"Opened viewer: {uri}")
     else:
-        print(f"Viewer open request failed; open this URL manually: {uri}")
+        print("Viewer open request failed.")
+        print("")
+        print(f"Open this URL manually: {uri}")
+        print("")
 
 
 if __name__ == "__main__":

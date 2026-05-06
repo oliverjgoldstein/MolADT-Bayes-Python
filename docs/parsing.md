@@ -73,7 +73,7 @@ make molecule-viewer VIEWER_EXAMPLES=ferrocene
 ./.venv/bin/python -m moladt.cli view-html benzene.moladt.json --output benzene.viewer.html
 ```
 
-This writes a standalone HTML viewer under `results/viewer/`. The Make target uses built-in explicit ADT examples. The direct `view-html` command accepts MolADT JSON. Viewer commands print a portable `file://` URL for manual opening on any OS if auto-open fails. Click an atom in the viewer to show coordinates, 3D edge lengths, effective orders, bonding systems, and bond angles calculated from the molecule's coordinate data. Charge is shown as blue/red halos around charged atoms, and ionic edges draw a blue-to-red gradient between charged atoms. Ordinary covalent edges are dark grey single/double/triple/quadruple line sets and are not repeated as page labels; pi, bridge, coordination, and other non-standard systems use a separate coloured overlay.
+This writes a standalone HTML viewer under `results/viewer/`. The Make target uses built-in explicit ADT examples. The direct `view-html` command accepts MolADT JSON. Viewer commands print a portable `file://` URL for manual opening on any OS if auto-open fails. Click an atom in the viewer to show coordinates, 3D edge lengths, effective orders, bonding systems, and bond angles calculated from the molecule's coordinate data. Charge is shown as blue/red halos around charged atoms; atoms participating in an ionic bonding system get larger, more opaque charge gradients, and ionic edges draw a blue-to-red gradient between charged atoms. Ordinary covalent edges are dark grey single/double/triple/quadruple line sets and are not repeated as page labels; pi, bridge, coordination, and other non-standard systems use a separate coloured overlay.
 
 ## Rule Of Thumb
 
