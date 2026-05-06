@@ -6,71 +6,45 @@ from moladt.examples._literal import atom
 
 rank = 4
 target_freesolv = -5
-seed_molecule = 'freesolv-prior'
+seed_molecule = 'water'
 random_seed = 0
-predicted_freesolv = -4.8635959534
-predictive_sd = 0.867919356927
-target_error = 0.136404046598
-bayesian_credible_score_percent = 75.1224028843
-score = -0.286051364322
-formula = 'C9H16O'
+predicted_freesolv = -4.9355971911
+predictive_sd = 0.953630684699
+target_error = 0.0644028089045
+bayesian_credible_score_percent = 72.2900519096
+score = -0.324483660902
+formula = 'C3H6ClFO2'
 
 molecule = Molecule(
     atoms={
-            AtomId(1): atom(1, AtomicSymbol.C, -6.149, -0.668, 5.183),
-            AtomId(2): atom(2, AtomicSymbol.C, -5.069, -1.055, 4.207),
-            AtomId(3): atom(3, AtomicSymbol.C, -4.901, -0.357, 3.068),
-            AtomId(4): atom(4, AtomicSymbol.C, -3.895, -0.591, 1.976),
-            AtomId(5): atom(5, AtomicSymbol.C, -2.967, 0.612, 1.761),
-            AtomId(6): atom(6, AtomicSymbol.C, -1.942, 0.404, 0.665),
-            AtomId(7): atom(7, AtomicSymbol.C, -1.834, 1.163, -0.442),
-            AtomId(8): atom(8, AtomicSymbol.C, -0.854, 1.022, -1.563),
-            AtomId(9): atom(9, AtomicSymbol.O, -0.093, 2.219, -1.653),
-            AtomId(10): atom(10, AtomicSymbol.C, -1.022, -0.773, 0.865),
-            AtomId(11): atom(11, AtomicSymbol.H, -6.906, -0.668, 5.940),
-            AtomId(12): atom(12, AtomicSymbol.H, -6.189, 0.374, 4.943),
-            AtomId(13): atom(13, AtomicSymbol.H, -5.392, -0.668, 5.940),
-            AtomId(14): atom(14, AtomicSymbol.H, -4.432, -1.888, 4.420),
-            AtomId(15): atom(15, AtomicSymbol.H, -5.567, 0.468, 2.922),
-            AtomId(16): atom(16, AtomicSymbol.H, -3.833, -1.497, 1.410),
-            AtomId(17): atom(17, AtomicSymbol.H, -4.513, 0.027, 1.358),
-            AtomId(18): atom(18, AtomicSymbol.H, -3.037, 1.514, 2.332),
-            AtomId(19): atom(19, AtomicSymbol.H, -3.585, 1.230, 1.143),
-            AtomId(20): atom(20, AtomicSymbol.H, -2.536, 1.966, -0.531),
-            AtomId(21): atom(21, AtomicSymbol.H, -0.744, 0.163, -2.192),
-            AtomId(22): atom(22, AtomicSymbol.H, -1.472, 1.640, -2.181),
-            AtomId(23): atom(23, AtomicSymbol.H, 0.586, 2.898, -1.653),
-            AtomId(24): atom(24, AtomicSymbol.H, -0.265, -1.530, 0.865),
-            AtomId(25): atom(25, AtomicSymbol.H, -1.597, -1.212, 1.654),
-            AtomId(26): atom(26, AtomicSymbol.H, -0.404, -0.155, 1.483),
+            AtomId(1): atom(1, AtomicSymbol.C, -0.011, 0.963, 0.007),
+            AtomId(2): atom(2, AtomicSymbol.O, -0.625, 1.577, -1.179),
+            AtomId(3): atom(3, AtomicSymbol.Cl, -0.570, -0.441, 0.890),
+            AtomId(4): atom(4, AtomicSymbol.O, 1.155, 1.572, 0.486),
+            AtomId(5): atom(5, AtomicSymbol.C, 1.011, -0.059, -1.015),
+            AtomId(6): atom(6, AtomicSymbol.C, -2.150, 1.771, -1.268),
+            AtomId(7): atom(7, AtomicSymbol.F, 0.887, -0.610, -2.241),
+            AtomId(8): atom(8, AtomicSymbol.H, 1.709, 2.126, 1.040),
+            AtomId(9): atom(9, AtomicSymbol.H, 1.946, -0.295, -0.552),
+            AtomId(10): atom(10, AtomicSymbol.H, 0.393, -0.677, -0.397),
+            AtomId(11): atom(11, AtomicSymbol.H, -3.220, 1.771, -1.268),
+            AtomId(12): atom(12, AtomicSymbol.H, -2.075, 2.742, -1.712),
+            AtomId(13): atom(13, AtomicSymbol.H, -2.150, 1.771, -0.198),
     },
     local_bonds=frozenset(
         {
                 Edge(AtomId(1), AtomId(2)),
-                Edge(AtomId(1), AtomId(11)),
-                Edge(AtomId(1), AtomId(12)),
-                Edge(AtomId(1), AtomId(13)),
-                Edge(AtomId(2), AtomId(3)),
-                Edge(AtomId(2), AtomId(14)),
-                Edge(AtomId(3), AtomId(4)),
-                Edge(AtomId(3), AtomId(15)),
-                Edge(AtomId(4), AtomId(5)),
-                Edge(AtomId(4), AtomId(16)),
-                Edge(AtomId(4), AtomId(17)),
-                Edge(AtomId(5), AtomId(6)),
-                Edge(AtomId(5), AtomId(18)),
-                Edge(AtomId(5), AtomId(19)),
-                Edge(AtomId(6), AtomId(7)),
-                Edge(AtomId(6), AtomId(10)),
-                Edge(AtomId(7), AtomId(8)),
-                Edge(AtomId(7), AtomId(20)),
-                Edge(AtomId(8), AtomId(9)),
-                Edge(AtomId(8), AtomId(21)),
-                Edge(AtomId(8), AtomId(22)),
-                Edge(AtomId(9), AtomId(23)),
-                Edge(AtomId(10), AtomId(24)),
-                Edge(AtomId(10), AtomId(25)),
-                Edge(AtomId(10), AtomId(26)),
+                Edge(AtomId(1), AtomId(3)),
+                Edge(AtomId(1), AtomId(4)),
+                Edge(AtomId(1), AtomId(5)),
+                Edge(AtomId(2), AtomId(6)),
+                Edge(AtomId(4), AtomId(8)),
+                Edge(AtomId(5), AtomId(7)),
+                Edge(AtomId(5), AtomId(9)),
+                Edge(AtomId(5), AtomId(10)),
+                Edge(AtomId(6), AtomId(11)),
+                Edge(AtomId(6), AtomId(12)),
+                Edge(AtomId(6), AtomId(13)),
         }
     ),
     systems=(
@@ -80,10 +54,10 @@ molecule = Molecule(
                     NonNegative(2),
                     frozenset(
                         {
-                            Edge(AtomId(2), AtomId(3)),
+                            Edge(AtomId(1), AtomId(2)),
                         }
                     ),
-                    None,
+                    'single',
                 ),
             ),
             (
@@ -92,10 +66,130 @@ molecule = Molecule(
                     NonNegative(2),
                     frozenset(
                         {
-                            Edge(AtomId(6), AtomId(7)),
+                            Edge(AtomId(1), AtomId(3)),
                         }
                     ),
-                    None,
+                    'single',
+                ),
+            ),
+            (
+                SystemId(3),
+                mk_bonding_system(
+                    NonNegative(2),
+                    frozenset(
+                        {
+                            Edge(AtomId(1), AtomId(4)),
+                        }
+                    ),
+                    'single',
+                ),
+            ),
+            (
+                SystemId(4),
+                mk_bonding_system(
+                    NonNegative(2),
+                    frozenset(
+                        {
+                            Edge(AtomId(1), AtomId(5)),
+                        }
+                    ),
+                    'single',
+                ),
+            ),
+            (
+                SystemId(5),
+                mk_bonding_system(
+                    NonNegative(2),
+                    frozenset(
+                        {
+                            Edge(AtomId(2), AtomId(6)),
+                        }
+                    ),
+                    'single',
+                ),
+            ),
+            (
+                SystemId(6),
+                mk_bonding_system(
+                    NonNegative(2),
+                    frozenset(
+                        {
+                            Edge(AtomId(5), AtomId(7)),
+                        }
+                    ),
+                    'single',
+                ),
+            ),
+            (
+                SystemId(7),
+                mk_bonding_system(
+                    NonNegative(2),
+                    frozenset(
+                        {
+                            Edge(AtomId(4), AtomId(8)),
+                        }
+                    ),
+                    'single',
+                ),
+            ),
+            (
+                SystemId(8),
+                mk_bonding_system(
+                    NonNegative(2),
+                    frozenset(
+                        {
+                            Edge(AtomId(5), AtomId(9)),
+                        }
+                    ),
+                    'single',
+                ),
+            ),
+            (
+                SystemId(9),
+                mk_bonding_system(
+                    NonNegative(2),
+                    frozenset(
+                        {
+                            Edge(AtomId(5), AtomId(10)),
+                        }
+                    ),
+                    'single',
+                ),
+            ),
+            (
+                SystemId(10),
+                mk_bonding_system(
+                    NonNegative(2),
+                    frozenset(
+                        {
+                            Edge(AtomId(6), AtomId(11)),
+                        }
+                    ),
+                    'single',
+                ),
+            ),
+            (
+                SystemId(11),
+                mk_bonding_system(
+                    NonNegative(2),
+                    frozenset(
+                        {
+                            Edge(AtomId(6), AtomId(12)),
+                        }
+                    ),
+                    'single',
+                ),
+            ),
+            (
+                SystemId(12),
+                mk_bonding_system(
+                    NonNegative(2),
+                    frozenset(
+                        {
+                            Edge(AtomId(6), AtomId(13)),
+                        }
+                    ),
+                    'single',
                 ),
             ),
     ),

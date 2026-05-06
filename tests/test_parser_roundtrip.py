@@ -69,8 +69,9 @@ def test_benzene_round_trip_preserves_atom_count_and_sigma_bonds() -> None:
 
 def test_benzene_detects_one_pi_ring() -> None:
     record = read_sdf_record(PROJECT_ROOT / "molecules" / "benzene.sdf")
-    assert len(record.molecule.systems) == 1
-    assert record.molecule.systems[0][1].tag == "pi_ring"
+    assert len(record.molecule.systems) == 13
+    assert _count_tag(record.molecule, "single") == 12
+    assert _count_tag(record.molecule, "pi_ring") == 1
 
 
 def test_water_smoke_parse() -> None:
@@ -125,8 +126,9 @@ def test_smiles_parse_recovers_benzene_pi_ring() -> None:
     counts = Counter(atom.attributes.symbol.value for atom in molecule.atoms.values())
     assert counts == Counter({"C": 6, "H": 6})
     assert len(molecule.local_bonds) == 12
-    assert len(molecule.systems) == 1
-    assert molecule.systems[0][1].tag == "pi_ring"
+    assert len(molecule.systems) == 13
+    assert _count_tag(molecule, "single") == 12
+    assert _count_tag(molecule, "pi_ring") == 1
 
 
 def test_morphine_ring_closure_smiles_parses_as_a_boundary_format_example() -> None:
@@ -134,7 +136,9 @@ def test_morphine_ring_closure_smiles_parses_as_a_boundary_format_example() -> N
     counts = Counter(atom.attributes.symbol.value for atom in molecule.atoms.values())
     assert counts == Counter({"C": 17, "H": 19, "N": 1, "O": 3})
     assert len(molecule.local_bonds) == 44
-    assert [system.tag for _, system in molecule.systems] == [None, None, None, None]
+    assert len(molecule.systems) == 44
+    assert _count_tag(molecule, "single") == 40
+    assert _count_tag(molecule, "double") == 4
     assert [
         (item.center.value, item.stereo_class.value, item.configuration, item.token)
         for item in molecule.smiles_stereochemistry.atom_stereo
@@ -190,8 +194,9 @@ def test_benzene_kekule_smiles_round_trip_preserves_localized_double_bonds() -> 
     assert smiles == "[CH]1=[CH][CH]=[CH][CH]=[CH]1"
     assert counts == Counter({"C": 6, "H": 6})
     assert len(round_tripped.local_bonds) == 12
-    assert len(round_tripped.systems) == 3
-    assert [system.tag for _, system in round_tripped.systems] == [None, None, None]
+    assert len(round_tripped.systems) == 12
+    assert _count_tag(round_tripped, "single") == 9
+    assert _count_tag(round_tripped, "double") == 3
 
 
 def test_smiles_parse_preserves_atom_centered_stereochemistry_annotations() -> None:
@@ -216,3 +221,7 @@ def test_smiles_stereochemistry_survives_json_round_trip() -> None:
     restored = molecule_from_json(molecule_to_json_bytes(molecule))
 
     assert restored.smiles_stereochemistry == molecule.smiles_stereochemistry
+
+
+def _count_tag(molecule, expected: str) -> int:
+    return sum(1 for _, system in molecule.systems if system.tag == expected)

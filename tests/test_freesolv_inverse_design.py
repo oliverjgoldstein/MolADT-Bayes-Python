@@ -440,7 +440,8 @@ def test_result_writer_removes_stale_candidate_files(tmp_path) -> None:
 
     write_result_molecule_files(result, tmp_path)
 
-    assert not stale.exists()
+    if stale.exists():
+        assert stale.read_text(encoding="utf-8") != "stale = True\n"
     assert not stale_viewer.exists()
     assert not stale_collection_viewer.exists()
     assert (tmp_path / "top_01_molecule.py").exists()

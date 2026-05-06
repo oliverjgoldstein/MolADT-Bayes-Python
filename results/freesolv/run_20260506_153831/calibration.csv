@@ -1,0 +1,13 @@
+dataset,representation,model,method,split,seed,nominal_coverage,empirical_coverage
+freesolv,moladt_featurized,bayes_gp_rbf_screened,laplace,test,30,0.5,0.6615384615384615
+freesolv,moladt_featurized,bayes_gp_rbf_screened,laplace,test,30,0.8,0.9076923076923077
+freesolv,moladt_featurized,bayes_gp_rbf_screened,laplace,test,30,0.9,0.9692307692307692
+freesolv,moladt_featurized,bayes_gp_rbf_screened,laplace,test,30,0.95,0.9846153846153847
+freesolv,moladt_featurized,bayes_gp_rbf_screened,laplace,train,12,0.5,0.7797270955165692
+freesolv,moladt_featurized,bayes_gp_rbf_screened,laplace,train,12,0.8,0.935672514619883
+freesolv,moladt_featurized,bayes_gp_rbf_screened,laplace,train,12,0.9,0.9551656920077972
+freesolv,moladt_featurized,bayes_gp_rbf_screened,laplace,train,12,0.95,0.9688109161793372
+freesolv,moladt_featurized,bayes_gp_rbf_screened,laplace,valid,18,0.5,0.609375
+freesolv,moladt_featurized,bayes_gp_rbf_screened,laplace,valid,18,0.8,0.859375
+freesolv,moladt_featurized,bayes_gp_rbf_screened,laplace,valid,18,0.9,0.90625
+freesolv,moladt_featurized,bayes_gp_rbf_screened,laplace,valid,18,0.95,0.9375

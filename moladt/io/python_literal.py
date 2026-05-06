@@ -47,24 +47,7 @@ def molecule_to_python_literal(molecule: Molecule, *, variable_name: str = "mole
             f"{_format_float(atom_value.coordinate.y.value)}, "
             f"{_format_float(atom_value.coordinate.z.value)}{charge_arg}),"
         )
-    lines.extend(
-        [
-            "    },",
-            "    local_bonds=frozenset(",
-        ]
-    )
-    if molecule.local_bonds:
-        lines.append("        {")
-        for edge in sorted(molecule.local_bonds):
-            lines.append(f"            Edge(AtomId({edge.a.value}), AtomId({edge.b.value})),")
-        lines.append("        }")
-    else:
-        lines.append("        {}")
-    lines.extend(
-        [
-            "    ),",
-        ]
-    )
+    lines.append("    },")
     if molecule.systems:
         lines.append("    systems=(")
         for system_id, system in sorted(molecule.systems, key=lambda item: item[0].value):

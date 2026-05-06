@@ -1,0 +1,37 @@
+# stan_version_major = 2
+# stan_version_minor = 38
+# stan_version_patch = 0
+# model = tmpwecy8pwh_model
+# start_datetime = 2026-05-06 14:11:21 UTC
+# method = optimize
+#   optimize
+#     algorithm = lbfgs (Default)
+#       lbfgs
+#         init_alpha = 0.001 (Default)
+#         tol_obj = 1e-12 (Default)
+#         tol_rel_obj = 10000 (Default)
+#         tol_grad = 1e-08 (Default)
+#         tol_rel_grad = 1e+07 (Default)
+#         tol_param = 1e-08 (Default)
+#         history_size = 5 (Default)
+#     jacobian = false (Default)
+#     iter = 5000
+#     save_iterations = false (Default)
+# id = 1 (Default)
+# data
+#   file = /var/folders/_z/jd9jlzfs0md6nvlwttph63x00000gn/T/tmpt33m0mqj/vhrdfl0g.json
+# init = 2 (Default)
+# random
+#   seed = 1
+# output
+#   file = /Users/Oliver/Documents/Computer Science/Year 13/MolADT/MolADT-Bayes-Python/results/freesolv/run_20260506_151111/details/stan_output/freesolv/moladt_featurized/bayes_gp_rbf_screened/laplace_optimize/bayes_gp_rbf_screened-20260506151121.csv
+#   diagnostic_file =  (Default)
+#   refresh = 100 (Default)
+#   sig_figs = 8 (Default)
+#   profile_file = profile.csv (Default)
+#   save_cmdstan_config = false (Default)
+# num_threads = 1 (Default)
+# stanc_version = stanc3 v2.38.0
+# stancflags = --filename-in-msg=bayes_gp_rbf_screened.stan
+lp__,alpha,signal_scale,lengthscale,sigma
+-336.70108,-4.9192607,5.9589489,3.7922043,0.63738718

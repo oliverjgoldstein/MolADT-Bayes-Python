@@ -7,10 +7,11 @@ import shlex
 from types import MappingProxyType
 from typing import Any, Iterator, Mapping
 
-from ..chem.constants import element_attributes, element_shells
+from ..chem.constants import element_attributes
 from ..chem.coordinate import Coordinate, mk_angstrom
 from ..chem.dietz import AtomId, BondingSystem, Edge, NonNegative, SystemId, mk_bonding_system, mk_edge
 from ..chem.molecule import Atom, AtomicSymbol, Molecule
+from ..chem.molecule_ops import effective_order
 from .molecule_json import molecule_to_dict
 
 
@@ -107,7 +108,10 @@ def molecule_to_sdf(
             f"{atom.coordinate.x.value:10.4f}{atom.coordinate.y.value:10.4f}{atom.coordinate.z.value:10.4f} "
             f"{atom.attributes.symbol.value:<3} 0  0  0  0  0  0  0  0  0  0  0  0"
         )
-    bond_lines = [f"{edge.a.value:>3}{edge.b.value:>3}{1:>3}  0  0  0  0" for edge in sorted(molecule.local_bonds)]
+    bond_lines = [
+        f"{edge.a.value:>3}{edge.b.value:>3}{_sdf_bond_order(molecule, edge):>3}  0  0  0  0"
+        for edge in sorted(molecule.local_bonds)
+    ]
     charge_lines = _format_charge_lines(molecule)
     payload = [
         title,
@@ -269,7 +273,6 @@ def _parse_v3000_atom_line(line: str) -> Atom:
         atom_id=atom_id,
         attributes=element_attributes(symbol),
         coordinate=Coordinate(mk_angstrom(x), mk_angstrom(y), mk_angstrom(z)),
-        shells=element_shells(symbol),
         formal_charge=formal_charge,
     )
 
@@ -310,22 +313,40 @@ def _parse_properties(lines: list[str]) -> dict[str, str]:
 
 def _build_molecule(atoms: list[Atom], bonds: list[tuple[Edge, int]]) -> Molecule:
     atom_map = {atom.atom_id: atom for atom in atoms}
-    local_bonds = frozenset(edge for edge, _ in bonds)
     aromatic_rings = _detect_six_rings(bonds)
     aromatic_ring_edges = frozenset(edge for ring in aromatic_rings for edge in ring)
     systems: list[tuple[SystemId, BondingSystem]] = []
     system_index = 1
     for edge, order in bonds:
-        if order == 2 and edge not in aromatic_ring_edges:
-            systems.append((SystemId(system_index), mk_bonding_system(NonNegative(2), frozenset({edge}))))
-            system_index += 1
-        elif order == 3:
-            systems.append((SystemId(system_index), mk_bonding_system(NonNegative(4), frozenset({edge}))))
-            system_index += 1
+        shared_electrons, tag = _bond_electron_system(order, edge in aromatic_ring_edges)
+        systems.append((SystemId(system_index), mk_bonding_system(NonNegative(shared_electrons), frozenset({edge}), tag)))
+        system_index += 1
     for ring_edges in aromatic_rings:
         systems.append((SystemId(system_index), mk_bonding_system(NonNegative(6), ring_edges, "pi_ring")))
         system_index += 1
-    return Molecule(atoms=atom_map, local_bonds=local_bonds, systems=tuple(systems))
+    return Molecule(atoms=atom_map, systems=tuple(systems))
+
+
+def _bond_electron_system(order: int, in_aromatic_ring: bool) -> tuple[int, str]:
+    if in_aromatic_ring and order in {1, 2, 4}:
+        return 2, "single"
+    if order == 1:
+        return 2, "single"
+    if order == 2:
+        return 4, "double"
+    if order == 3:
+        return 6, "triple"
+    if order == 4:
+        return 2, "aromatic_edge"
+    return 2, f"sdf_bond_type_{order}"
+
+
+def _sdf_bond_order(molecule: Molecule, edge: Edge) -> int:
+    order = effective_order(molecule, edge)
+    for candidate in (1, 2, 3):
+        if abs(order - candidate) <= 1e-9:
+            return candidate
+    return 1
 
 
 def _parse_atom_line(index: int, line: str) -> Atom:
@@ -340,7 +361,6 @@ def _parse_atom_line(index: int, line: str) -> Atom:
         atom_id=atom_id,
         attributes=element_attributes(symbol),
         coordinate=Coordinate(mk_angstrom(x), mk_angstrom(y), mk_angstrom(z)),
-        shells=element_shells(symbol),
         formal_charge=0,
     )
 

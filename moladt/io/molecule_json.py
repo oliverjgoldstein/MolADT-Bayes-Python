@@ -4,7 +4,7 @@ import json
 from typing import Any, Protocol, cast
 
 from ..chem.coordinate import Coordinate
-from ..chem.constants import element_shells
+from ..chem.constants import element_attributes
 from ..chem.dietz import AtomId, BondingSystem, Edge, SystemId
 from ..chem.molecule import (
     Atom,
@@ -94,27 +94,32 @@ def element_attributes_to_dict(attributes: ElementAttributes) -> dict[str, Any]:
 
 
 def element_attributes_from_dict(data: dict[str, Any]) -> ElementAttributes:
+    symbol = AtomicSymbol(str(data["symbol"]))
+    defaults = element_attributes(symbol)
     return ElementAttributes(
-        symbol=AtomicSymbol(str(data["symbol"])),
+        symbol=symbol,
         atomic_number=int(data["atomic_number"]),
         atomic_weight=float(data["atomic_weight"]),
+        shells=defaults.shells,
     )
 
 
 def atom_to_dict(atom: Atom) -> dict[str, Any]:
-    return {
+    payload = {
         "atom_id": atom.atom_id.to_dict(),
         "attributes": element_attributes_to_dict(atom.attributes),
         "coordinate": atom.coordinate.to_dict(),
-        "shells": [shell.to_dict() for shell in atom.shells],
         "formal_charge": atom.formal_charge,
     }
+    if atom.shells is not None:
+        payload["shells"] = [shell.to_dict() for shell in atom.shells]
+    return payload
 
 
 def atom_from_dict(data: dict[str, Any]) -> Atom:
     attributes = element_attributes_from_dict(data["attributes"])
-    shells_data = data.get("shells", [])
-    shells = tuple(_shell_from_dict(item) for item in shells_data) if shells_data else element_shells(attributes.symbol)
+    shells_data = data.get("shells")
+    shells = None if shells_data is None else tuple(_shell_from_dict(item) for item in shells_data)
     return Atom(
         atom_id=AtomId.from_dict(data["atom_id"]),
         attributes=attributes,
@@ -144,15 +149,17 @@ def molecule_from_dict(data: dict[str, Any]) -> Molecule:
         AtomId.from_dict(item["atom_id"]): atom_from_dict(item["atom"])
         for item in data["atoms"]
     }
-    local_bonds = frozenset(Edge.from_dict(item) for item in data["local_bonds"])
+    local_bonds = frozenset(Edge.from_dict(item) for item in data.get("local_bonds", []))
     systems = tuple(
         (SystemId.from_dict(item["system_id"]), BondingSystem.from_dict(item["bonding_system"]))
         for item in data["systems"]
     )
+    system_edges = frozenset(edge for _, system in systems for edge in system.member_edges)
+    legacy_local_bonds = local_bonds - system_edges
     smiles_stereochemistry = smiles_stereochemistry_from_dict(data.get("smiles_stereochemistry", {}))
     return Molecule(
         atoms=atoms,
-        local_bonds=local_bonds,
+        local_bonds=legacy_local_bonds,
         systems=systems,
         smiles_stereochemistry=smiles_stereochemistry,
     )

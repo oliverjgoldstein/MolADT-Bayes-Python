@@ -94,4 +94,4 @@ def test_from_json_cli_round_trips_molecule(tmp_path: Path, capsys) -> None:
 
     assert result == 0
     assert "Molecule Report" in output
-    assert "Sigma Network" in output
+    assert "Edge Network" in output

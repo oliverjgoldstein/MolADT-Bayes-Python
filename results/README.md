@@ -4,6 +4,10 @@ Local runs write timestamped folders here.
 
 Most generated files are ignored. Small reference artifacts can be checked in when they help review or reproduce a result.
 
+Molecule references use the current MolADT shape: atoms plus bonding systems,
+with each generated edge represented by a shared-electron system rather than an
+edge-only bond order.
+
 ## Main Folders
 
 | Folder | Produced by |

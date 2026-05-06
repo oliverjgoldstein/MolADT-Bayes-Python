@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from .constants import get_max_bonds_symbol
 from .dietz import AtomId, BondingSystem, Edge
 from .molecule import Molecule
-from .molecule_ops import neighbors_sigma
 
 
 class ValidationError(ValueError):
@@ -16,9 +15,7 @@ BondMap = dict[tuple[AtomId, AtomId], float]
 
 
 def used_electrons_at(molecule: Molecule, atom_id: AtomId) -> float:
-    sigma = float(len(neighbors_sigma(molecule, atom_id)))
-    system = sum(_system_electron_part(atom_id, bonding_system) for _, bonding_system in molecule.systems)
-    return sigma + system
+    return sum(_system_electron_part(atom_id, bonding_system) for _, bonding_system in molecule.systems)
 
 
 def _system_electron_part(atom_id: AtomId, bonding_system: BondingSystem) -> float:
@@ -31,10 +28,7 @@ def _system_electron_part(atom_id: AtomId, bonding_system: BondingSystem) -> flo
 
 def validate_molecule(molecule: Molecule) -> Molecule:
     atom_set = set(molecule.atoms)
-    sigma_map: BondMap = {}
-    for edge in molecule.local_bonds:
-        sigma_map = _accumulate_bond(atom_set, 2.0, sigma_map, edge)
-    full_map = sigma_map
+    full_map: BondMap = {}
     for _, bonding_system in molecule.systems:
         full_map = _add_system_bonds(atom_set, bonding_system, full_map)
     _ensure_symmetric(full_map)

@@ -9,7 +9,7 @@ MolADT can start from SDF, SMILES, or MolADT JSON.
 ./.venv/bin/python -m moladt.cli parse --properties molecules/benzene.sdf
 ```
 
-The parser accepts SDF V2000 and a core V3000 CTAB subset: atom coordinates, bond tables, atom-local charges, and property blocks.
+The parser accepts SDF V2000 and a core V3000 CTAB subset: atom coordinates, bond tables, atom-local charges, and property blocks. Bond table entries become bonding systems: single, double, and triple bonds are one-edge systems sharing 2, 4, and 6 electrons.
 
 ## MolADT JSON
 
@@ -27,7 +27,7 @@ MolADT JSON is the shared boundary format used by the Python and Haskell repos.
 ./.venv/bin/python -m moladt.cli to-example molecules/benzene.sdf --name benzene_generated --output moladt/examples/benzene_generated.py
 ```
 
-`to-python` and its `to-example` alias convert parsed geometry into canonical expanded `Molecule(...)` source with literal `AtomId(...)`, `Edge(...)`, and `mk_bonding_system(...)` entries. Atoms are sorted by `AtomId`, edges are normalized and sorted, and systems are sorted by `SystemId`. The output is meant for checked examples and reviewable fixtures, so it does not hide atoms or bonds behind generated loops.
+`to-python` and its `to-example` alias convert parsed geometry into canonical expanded `Molecule(...)` source with literal `AtomId(...)`, `Edge(...)`, and `mk_bonding_system(...)` entries. Atoms are sorted by `AtomId`, edges are normalized and sorted, and systems are sorted by `SystemId`. The output is meant for checked examples and reviewable fixtures, so it does not hide atoms or bonding systems behind generated loops.
 
 Python API:
 
@@ -51,7 +51,7 @@ print(molecule_to_smiles(round_tripped))
 ./.venv/bin/python -m moladt.cli to-smiles molecules/benzene.sdf
 ```
 
-The SMILES path is conservative. It covers the classical subset used by tests and examples. It does not try to encode every MolADT molecule.
+The SMILES path is conservative. It covers the classical subset used by tests and examples. It emits the same one-edge systems for single/double/triple bonds, adds `pi_ring` systems for supported aromatic six-rings, and does not try to encode every MolADT molecule.
 
 ## Viewer
 

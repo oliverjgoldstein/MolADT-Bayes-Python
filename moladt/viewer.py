@@ -55,7 +55,7 @@ def molecule_viewer_payload(molecule: Molecule, *, title: str = "MolADT 3D Viewe
             "y": atom.coordinate.y.value,
             "z": atom.coordinate.z.value,
             "charge": atom.formal_charge,
-            "shells": _shells_payload(atom.shells),
+            "shells": _shells_payload(atom.shells or ()),
             **_element_style(atom.attributes.symbol.value),
         }
         for atom_id, atom in sorted(molecule.atoms.items(), key=lambda item: item[0].value)

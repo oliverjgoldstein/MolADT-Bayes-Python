@@ -15,7 +15,7 @@ from moladt.chem.dietz import mk_edge
 from moladt.chem.molecule import AtomicSymbol, Molecule
 from moladt.chem.molecule_ops import effective_order
 from moladt.inference import compute_descriptors as compute_moladt_descriptors
-from moladt.inference.descriptors import coordinate_descriptors
+from moladt.inference.descriptors import coordinate_descriptors, legacy_bonding_system_shared_electrons, legacy_bonding_systems
 from moladt.io.sdf import parse_sdf_record
 from moladt.io.smiles import molecule_to_smiles, parse_smiles
 
@@ -847,9 +847,10 @@ def _typed_pair_features(molecule: Molecule) -> dict[str, float]:
 
 
 def _typed_system_features(molecule: Molecule) -> dict[str, float]:
-    atom_sizes = [float(len(system.member_atoms)) for _, system in molecule.systems]
-    edge_sizes = [float(len(system.member_edges)) for _, system in molecule.systems]
-    shared_electrons = [float(system.shared_electrons.value) for _, system in molecule.systems]
+    systems = legacy_bonding_systems(molecule)
+    atom_sizes = [float(len(system.member_atoms)) for system in systems]
+    edge_sizes = [float(len(system.member_edges)) for system in systems]
+    shared_electrons = [legacy_bonding_system_shared_electrons(system) for system in systems]
     return {
         "system_member_atoms_mean": float(np.mean(atom_sizes)) if atom_sizes else 0.0,
         "system_member_atoms_max": float(np.max(atom_sizes)) if atom_sizes else 0.0,
@@ -892,7 +893,7 @@ def _typed_radial_features(molecule: Molecule) -> dict[str, float]:
     for center in _PAIR_RADIAL_CENTERS:
         channel = np.exp(-((distances - center) ** 2) / (2.0 * (_PAIR_RADIAL_SIGMA ** 2)))
         features[_radial_feature_name("aprdf_all", center)] = float(np.sum(pair_weights * channel))
-    system_edges = {edge for _, system in molecule.systems for edge in system.member_edges}
+    system_edges = {edge for system in legacy_bonding_systems(molecule) for edge in system.member_edges}
     edge_distances: list[float] = []
     edge_weights: list[float] = []
     system_edge_distances: list[float] = []

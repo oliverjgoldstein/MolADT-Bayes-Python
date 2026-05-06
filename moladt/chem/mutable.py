@@ -52,10 +52,15 @@ class MutableMolecule:
         )
 
     def freeze(self) -> Molecule:
+        retained_systems = tuple(
+            (system_id, system)
+            for system_id, system in self.systems
+            if system.member_edges.issubset(self.local_bonds)
+        )
         return Molecule(
             atoms=self.atoms,
             local_bonds=frozenset(self.local_bonds),
-            systems=tuple(self.systems),
+            systems=retained_systems,
             smiles_stereochemistry=self.smiles_stereochemistry,
         )
 

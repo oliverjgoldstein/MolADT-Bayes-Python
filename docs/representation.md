@@ -2,7 +2,7 @@
 
 MolADT is a molecule ADT.
 
-The central object is not a SMILES string, a plain graph, or an untyped hypergraph. It is a record: atoms, sigma edges, Dietz bonding systems, coordinates, charges, and shell data all have their own fields.
+The central object is not a SMILES string, a plain graph, or an untyped hypergraph. It is a record: atoms, Dietz bonding systems, coordinates, charges, optional shell data, and a derived edge index all have their own fields.
 
 ## Molecule ADT
 
@@ -22,15 +22,21 @@ Python mirrors the same shape with typed dataclasses and snake-case names:
 @dataclass(frozen=True, slots=True)
 class Molecule:
     atoms: Mapping[AtomId, Atom]
-    local_bonds: frozenset[Edge]
-    systems: tuple[tuple[SystemId, BondingSystem], ...]
+    local_bonds: frozenset[Edge] = frozenset()
+    systems: tuple[tuple[SystemId, BondingSystem], ...] = ()
 ```
 
 | Haskell field | Python field | Meaning |
 | --- | --- | --- |
 | `atoms` | `atoms` | Atom table keyed by stable ids. |
-| `localBonds` | `local_bonds` | Ordinary two-atom sigma edges. |
-| `systems` | `systems` | Dietz electron-sharing systems. |
+| `systems` | `systems` | Canonical Dietz electron-sharing systems. |
+| `localBonds` | `local_bonds` | Compatibility edge index derived from bonding-system member edges. |
+
+Every edge is represented by a bonding system. Conventional single, double, and
+triple bonds are one-edge systems sharing `2`, `4`, and `6` electrons,
+respectively, with tags `single`, `double`, and `triple`. Legacy values that
+only provide `local_bonds` are normalized by adding two-electron `single`
+systems.
 
 ## Atom ADT
 
@@ -43,6 +49,7 @@ data ElementAttributes = ElementAttributes
   { symbol       :: AtomicSymbol
   , atomicNumber :: Int
   , atomicWeight :: Double
+  , defaultShells :: Shells
   }
 
 data Atom = Atom
@@ -76,21 +83,25 @@ class ElementAttributes:
     symbol: AtomicSymbol
     atomic_number: int
     atomic_weight: float
+    shells: Shells | None = None
 
 @dataclass(frozen=True, slots=True)
 class Atom:
     atom_id: AtomId
     attributes: ElementAttributes
     coordinate: Coordinate
-    shells: Shells
+    shells: Shells | None = None
     formal_charge: int = 0
 ```
 
-The `formalCharge` field is explicit. Shells are attached to atoms directly, so local electronic structure does not have to be recovered from a string later.
+The `formalCharge` field is explicit. Shells are optional on atoms and are also
+available from `ElementAttributes`, so simple constructors can take defaults
+from `element_attributes(symbol)` while JSON/parser boundaries can omit shell
+payloads.
 
 ## Dietz Layer
 
-MolADT separates local sigma edges from electron-sharing systems:
+MolADT stores bonding as electron-sharing systems:
 
 ```haskell
 newtype AtomId   = AtomId Integer
@@ -128,14 +139,15 @@ class BondingSystem:
     tag: str | None = None
 ```
 
-That is why the same molecule can carry both a normal graph and explicit non-classical bonding. Examples:
+That is why the same molecule can carry both conventional bonds and explicit
+non-classical bonding in one layer. Examples:
 
 | Molecule | What the ADT stores explicitly |
 | --- | --- |
-| Benzene | six local ring edges plus a six-electron `pi_ring` system |
-| Diborane | two `3c-2e` bridge systems |
-| Ferrocene | cyclopentadienyl pi systems plus Fe/Cp electron pools |
-| Morphine | fused graph plus named delocalisation systems |
+| Benzene | six one-edge `single` systems plus a six-electron `pi_ring` system |
+| Diborane | terminal `single` systems plus two `3c-2e` bridge systems |
+| Ferrocene | one-edge Cp/C-H systems plus cyclopentadienyl pi systems and Fe/Cp electron pools |
+| Morphine | every graph edge as a system plus named delocalisation systems |
 
 ## Orbital Layer
 

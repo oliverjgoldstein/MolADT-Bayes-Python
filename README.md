@@ -2,7 +2,7 @@
 
 MolADT represents molecules as typed data for Bayesian modelling, feature generation, inverse design, validation, and viewing.
 
-The core object is not just a string and not just a graph. It keeps atoms, coordinates, local bonds, electron-sharing systems, formal charge, and shell/orbital data in explicit fields that can be inspected, mutated, scored, serialized, and shared with the Haskell repo.
+The core object is not just a string and not just a graph. It keeps atoms, coordinates, bonding systems, formal charge, and optional shell/orbital data in explicit fields that can be inspected, mutated, scored, serialized, and shared with the Haskell repo. The edge set is derived from bonding systems and kept as a compatibility index.
 
 [Quickstart](docs/quickstart.md) · [Representation](docs/representation.md) · [Examples](docs/examples.md) · [Equality](docs/molecule-equality.md) · [CLI](docs/cli.md) · [Models](docs/models.md) · [Benchmarks](docs/inference-and-benchmarks.md) · [Outputs](docs/outputs.md)
 
@@ -58,9 +58,22 @@ data Molecule = Molecule
 @dataclass(frozen=True, slots=True)
 class Molecule:
     atoms: Mapping[AtomId, Atom]
-    local_bonds: frozenset[Edge]
-    systems: tuple[tuple[SystemId, BondingSystem], ...]
+    local_bonds: frozenset[Edge] = frozenset()
+    systems: tuple[tuple[SystemId, BondingSystem], ...] = ()
 ```
+
+The canonical bonding layer is `systems`: every edge is an instance of a
+`BondingSystem`. A conventional single, double, or triple bond is a one-edge
+system with `2`, `4`, or `6` shared electrons respectively, tagged `single`,
+`double`, or `triple`. `local_bonds` is retained for older callers and graph
+traversal; constructing a molecule from bare edges automatically lifts them
+into two-electron `single` systems.
+
+Pretty printers derive their edge rows from the bonding systems. They show the
+total electrons shared over each edge, then the effective order. For example, a
+benzene C-C edge displays as `shared=3e` and `order=1.50`: `2e` from its
+one-edge `single` system plus `1e/edge` from the six-electron `pi_ring`
+system. The viewer lists the same explicit bonding systems.
 
 Use [`same_molecule`](docs/molecule-equality.md) when you want equality modulo
 container ordering, such as atom maps, edge sets, system tuples, and annotation
@@ -74,9 +87,13 @@ class Atom:
     atom_id: AtomId
     attributes: ElementAttributes
     coordinate: Coordinate
-    shells: Shells
+    shells: Shells | None = None
     formal_charge: int = 0
 ```
+
+`ElementAttributes` also carries the default shell data, so simple atom
+builders can use `element_attributes(symbol)` and omit `shells`. The older
+`element_shells(symbol)` helper remains as a compatibility wrapper.
 
 Delocalised and multicentre bonding is represented explicitly:
 
@@ -93,10 +110,10 @@ Examples:
 
 | Molecule | What MolADT stores |
 | --- | --- |
-| Benzene | local ring bonds plus a six-electron `pi_ring` system |
-| Diborane | two explicit `3c-2e` bridge systems |
-| Ferrocene | two Cp pi systems plus an Fe/Cp electron pool |
-| Morphine | fused sigma skeleton plus named delocalised systems |
+| Benzene | one-edge `single` systems on each edge plus a six-electron `pi_ring`; each C-C edge displays as `shared=3e` |
+| Diborane | terminal `single` systems plus two explicit `3c-2e` bridge systems |
+| Ferrocene | one-edge Cp/C-H systems plus two Cp pi systems and an Fe/Cp electron pool |
+| Morphine | every graph edge as a system plus named delocalised systems |
 
 Ferrocene is a good example to look at because the representation keeps the metallocene structure explicit instead of flattening it into a string. This is the fully expanded ADT: no hidden loops, no placeholder edge sets.
 
@@ -250,7 +267,7 @@ make molecule-viewer VIEWER_EXAMPLES="benzene diborane ferrocene"
 make python-pretty-example EXAMPLE=morphine
 ```
 
-`make view` opens six built-in examples in one browser page. Click an atom to see stored shell/orbital glyphs, coordinates, 3D edge lengths, and bond angles from the molecule coordinates.
+`make view` opens six built-in examples in one browser page. Click an atom to see stored shell/orbital glyphs, coordinates, 3D edge lengths, effective orders, bonding systems, and bond angles from the molecule coordinates.
 
 Use `OPEN_VIEWER=1` to open generated viewer pages automatically:
 

@@ -43,7 +43,7 @@ def pretty_text(value: object) -> str:
     return pretty_block(value).render()
 
 
-def pretty_shells(shells: Shells) -> str:
+def pretty_shells(shells: Shells | None) -> str:
     return PrettyBlock(tuple(_pretty_shell_lines(shells))).render()
 
 
@@ -55,8 +55,8 @@ def pretty_block(value: object) -> PrettyBlock:
 @pretty_block.register
 def _(molecule: Molecule) -> PrettyBlock:
     atom_items = sorted(molecule.atoms.items(), key=lambda item: item[0].value)
-    sigma_edges = sorted(molecule.local_bonds)
     system_items = sorted(molecule.systems, key=lambda item: item[0].value)
+    graph_edges = _edge_network_edges(molecule, system_items)
     total_charge = sum(atom.formal_charge for _, atom in atom_items)
     atom_stereo = molecule.smiles_stereochemistry.atom_stereo
     bond_stereo = molecule.smiles_stereochemistry.bond_stereo
@@ -64,7 +64,7 @@ def _(molecule: Molecule) -> PrettyBlock:
     lines: list[str] = [
         "Molecule Report",
         "===============",
-        *_summary_section(atom_items, sigma_edges, system_items, total_charge, atom_stereo, bond_stereo),
+        *_summary_section(atom_items, graph_edges, system_items, total_charge, atom_stereo, bond_stereo),
         "",
     ]
 
@@ -85,9 +85,9 @@ def _(molecule: Molecule) -> PrettyBlock:
         lines.append("none")
     lines.append("")
 
-    lines.extend(_section_header("Sigma Network"))
-    if sigma_edges:
-        for index, edge in enumerate(sigma_edges, start=1):
+    lines.extend(_section_header("Edge Network"))
+    if graph_edges:
+        for index, edge in enumerate(graph_edges, start=1):
             lines.append(f"{index:02d}. {_format_bond_line(molecule, edge)}")
     else:
         lines.append("none")
@@ -127,17 +127,16 @@ def _(system: BondingSystem) -> PrettyBlock:
     tag_suffix = f" [{system.tag}]" if system.tag else ""
     member_atoms = ", ".join(f"#{atom_id.value}" for atom_id in sorted(system.member_atoms)) or "none"
     edge_lines = [f"{edge.a.value}-{edge.b.value}" for edge in sorted(system.member_edges)]
-    per_edge = (
-        system.shared_electrons.value / (2.0 * len(system.member_edges))
-        if system.member_edges
-        else 0.0
-    )
+    edge_electrons = _system_electrons_per_edge(system)
     lines = [
-        f"Bonding system{tag_suffix}: {system.shared_electrons.value} shared electrons",
+        f"Bonding system{tag_suffix}: {_format_electrons(system.shared_electrons.value)} shared electron pool",
         f"  member atoms: {member_atoms}",
     ]
     if edge_lines:
-        lines.append(f"  member edges (+{per_edge:.2f} bond order each):")
+        lines.append(
+            f"  member edges ({_format_electrons(edge_electrons)} shared over each edge, "
+            f"order contribution {edge_electrons / 2.0:.2f}):"
+        )
         lines.extend(f"    {edge_line}" for edge_line in edge_lines)
     else:
         lines.append("  member edges: (none)")
@@ -166,7 +165,7 @@ def _count_label(count: int, singular: str, plural: str) -> str:
 
 def _summary_section(
     atom_items: list[tuple[AtomId, Atom]],
-    sigma_edges: list[Edge],
+    graph_edges: list[Edge],
     system_items: list[tuple[SystemId, BondingSystem]],
     total_charge: int,
     atom_stereo: tuple[SmilesAtomStereo, ...],
@@ -181,7 +180,7 @@ def _summary_section(
     return [
         _summary_line("atoms", str(len(atom_items))),
         _summary_line("heavy atoms", str(sum(1 for _, atom in atom_items if atom.attributes.symbol.value != "H"))),
-        _summary_line("sigma bonds", str(len(sigma_edges))),
+        _summary_line("edges", str(len(graph_edges))),
         _summary_line("bonding systems", str(len(system_items))),
         _summary_line("net charge", f"{total_charge:+d}"),
         _summary_line("composition", _molecular_formula(atom_items)),
@@ -245,7 +244,7 @@ def _format_atom_table(
             )
         )
 
-    headers = ("atom", "Z", "chg", "sigma", "used", "xyz (Angstrom)", "sigma neighbors", "systems")
+    headers = ("atom", "Z", "chg", "degree", "used", "xyz (Angstrom)", "edge neighbors", "systems")
     widths = [
         max(len(headers[column]), *(len(row[column]) for row in rows))
         for column in range(len(headers))
@@ -255,6 +254,16 @@ def _format_atom_table(
         _format_table_separator(widths),
         *(_format_table_row(row, widths) for row in rows),
     ]
+
+
+def _edge_network_edges(
+    molecule: Molecule,
+    system_items: list[tuple[SystemId, BondingSystem]],
+) -> list[Edge]:
+    edges = set(molecule.local_bonds)
+    for _, system in system_items:
+        edges.update(system.member_edges)
+    return sorted(edges)
 
 
 def _format_atom_shell_block(atom: Atom) -> list[str]:
@@ -301,31 +310,36 @@ def _format_coord(coordinate: Coordinate) -> str:
 
 def _format_bond_line(molecule: Molecule, edge: Edge) -> str:
     pair = _format_edge_short(molecule, edge)
+    shared_text = f"shared={_format_electrons(_edge_shared_electrons(molecule.systems, edge))}"
     order_text = f"order={effective_order(molecule, edge):.2f}"
     system_labels = [
-        _format_system_label(system_id.value, system.tag)
+        _format_edge_system_ref(system_id, system)
         for system_id, system in molecule.systems
         if edge in system.member_edges
     ]
     suffix = f"  systems={', '.join(system_labels)}" if system_labels else ""
-    return f"{pair}  {order_text}{suffix}"
+    return f"{pair}  {shared_text}  {order_text}{suffix}"
 
 
 def _format_system_block(molecule: Molecule, system_id: SystemId, system: BondingSystem) -> list[str]:
     title = f"[#{system_id.value}] {system.tag}" if system.tag else f"[#{system_id.value}]"
     lines = [
         title,
-        f"  shared electrons: {system.shared_electrons.value}",
+        f"  shared electrons: {_format_electrons(system.shared_electrons.value)} pool",
         f"  member edges:     {len(system.member_edges)}",
     ]
     atom_refs = ", ".join(_render_atom_ref(molecule.atoms[atom_id]) for atom_id in sorted(system.member_atoms))
     if atom_refs:
         lines.append(f"  member atoms:     {atom_refs}")
     if system.member_edges:
-        per_edge = system.shared_electrons.value / (2.0 * len(system.member_edges))
-        lines.append(f"  edge bonus:       +{per_edge:.2f} to each listed edge")
+        edge_electrons = _system_electrons_per_edge(system)
+        lines.append(f"  edge share:       {_format_electrons(edge_electrons)} per listed edge")
+        lines.append(f"  bond-order part:  {edge_electrons / 2.0:.2f} per listed edge")
         lines.append("  edge list:")
-        lines.extend(f"    - {_format_edge_short(molecule, edge)}" for edge in sorted(system.member_edges))
+        lines.extend(
+            f"    - {_format_edge_short(molecule, edge)}  shares {_format_electrons(edge_electrons)}"
+            for edge in sorted(system.member_edges)
+        )
     else:
         lines.append("  edge list:        none")
     return lines
@@ -349,9 +363,35 @@ def _format_system_label(system_id: int, tag: str | None) -> str:
     return f"#{system_id}[{tag}]" if tag else f"#{system_id}"
 
 
+def _format_edge_system_ref(system_id: SystemId, system: BondingSystem) -> str:
+    label = _format_system_label(system_id.value, system.tag)
+    edge_electrons = _system_electrons_per_edge(system)
+    if len(system.member_edges) == 1 and system.shared_electrons.value in {2, 4, 6}:
+        return f"{label}:{_format_electrons(edge_electrons)}"
+    return f"{label}:{_format_electrons(edge_electrons)}/edge from {_format_electrons(system.shared_electrons.value)}"
+
+
+def _system_electrons_per_edge(system: BondingSystem) -> float:
+    if not system.member_edges:
+        return 0.0
+    return system.shared_electrons.value / len(system.member_edges)
+
+
+def _edge_shared_electrons(system_items: Iterable[tuple[SystemId, BondingSystem]], edge: Edge) -> float:
+    return sum(_system_electrons_per_edge(system) for _, system in system_items if edge in system.member_edges)
+
+
+def _format_electrons(value: float | int) -> str:
+    numeric = float(value)
+    rounded = round(numeric)
+    if abs(numeric - rounded) <= 1e-9:
+        return f"{rounded}e"
+    return f"{numeric:.2f}e"
+
+
 def _system_labels_for_atom(system_items: list[tuple[SystemId, BondingSystem]], atom_id: AtomId) -> list[str]:
     return [
-        _format_system_label(system_id.value, system.tag)
+        f"{_format_system_label(system_id.value, system.tag)}:{_format_electrons(system.shared_electrons.value)}"
         for system_id, system in system_items
         if atom_id in system.member_atoms
     ]
@@ -370,7 +410,9 @@ def _format_bond_stereo(molecule: Molecule, stereo: SmilesBondStereo) -> str:
     return f"{left} -> {right}: {stereo.direction.value}"
 
 
-def _pretty_shell_lines(shells: Shells) -> list[str]:
+def _pretty_shell_lines(shells: Shells | None) -> list[str]:
+    if shells is None:
+        return []
     lines: list[str] = []
     for shell in shells:
         subshell_lines = _format_shell(shell)

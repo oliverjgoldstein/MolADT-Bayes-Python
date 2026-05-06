@@ -1,9 +1,10 @@
 # Orbitals
 
-Atoms carry local shell and orbital data.
+Atoms can carry local shell and orbital data. Shells are optional on `Atom`,
+and default element shells live in `ElementAttributes`.
 
 ```text
-Molecule -> Atom -> Shells -> Shell -> SubShell -> Orbital
+Molecule -> Atom -> Shells? -> Shell -> SubShell -> Orbital
 ```
 
 The Python types live in [`moladt/chem/orbital.py`](../moladt/chem/orbital.py), and mirror the ADT shape used by the sibling Haskell repo.
@@ -120,7 +121,7 @@ class Shell:
 Shells: TypeAlias = tuple[Shell, ...]
 ```
 
-An `Orbital` records its typed orbital constructor, electron count, optional orientation, and optional hybrid components. A `Shell` records one principal quantum number and optional `s`, `p`, `d`, and `f` subshells.
+An `Orbital` records its typed orbital constructor, electron count, optional orientation, and optional hybrid components. A `Shell` records one principal quantum number and optional `s`, `p`, `d`, and `f` subshells. A molecule can omit atom shells at a parser or JSON boundary; constructors fill defaults from `element_attributes(symbol)` when available.
 
 ## Iodine Valence
 

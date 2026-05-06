@@ -22,4 +22,4 @@ Start here when you need more than the root [README](../README.md).
 - [Data sources](data-sources.md): FreeSolv, QM9, and ZINC inputs.
 - [Repo map](repo-map.md): where the main code lives.
 
-MolADT's core idea is simple: keep molecule structure as typed data, then parse, validate, featurize, score, and export that same object.
+MolADT's core idea is simple: keep molecule structure as typed data, then parse, validate, featurize, score, and export that same object. At the bonding layer, every edge is represented by a bonding system; single, double, and triple bonds are one-edge systems sharing 2, 4, and 6 electrons. Pretty printers display edge rows from that bonding-system layer, including the total electrons shared over each edge; viewers list the same explicit systems.

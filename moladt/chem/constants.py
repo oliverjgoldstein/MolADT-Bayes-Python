@@ -94,24 +94,6 @@ _NOMINAL_VALENCE: dict[AtomicSymbol, tuple[int, int]] = {
 }
 
 
-_ELEMENT_ATTRIBUTES: dict[AtomicSymbol, ElementAttributes] = {
-    AtomicSymbol.O: ElementAttributes(AtomicSymbol.O, 8, 15.999),
-    AtomicSymbol.H: ElementAttributes(AtomicSymbol.H, 1, 1.008),
-    AtomicSymbol.N: ElementAttributes(AtomicSymbol.N, 7, 14.007),
-    AtomicSymbol.C: ElementAttributes(AtomicSymbol.C, 6, 12.011),
-    AtomicSymbol.B: ElementAttributes(AtomicSymbol.B, 5, 10.811),
-    AtomicSymbol.Fe: ElementAttributes(AtomicSymbol.Fe, 26, 55.845),
-    AtomicSymbol.F: ElementAttributes(AtomicSymbol.F, 9, 18.998),
-    AtomicSymbol.Cl: ElementAttributes(AtomicSymbol.Cl, 17, 35.453),
-    AtomicSymbol.S: ElementAttributes(AtomicSymbol.S, 16, 32.065),
-    AtomicSymbol.Br: ElementAttributes(AtomicSymbol.Br, 35, 79.904),
-    AtomicSymbol.P: ElementAttributes(AtomicSymbol.P, 15, 30.974),
-    AtomicSymbol.Si: ElementAttributes(AtomicSymbol.Si, 14, 28.085),
-    AtomicSymbol.I: ElementAttributes(AtomicSymbol.I, 53, 126.904),
-    AtomicSymbol.Na: ElementAttributes(AtomicSymbol.Na, 11, 22.990),
-}
-
-
 _ELEMENT_SHELLS = {
     AtomicSymbol.O: orbital.OXYGEN,
     AtomicSymbol.H: orbital.HYDROGEN,
@@ -127,6 +109,24 @@ _ELEMENT_SHELLS = {
     AtomicSymbol.Si: orbital.SILICON,
     AtomicSymbol.I: orbital.IODINE,
     AtomicSymbol.Na: orbital.SODIUM,
+}
+
+
+_ELEMENT_ATTRIBUTES: dict[AtomicSymbol, ElementAttributes] = {
+    AtomicSymbol.O: ElementAttributes(AtomicSymbol.O, 8, 15.999, _ELEMENT_SHELLS[AtomicSymbol.O]),
+    AtomicSymbol.H: ElementAttributes(AtomicSymbol.H, 1, 1.008, _ELEMENT_SHELLS[AtomicSymbol.H]),
+    AtomicSymbol.N: ElementAttributes(AtomicSymbol.N, 7, 14.007, _ELEMENT_SHELLS[AtomicSymbol.N]),
+    AtomicSymbol.C: ElementAttributes(AtomicSymbol.C, 6, 12.011, _ELEMENT_SHELLS[AtomicSymbol.C]),
+    AtomicSymbol.B: ElementAttributes(AtomicSymbol.B, 5, 10.811, _ELEMENT_SHELLS[AtomicSymbol.B]),
+    AtomicSymbol.Fe: ElementAttributes(AtomicSymbol.Fe, 26, 55.845, _ELEMENT_SHELLS[AtomicSymbol.Fe]),
+    AtomicSymbol.F: ElementAttributes(AtomicSymbol.F, 9, 18.998, _ELEMENT_SHELLS[AtomicSymbol.F]),
+    AtomicSymbol.Cl: ElementAttributes(AtomicSymbol.Cl, 17, 35.453, _ELEMENT_SHELLS[AtomicSymbol.Cl]),
+    AtomicSymbol.S: ElementAttributes(AtomicSymbol.S, 16, 32.065, _ELEMENT_SHELLS[AtomicSymbol.S]),
+    AtomicSymbol.Br: ElementAttributes(AtomicSymbol.Br, 35, 79.904, _ELEMENT_SHELLS[AtomicSymbol.Br]),
+    AtomicSymbol.P: ElementAttributes(AtomicSymbol.P, 15, 30.974, _ELEMENT_SHELLS[AtomicSymbol.P]),
+    AtomicSymbol.Si: ElementAttributes(AtomicSymbol.Si, 14, 28.085, _ELEMENT_SHELLS[AtomicSymbol.Si]),
+    AtomicSymbol.I: ElementAttributes(AtomicSymbol.I, 53, 126.904, _ELEMENT_SHELLS[AtomicSymbol.I]),
+    AtomicSymbol.Na: ElementAttributes(AtomicSymbol.Na, 11, 22.990, _ELEMENT_SHELLS[AtomicSymbol.Na]),
 }
 
 
@@ -152,5 +152,5 @@ def element_attributes(symbol: AtomicSymbol) -> ElementAttributes:
     return _ELEMENT_ATTRIBUTES[symbol]
 
 
-def element_shells(symbol: AtomicSymbol) -> orbital.Shells:
-    return _ELEMENT_SHELLS[symbol]
+def element_shells(symbol: AtomicSymbol) -> orbital.Shells | None:
+    return element_attributes(symbol).shells

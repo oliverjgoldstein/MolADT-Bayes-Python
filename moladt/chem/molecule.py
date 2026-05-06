@@ -6,7 +6,7 @@ from types import MappingProxyType
 from typing import Mapping, TypeAlias
 
 from .coordinate import Coordinate
-from .dietz import AtomId, BondingSystem, Edge, NonNegative, SystemId
+from .dietz import AtomId, BondingSystem, Edge, NonNegative, SystemId, mk_bonding_system
 from .orbital import Shells
 
 
@@ -104,6 +104,7 @@ class ElementAttributes:
     symbol: AtomicSymbol
     atomic_number: int
     atomic_weight: float
+    shells: Shells | None = None
 
     def __str__(self) -> str:
         return f"{self.symbol.value}(Z={self.atomic_number}, {self.atomic_weight:.4f} u)"
@@ -114,8 +115,12 @@ class Atom:
     atom_id: AtomId
     attributes: ElementAttributes
     coordinate: Coordinate
-    shells: Shells
+    shells: Shells | None = None
     formal_charge: int = 0
+
+    def __post_init__(self) -> None:
+        if self.shells is None and self.attributes.shells is not None:
+            object.__setattr__(self, "shells", self.attributes.shells)
 
     def pretty(self) -> str:
         from .pretty import pretty_text
@@ -166,14 +171,17 @@ def _normalize_systems(systems: MoleculeSystems) -> MoleculeSystems:
 @dataclass(frozen=True, slots=True)
 class Molecule:
     atoms: Mapping[AtomId, Atom]
-    local_bonds: frozenset[Edge]
-    systems: MoleculeSystems
+    local_bonds: frozenset[Edge] = frozenset()
+    systems: MoleculeSystems = ()
     smiles_stereochemistry: SmilesStereochemistry = field(default_factory=SmilesStereochemistry)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "atoms", _normalize_atom_map(self.atoms))
-        object.__setattr__(self, "local_bonds", frozenset(self.local_bonds))
-        object.__setattr__(self, "systems", _normalize_systems(self.systems))
+        systems = _normalize_systems(self.systems)
+        systems = _with_single_edge_systems(frozenset(self.local_bonds), systems)
+        edge_index = frozenset(edge for _, system in systems for edge in system.member_edges)
+        object.__setattr__(self, "local_bonds", edge_index)
+        object.__setattr__(self, "systems", systems)
 
 
 def same_molecule(left: Molecule, right: Molecule) -> bool:
@@ -206,6 +214,35 @@ def molecule_canonical_key(molecule: Molecule) -> CanonicalMolecule:
         ),
         _canonical_stereochemistry(molecule.smiles_stereochemistry),
     )
+
+
+def _with_single_edge_systems(local_bonds: frozenset[Edge], systems: MoleculeSystems) -> MoleculeSystems:
+    """Lift legacy edge-only input into explicit 2e bonding systems.
+
+    The canonical Dietz layer stores electron sharing in bonding systems. The
+    `local_bonds` field is retained as a compatibility edge index, so any edge
+    supplied there but not already covered by a system becomes a singleton
+    single-bond system with two shared electrons.
+    """
+
+    covered_edges = frozenset(
+        edge
+        for _, system in systems
+        if len(system.member_edges) == 1 and system.shared_electrons.value in {2, 4, 6}
+        for edge in system.member_edges
+    )
+    missing_edges = sorted(local_bonds - covered_edges)
+    if not missing_edges:
+        return systems
+    next_id = max((system_id.value for system_id, _ in systems), default=0) + 1
+    additions = tuple(
+        (
+            SystemId(next_id + offset),
+            mk_bonding_system(NonNegative(2), frozenset({edge}), "single"),
+        )
+        for offset, edge in enumerate(missing_edges)
+    )
+    return _normalize_systems(systems + additions)
 
 
 def _canonical_bonding_system(system: BondingSystem) -> CanonicalBondingSystem:

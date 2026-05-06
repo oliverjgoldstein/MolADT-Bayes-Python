@@ -1,0 +1,33 @@
+FreeSolv Bayesian model summary
+Selected run: moladt_featurized / bayes_gp_rbf_screened / laplace
+Split scheme: moleculenet_random_like:513/64/65
+Rows: train=513 valid=64 test=65
+
+Train/test predictive uncertainty
+- Train
+  n_eval = 513
+  rmse = 0.509517
+  mae = 0.331127
+  r2 = 0.982356
+  mean_predictive_sd = 0.741347
+  empirical_90pct_coverage = 0.955166
+  mean_log_predictive_density = -0.875980
+- Test
+  n_eval = 65
+  rmse = 0.737749
+  mae = 0.530556
+  r2 = 0.938939
+  mean_predictive_sd = 1.062995
+  empirical_90pct_coverage = 0.969231
+  mean_log_predictive_density = -1.110836
+
+Posterior hyperparameters
+- alpha = -5.016285 (sd 1.382439; p05 -7.305681; p95 -2.759889)
+- signal_scale = 6.123190 (sd 0.763139; p05 4.936573; p95 7.426750)
+- lengthscale = 3.813514 (sd 0.305272; p05 3.316686; p95 4.332702)
+- sigma = 0.638601 (sd 0.035717; p05 0.579971; p95 0.697301)
+
+Posterior-mean predictive model
+mu(x*) = -5.016285 + K_rbf(x*, X_train; signal_scale=6.123190, lengthscale=3.813514) @ [K_rbf(X_train, X_train; signal_scale=6.123190, lengthscale=3.813514) + 0.638601^2 I]^-1 @ (y_train - -5.016285)
+k_rbf(a, b; signal_scale=s, lengthscale=l) = s^2 * exp(-||a - b||^2 / (2 * l^2))
+y(x*) | data is summarized by Normal(mu(x*), predictive_sd(x*)^2) with observation noise sigma=0.638601

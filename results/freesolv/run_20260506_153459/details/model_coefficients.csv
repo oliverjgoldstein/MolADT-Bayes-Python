@@ -1,0 +1,5 @@
+dataset,representation,target,model,method,parameter_type,parameter_name,feature_group,equation_term,draw_count,runtime_seconds,posterior_mean,posterior_abs_mean,posterior_sd,posterior_median,posterior_p05,posterior_p95,importance_rank
+freesolv,moladt_featurized,expt,bayes_gp_rbf_screened,laplace,intercept,alpha,global,alpha,2000,64.6814009580412,-5.21397789205,5.21397789205,1.2615144505763043,-5.2074296,-7.281565335,-3.1417770850000006,1
+freesolv,moladt_featurized,expt,bayes_gp_rbf_screened,laplace,signal_scale,signal_scale,kernel,signal_scale,2000,64.6814009580412,5.9221527514,5.9221527514,0.7242496713793822,5.8858031,4.788115234999999,7.16292921,2
+freesolv,moladt_featurized,expt,bayes_gp_rbf_screened,laplace,lengthscale,lengthscale,kernel,lengthscale,2000,64.6814009580412,3.5117830260499994,3.5117830260499994,0.3101330064655742,3.49775975,3.012658315,4.0409022,3
+freesolv,moladt_featurized,expt,bayes_gp_rbf_screened,laplace,noise_scale,sigma,global,sigma,2000,64.6814009580412,0.5793803186100001,0.5793803186100001,0.03919984448459726,0.578499255,0.515456709,0.6441637955,4

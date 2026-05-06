@@ -16,7 +16,7 @@ from typing import Callable, Protocol, Sequence, TextIO
 import numpy as np
 import pandas as pd
 
-from moladt.chem.constants import element_attributes, element_shells, equilibrium_bond_length
+from moladt.chem.constants import element_attributes, equilibrium_bond_length
 from moladt.chem.coordinate import Coordinate, mk_angstrom
 from moladt.chem.dietz import AtomId, BondingSystem, Edge, NonNegative, SystemId, mk_bonding_system, mk_edge
 from moladt.chem.molecule import Atom, AtomicSymbol, Molecule
@@ -948,7 +948,7 @@ def mutate_atom(molecule: Molecule, rng: random.Random) -> Molecule | None:
     mutable.atoms[atom_id] = replace(
         atom,
         attributes=element_attributes(new_symbol),
-        shells=element_shells(new_symbol),
+        shells=None,
     )
     return _complete_generated_candidate(mutable.freeze())
 
@@ -1632,7 +1632,6 @@ def _new_atom(atom_id: AtomId, symbol: AtomicSymbol, parent_id: AtomId, molecule
             mk_angstrom(parent_atom.coordinate.y.value + bond_length * direction[1]),
             mk_angstrom(parent_atom.coordinate.z.value + bond_length * direction[2]),
         ),
-        shells=element_shells(symbol),
         formal_charge=0,
     )
 
@@ -1784,7 +1783,6 @@ def _seed_atom(atom_id: int, symbol: AtomicSymbol, x: float, y: float, z: float)
         atom_id=resolved_atom_id,
         attributes=element_attributes(symbol),
         coordinate=Coordinate(mk_angstrom(x), mk_angstrom(y), mk_angstrom(z)),
-        shells=element_shells(symbol),
         formal_charge=0,
     )
 
@@ -1911,8 +1909,6 @@ def _can_add_pi_ring_system(molecule: Molecule, ring: frozenset[Edge]) -> bool:
     system = mk_bonding_system(NonNegative(6), ring, "pi_ring")
     if not _is_valid_pi_ring(molecule, system):
         return False
-    if any(_has_localized_singleton_system(molecule, edge) for edge in ring):
-        return False
     ring_atoms = {atom_id for edge in ring for atom_id in (edge.a, edge.b)}
     return all(
         _hydrogen_slots_after(molecule, atom_id, AtomicSymbol.C, extra_used=1.0) is not None
@@ -1954,12 +1950,20 @@ def _sigma_degree_without_terminal_hydrogens(molecule: Molecule, atom_id: AtomId
 
 
 def _atom_participates_in_system(molecule: Molecule, atom_id: AtomId) -> bool:
-    return any(atom_id in system.member_atoms for _, system in molecule.systems)
+    return any(
+        atom_id in system.member_atoms and len(system.member_edges) > 1
+        for _, system in molecule.systems
+    )
 
 
 def _terminal_hydrogens_attached_to(molecule: Molecule, atom_id: AtomId) -> tuple[AtomId, ...]:
     hydrogens: list[AtomId] = []
-    system_atoms = {member for _, system in molecule.systems for member in system.member_atoms}
+    system_atoms = {
+        member
+        for _, system in molecule.systems
+        if len(system.member_edges) > 1
+        for member in system.member_atoms
+    }
     for neighbor in neighbors_sigma(molecule, atom_id):
         atom = molecule.atoms[neighbor]
         if atom.attributes.symbol is not AtomicSymbol.H:
@@ -2167,7 +2171,12 @@ def _ensure_no_hydrogen_hydrogen_local_bonds(molecule: Molecule) -> None:
 
 
 def _ensure_terminal_atom_rules(molecule: Molecule) -> None:
-    system_atoms = {atom_id for _, system in molecule.systems for atom_id in system.member_atoms}
+    system_atoms = {
+        atom_id
+        for _, system in molecule.systems
+        if len(system.member_edges) > 1
+        for atom_id in system.member_atoms
+    }
     for atom_id, atom in molecule.atoms.items():
         symbol = atom.attributes.symbol
         if symbol not in TERMINAL_FREE_SOLV_SYMBOLS:
@@ -2411,7 +2420,12 @@ def _atom_participates_in_pi_ring(molecule: Molecule, atom_id: AtomId) -> bool:
 
 def _complete_terminal_hydrogens(molecule: Molecule) -> Molecule:
     mutable = MutableMolecule.from_molecule(molecule)
-    system_atoms = {atom_id for _, system in molecule.systems for atom_id in system.member_atoms}
+    system_atoms = {
+        atom_id
+        for _, system in molecule.systems
+        if len(system.member_edges) > 1
+        for atom_id in system.member_atoms
+    }
     removable_hydrogens = [
         atom_id
         for atom_id, atom in molecule.atoms.items()

@@ -95,7 +95,11 @@ def test_same_molecule_detects_structural_changes() -> None:
     changed = Molecule(
         atoms=base.atoms,
         local_bonds=frozenset({Edge(AtomId(1), AtomId(2))}),
-        systems=base.systems,
+        systems=tuple(
+            entry
+            for entry in base.systems
+            if Edge(AtomId(1), AtomId(3)) not in entry[1].member_edges
+        ),
     )
 
     assert not same_molecule(base, changed)

@@ -3,15 +3,25 @@ from __future__ import annotations
 from math import sqrt
 
 from .coordinate import Angstrom, mk_angstrom
-from .dietz import AtomId, Edge, SystemId, mk_edge
+from .dietz import AtomId, Edge, NonNegative, SystemId, mk_bonding_system, mk_edge
 from .molecule import Atom, Molecule
 
 
 def add_sigma(atom_a: AtomId, atom_b: AtomId, molecule: Molecule) -> Molecule:
+    edge = mk_edge(atom_a, atom_b)
+    if edge in molecule.local_bonds:
+        return molecule
+    next_system_id = max((system_id.value for system_id, _ in molecule.systems), default=0) + 1
     return Molecule(
         atoms=molecule.atoms,
-        local_bonds=molecule.local_bonds | {mk_edge(atom_a, atom_b)},
-        systems=molecule.systems,
+        local_bonds=molecule.local_bonds | {edge},
+        systems=molecule.systems
+        + (
+            (
+                SystemId(next_system_id),
+                mk_bonding_system(NonNegative(2), frozenset({edge}), "single"),
+            ),
+        ),
         smiles_stereochemistry=molecule.smiles_stereochemistry,
     )
 
@@ -38,12 +48,11 @@ def edge_systems(molecule: Molecule, edge: Edge) -> tuple[SystemId, ...]:
 
 
 def effective_order(molecule: Molecule, edge: Edge) -> float:
-    sigma = 1.0 if edge in molecule.local_bonds else 0.0
-    pi_contribution = 0.0
+    contribution = 0.0
     for _, system in molecule.systems:
         if edge in system.member_edges and system.member_edges:
-            pi_contribution += system.shared_electrons.value / (2.0 * len(system.member_edges))
-    return sigma + pi_contribution
+            contribution += system.shared_electrons.value / (2.0 * len(system.member_edges))
+    return contribution
 
 
 def pretty_print_molecule(molecule: Molecule) -> str:

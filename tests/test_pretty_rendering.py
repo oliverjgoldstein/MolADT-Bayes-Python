@@ -15,24 +15,26 @@ def test_ferrocene_pretty_rendering_includes_shells_and_backdonation() -> None:
     rendered = pretty_text(ferrocene_pretty)
     assert "Molecule Report" in rendered
     assert "heavy atoms      11" in rendered
-    assert "atom    Z   chg  sigma  used" in rendered
-    assert "bonding systems  3" in rendered
+    assert "atom    Z   chg  degree  used" in rendered
+    assert "bonding systems  23" in rendered
     assert "Bonding Systems" in rendered
     assert "[#3] fe_backdonation" in rendered
     assert "[Fe#1]" in rendered
-    assert "#3[fe_backdonation]" in rendered
+    assert "#3[fe_backdonation]:6e" in rendered
     assert "Electron Shells" in rendered
     assert "shells:" in rendered
+    assert "shared=" in rendered
 
 
 def test_diborane_pretty_rendering_includes_3c2e_bridges() -> None:
     rendered = pretty_text(diborane_pretty)
     assert "atoms            8" in rendered
     assert "heavy atoms      2" in rendered
-    assert "Sigma Network" in rendered
+    assert "Edge Network" in rendered
     assert "[#1] bridge_h3_3c2e" in rendered
     assert "[#2] bridge_h4_3c2e" in rendered
-    assert "edge bonus:       +0.50 to each listed edge" in rendered
+    assert "edge share:       1e per listed edge" in rendered
+    assert "bond-order part:  0.50 per listed edge" in rendered
     assert "[B#1]" in rendered
     assert "used" in rendered
 
@@ -50,6 +52,8 @@ def test_benzene_pretty_rendering_omits_empty_stereochemistry_section() -> None:
     rendered = pretty_text(read_sdf(PROJECT_ROOT / "molecules" / "benzene.sdf"))
 
     assert "SMILES Stereochemistry" not in rendered
+    assert "shared=3e  order=1.50" in rendered
+    assert "#13[pi_ring]:1e/edge from 6e" in rendered
 
 
 def test_manuscript_examples_render_titles_and_notes() -> None:

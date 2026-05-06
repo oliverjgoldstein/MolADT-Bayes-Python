@@ -19,6 +19,11 @@ Tracked files:
 - `generated_molecules.csv`
 - `generated_molecules.jsonl`
 
+The molecule files are explicit MolADT values: atoms plus bonding systems. A
+generated single, double, or triple edge is stored as a one-edge system sharing
+2, 4, or 6 electrons, so pretty-printing the files shows electron sharing over
+the edge rather than a separate bond-order field.
+
 Run `make freesolv` first when these molecules should be paired with a fresh FreeSolv benchmark.
 
 Open the saved top 10 in the browser:

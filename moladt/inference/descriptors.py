@@ -3,9 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from math import log, pi, sqrt
 
-from ..chem.dietz import AtomId, Edge
+from ..chem.dietz import AtomId, BondingSystem, Edge
 from ..chem.molecule import Atom, AtomicSymbol, Molecule
 from ..chem.molecule_ops import effective_order
+
+_CONVENTIONAL_ONE_EDGE_SYSTEM_ELECTRONS = {
+    "single": 2,
+    "double": 4,
+    "triple": 6,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -230,16 +236,41 @@ def negative_charge_count(molecule: Molecule) -> float:
     return sum(bool_to_float(atom.formal_charge < 0) for atom in atom_list(molecule))
 
 
+def is_conventional_one_edge_system(system: BondingSystem) -> bool:
+    return (
+        len(system.member_edges) == 1
+        and system.tag in _CONVENTIONAL_ONE_EDGE_SYSTEM_ELECTRONS
+        and system.shared_electrons.value == _CONVENTIONAL_ONE_EDGE_SYSTEM_ELECTRONS[system.tag]
+    )
+
+
+def is_sigma_singleton_system(system: BondingSystem) -> bool:
+    return (
+        is_conventional_one_edge_system(system)
+        and system.tag == "single"
+    )
+
+
+def legacy_bonding_systems(molecule: Molecule) -> tuple[BondingSystem, ...]:
+    return tuple(system for _, system in molecule.systems if not is_sigma_singleton_system(system))
+
+
+def legacy_bonding_system_shared_electrons(system: BondingSystem) -> float:
+    if is_conventional_one_edge_system(system) and system.tag in {"double", "triple"}:
+        return float(system.shared_electrons.value - 2)
+    return float(system.shared_electrons.value)
+
+
 def bonding_system_count(molecule: Molecule) -> float:
-    return float(len(molecule.systems))
+    return float(len(legacy_bonding_systems(molecule)))
 
 
 def multicentre_system_count(molecule: Molecule) -> float:
-    return float(sum(1 for _, system in molecule.systems if len(system.member_edges) > 1))
+    return float(sum(1 for system in legacy_bonding_systems(molecule) if len(system.member_edges) > 1))
 
 
 def zero_electron_system_count(molecule: Molecule) -> float:
-    return float(sum(1 for _, system in molecule.systems if system.shared_electrons.value == 0))
+    return float(sum(1 for system in legacy_bonding_systems(molecule) if system.shared_electrons.value == 0))
 
 
 def sigma_edge_count(molecule: Molecule) -> float:

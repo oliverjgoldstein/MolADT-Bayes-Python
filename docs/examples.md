@@ -18,9 +18,9 @@ make molecule-viewer VIEWER_EXAMPLES=ferrocene
 | --- | --- |
 | Benzene | Classical ring plus a six-electron `pi_ring`. |
 | Water | Small parser, validation, and SMILES sanity check. |
-| Diborane | Two explicit `3c-2e` bridge systems. |
-| Ferrocene | Organometallic Cp/metal bonding systems. |
-| Morphine | Fused graph plus named delocalization systems. |
+| Diborane | Terminal `single` systems plus two explicit `3c-2e` bridge systems. |
+| Ferrocene | One-edge Cp/C-H systems plus organometallic Cp/metal bonding systems. |
+| Morphine | Every graph edge as a system plus named delocalization systems. |
 
 ## Where They Live
 
@@ -36,12 +36,14 @@ make molecule-viewer VIEWER_EXAMPLES=ferrocene
 
 - SMILES is a boundary format.
 - MolADT is the working object.
-- Non-classical bonding is explicit in `systems`, not squeezed into a string.
+- Every edge is explicit in `systems`; non-classical bonding is not squeezed into a string.
 - The same object can be validated, viewed, serialized, featurized, and scored.
-- Checked-in examples are expanded as literal `AtomId`, `Edge`, and `BondingSystem` values. They do not hide their atoms or bonds behind loops.
+- Checked-in examples are expanded as literal `AtomId`, `Edge`, and `BondingSystem` values. They do not hide their atoms or bonding systems behind loops.
 - The canonical normal form is sorted and fully explicit: atoms by `AtomId`, normalized edges with the lower `AtomId` first, and systems by `SystemId`.
 
-The examples use this shape:
+The examples can still show a `local_bonds` input for readability, but molecule
+construction normalizes those edges into one-edge `single` bonding systems.
+Benzene also keeps the aromatic `pi_ring` system:
 
 ```python
 from __future__ import annotations
