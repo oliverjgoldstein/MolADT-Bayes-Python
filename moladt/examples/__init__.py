@@ -4,6 +4,7 @@ from .benzene import benzene, benzene_pretty
 from .diborane import diborane_pretty
 from .ferrocene import ferrocene_pretty
 from .manuscript import (
+    BENZENE_MANUSCRIPT,
     DIBORANE_MANUSCRIPT,
     FERROCENE_MANUSCRIPT,
     MANUSCRIPT_EXAMPLES,
@@ -15,6 +16,7 @@ from .morphine import MORPHINE_RING_CLOSURE_SMILES, morphine_pretty
 from .sample_molecules import hydrogen, methane, oxygen, water
 
 __all__ = [
+    "BENZENE_MANUSCRIPT",
     "DIBORANE_MANUSCRIPT",
     "FERROCENE_MANUSCRIPT",
     "MANUSCRIPT_EXAMPLES",

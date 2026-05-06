@@ -19,7 +19,7 @@ Run:
 | `from-json` | Read MolADT JSON back into a validated molecule. |
 | `view-html` | Export a standalone HTML molecule viewer from MolADT JSON. |
 | `view-examples` | Export the built-in ADT examples in one viewer while preserving their bonding systems. |
-| `pretty-example` | Print built-in examples such as diborane, ferrocene, or morphine. |
+| `pretty-example` | Print built-in examples such as benzene, diborane, ferrocene, or morphine. |
 
 ## Examples
 
@@ -35,7 +35,7 @@ Run:
 ./.venv/bin/python -m moladt.cli view-html benzene.moladt.json --output benzene.viewer.html
 ./.venv/bin/python -m moladt.cli view-html benzene.moladt.json --output benzene.viewer.html --open-viewer
 ./.venv/bin/python -m moladt.cli view-examples --output examples.viewer.html --open-viewer
-./.venv/bin/python -m moladt.cli pretty-example ferrocene
+./.venv/bin/python -m moladt.cli pretty-example benzene
 ./.venv/bin/python -m moladt.cli pretty-example ferrocene --open-viewer
 ```
 

@@ -6,12 +6,14 @@ from ..chem.molecule import (
     Molecule,
     SmilesAtomStereo,
     SmilesAtomStereoClass,
+    SmilesBondStereo,
+    SmilesBondStereoDirection,
     SmilesStereochemistry,
 )
-from ._literal import atom, single_covalent_systems
+from ._literal import atom
 
 
-MORPHINE_RING_CLOSURE_SMILES = "CN1CC[C@]23C4=C5C=CC(O)=C4O[C@H]2[C@@H](O)C=C[C@H]3[C@H]1C5"
+MORPHINE_RING_CLOSURE_SMILES = 'CN1CC[C@]23C4=C5C=CC(O)=C4O[C@H]2[C@@H](O)C=C[C@H]3[C@H]1C5'
 
 morphine_pretty = Molecule(
     atoms={
@@ -67,44 +69,316 @@ morphine_pretty = Molecule(
                 "phenyl_pi_ring",
             ),
         ),
-    )
-    + single_covalent_systems(
-        3,
         (
-            Edge(AtomId(1), AtomId(2)),
-            Edge(AtomId(1), AtomId(11)),
-            Edge(AtomId(2), AtomId(3)),
-            Edge(AtomId(2), AtomId(8)),
-            Edge(AtomId(3), AtomId(4)),
-            Edge(AtomId(3), AtomId(5)),
-            Edge(AtomId(5), AtomId(6)),
-            Edge(AtomId(6), AtomId(7)),
-            Edge(AtomId(7), AtomId(8)),
-            Edge(AtomId(7), AtomId(18)),
-            Edge(AtomId(8), AtomId(9)),
-            Edge(AtomId(8), AtomId(10)),
-            Edge(AtomId(9), AtomId(21)),
-            Edge(AtomId(10), AtomId(11)),
-            Edge(AtomId(10), AtomId(16)),
-            Edge(AtomId(11), AtomId(12)),
-            Edge(AtomId(12), AtomId(13)),
-            Edge(AtomId(12), AtomId(14)),
-            Edge(AtomId(14), AtomId(15)),
-            Edge(AtomId(15), AtomId(16)),
-            Edge(AtomId(16), AtomId(17)),
-            Edge(AtomId(17), AtomId(18)),
-            Edge(AtomId(18), AtomId(19)),
-            Edge(AtomId(19), AtomId(20)),
-            Edge(AtomId(19), AtomId(21)),
+            SystemId(3),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(1), AtomId(2)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(4),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(1), AtomId(11)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(5),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(2), AtomId(3)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(6),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(2), AtomId(8)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(7),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(3), AtomId(4)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(8),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(3), AtomId(5)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(9),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(5), AtomId(6)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(10),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(6), AtomId(7)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(11),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(7), AtomId(8)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(12),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(7), AtomId(18)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(13),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(8), AtomId(9)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(14),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(8), AtomId(10)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(15),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(9), AtomId(21)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(16),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(10), AtomId(11)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(17),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(10), AtomId(16)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(18),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(11), AtomId(12)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(19),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(12), AtomId(13)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(20),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(12), AtomId(14)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(21),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(14), AtomId(15)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(22),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(15), AtomId(16)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(23),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(16), AtomId(17)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(24),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(17), AtomId(18)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(25),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(18), AtomId(19)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(26),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(19), AtomId(20)),
+                    }
+                ),
+                None,
+            ),
+        ),
+        (
+            SystemId(27),
+            mk_bonding_system(
+                NonNegative(2),
+                frozenset(
+                    {
+                        Edge(AtomId(19), AtomId(21)),
+                    }
+                ),
+                None,
+            ),
         ),
     ),
     smiles_stereochemistry=SmilesStereochemistry(
         atom_stereo=(
-            SmilesAtomStereo(AtomId(2), SmilesAtomStereoClass.TETRAHEDRAL, 1, "@"),
-            SmilesAtomStereo(AtomId(3), SmilesAtomStereoClass.TETRAHEDRAL, 2, "@@"),
-            SmilesAtomStereo(AtomId(7), SmilesAtomStereoClass.TETRAHEDRAL, 1, "@"),
-            SmilesAtomStereo(AtomId(8), SmilesAtomStereoClass.TETRAHEDRAL, 1, "@"),
-            SmilesAtomStereo(AtomId(18), SmilesAtomStereoClass.TETRAHEDRAL, 1, "@"),
+            SmilesAtomStereo(AtomId(2), SmilesAtomStereoClass.TETRAHEDRAL, 1, '@'),
+            SmilesAtomStereo(AtomId(3), SmilesAtomStereoClass.TETRAHEDRAL, 2, '@@'),
+            SmilesAtomStereo(AtomId(7), SmilesAtomStereoClass.TETRAHEDRAL, 1, '@'),
+            SmilesAtomStereo(AtomId(8), SmilesAtomStereoClass.TETRAHEDRAL, 1, '@'),
+            SmilesAtomStereo(AtomId(18), SmilesAtomStereoClass.TETRAHEDRAL, 1, '@'),
+        ),
+        bond_stereo=(
         ),
     ),
 )

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from ..chem.molecule import Molecule
 from ..chem.pretty import pretty_text
+from .benzene import benzene_pretty
 from .diborane import diborane_pretty
 from .ferrocene import ferrocene_pretty
 from .morphine import morphine_pretty
@@ -22,6 +23,13 @@ class ManuscriptExample:
     def __str__(self) -> str:
         return self.render()
 
+
+BENZENE_MANUSCRIPT = ManuscriptExample(
+    slug="benzene",
+    title="Benzene (C6H6)",
+    note="Dietz-style ADT with each sigma edge as an unnamed 2e bonding system plus a six-electron pi_ring system.",
+    molecule=benzene_pretty,
+)
 
 FERROCENE_MANUSCRIPT = ManuscriptExample(
     slug="ferrocene",
@@ -45,6 +53,7 @@ MORPHINE_MANUSCRIPT = ManuscriptExample(
 )
 
 MANUSCRIPT_EXAMPLES: dict[str, ManuscriptExample] = {
+    BENZENE_MANUSCRIPT.slug: BENZENE_MANUSCRIPT,
     FERROCENE_MANUSCRIPT.slug: FERROCENE_MANUSCRIPT,
     DIBORANE_MANUSCRIPT.slug: DIBORANE_MANUSCRIPT,
     MORPHINE_MANUSCRIPT.slug: MORPHINE_MANUSCRIPT,
