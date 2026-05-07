@@ -1995,7 +1995,7 @@ _HTML_TEMPLATE = """<!doctype html>
       });
 
       if (state.systems) {
-        const lanes = systemEdgeLaneMap(molecule.systems.filter((system) => !isStandardCovalentSystem(system)));
+        const lanes = systemEdgeLaneMap(molecule.systems);
         molecule.systems.forEach((system) => {
           const selected = state.activeSystem === system.id;
           const active = state.activeSystem === null || selected;
@@ -2004,6 +2004,10 @@ _HTML_TEMPLATE = """<!doctype html>
             const b = points.get(edge.b);
             if (a && b) {
               const perspective = ((a.p + b.p) / 2) * state.zoom;
+              const lane = lanes.get(edgeKey(edge) + ":" + Number(system.id)) || { index: 0, count: 1 };
+              const overlapping = lane.count > 1;
+              const laneSpacing = Math.max(5.6, 6.6 * perspective);
+              const laneOffset = overlapping ? (lane.index - (lane.count - 1) / 2) * laneSpacing : 0;
               if (isIonicSystem(system)) {
                 const gradient = chargeGradientForEdge(molecule.atomMap, edge);
                 drawBondLines(a, b, {
@@ -2012,25 +2016,27 @@ _HTML_TEMPLATE = """<!doctype html>
                   spacing: Math.max(4, 5.2 * perspective),
                   colorA: gradient.colorA,
                   colorB: gradient.colorB,
-                  alpha: active ? 0.95 : 0.22
+                  alpha: active ? 0.95 : 0.22,
+                  dash: overlapping ? [7, 6] : null,
+                  offset: laneOffset
                 });
                 return;
               }
               const covalentLines = standardCovalentLineCount(system);
               if (covalentLines) {
-                if (!selected) return;
+                if (!selected && !overlapping) return;
                 drawBondLines(a, b, {
                   lineCount: covalentLines,
                   width: Math.max(2.2, 2.8 * perspective),
                   spacing: Math.max(4.4, 5.6 * perspective),
                   color: COVALENT_BOND_COLOR,
-                  alpha: 0.98
+                  alpha: selected ? 0.98 : 0.58,
+                  dash: overlapping ? [7, 6] : null,
+                  offset: laneOffset
                 });
                 return;
               }
-              const lane = lanes.get(edgeKey(edge) + ":" + Number(system.id)) || { index: 0, count: 1 };
               const width = active ? 6.2 : 3.8;
-              const laneOffset = lane.count > 1 ? (lane.index - (lane.count - 1) / 2) * (width + 2.0) : 0;
               const edgeColor = system.color;
               drawLine(a, b, {
                 width,

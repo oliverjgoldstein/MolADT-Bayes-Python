@@ -350,8 +350,11 @@ def test_molecule_viewer_html_offsets_overlapping_system_edges() -> None:
     html = molecule_viewer_html(ferrocene_pretty, title="Ferrocene")
 
     assert "function systemEdgeLaneMap" in html
+    assert "const lanes = systemEdgeLaneMap(molecule.systems);" in html
+    assert "if (!selected && !overlapping) return;" in html
     assert "offset: laneOffset" in html
     assert "alpha: active ? 1 : 0.18" in html
+    assert "dash: overlapping ? [7, 6] : null" in html
     assert "dash: active ? [10, 7] : [8, 8]" in html
     assert "forEach((system) => drawSystemLabel(system, points))" not in html
 

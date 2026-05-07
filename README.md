@@ -9,7 +9,7 @@ The core object is not just a string and not just a graph. It keeps atoms, coord
   <img src="docs/assets/diborane.png" alt="Diborane in the MolADT viewer" width="280">
 </p>
 
-[Quickstart](docs/quickstart.md) · [Representation](docs/representation.md) · [Examples](docs/examples.md) · [Equality](docs/molecule-equality.md) · [CLI](docs/cli.md) · [Models](docs/models.md) · [Benchmarks](docs/inference-and-benchmarks.md) · [Outputs](docs/outputs.md)
+[Quickstart](docs/quickstart.md) · [Representation](docs/representation.md) · [Validator](#validator) · [Examples](docs/examples.md) · [Equality](docs/molecule-equality.md) · [CLI](docs/cli.md) · [Models](docs/models.md) · [Benchmarks](docs/inference-and-benchmarks.md) · [Outputs](docs/outputs.md)
 
 ## What It Does
 
@@ -131,10 +131,10 @@ Examples:
 
 Ferrocene is a useful example because the metallocene structure is explicit
 without flattening it into a string. Each Cp delocalised system spans the five
-Cp ring C-C edges and the five Fe-C contacts to the central iron. Overlapping
-non-standard systems are visible in the viewer as separate dashed coloured
-overlays. The ordinary Cp/C-H and Cp/Cp covalent edges are still
-present as unnamed one-edge systems that display as `single covalent`.
+Cp ring C-C edges and the five Fe-C contacts to the central iron. When those
+delocalised systems overlap ordinary covalent edges, the viewer gives each
+system a separate dashed lane. The ordinary Cp/C-H and Cp/Cp covalent edges are
+still present as unnamed one-edge systems that display as `single covalent`.
 
 | System | Shared electrons | Member edges |
 | --- | --- | --- |
@@ -142,6 +142,28 @@ present as unnamed one-edge systems that display as `single covalent`.
 | `cp2_pi` | `6e` | the five C-C edges in the second Cp ring plus the five Fe-C contacts to that ring |
 
 See the full expanded ADT in [`moladt/examples/ferrocene.py`](moladt/examples/ferrocene.py).
+
+## Validator
+
+`validate_molecule(molecule)` is a representation validator, not a physical
+chemistry oracle. It rejects malformed MolADT values before parsing, viewing,
+feature extraction, or inverse-design scoring continue.
+
+It checks that atom map keys match the atom IDs, coordinates and element
+metadata are finite, `SystemId`s are positive and unique, bonding systems are
+non-empty and reference existing atoms, cached member atoms match the member
+edges, duplicate bonding systems are not present, and SMILES stereochemistry
+annotations only point at known atoms. It also enforces the MolADT edge contract:
+ordinary one-edge covalent systems with `2`, `4`, `6`, or `8` shared electrons
+must be unnamed and display as single/double/triple/quadruple covalent bonds;
+one-edge `0e` systems must be tagged `ionic`; and `ionic` systems must share
+zero electrons over exactly one edge.
+
+The validator deliberately does not prove a molecule is physically realistic,
+choose protonation states, infer missing hydrogens, or decide whether a
+delocalised system is chemically preferred. Task-specific checks can add those
+rules separately. The FreeSolv inverse-design task now runs this generic
+validator before its own FreeSolv geometry and generation-contract checks.
 
 ## View Molecules
 
@@ -151,7 +173,7 @@ make molecule-viewer VIEWER_EXAMPLES="benzene diborane ferrocene"
 make python-pretty-example EXAMPLE=morphine
 ```
 
-`make view` opens seven built-in examples in one browser page, including sodium chloride's charged 0e ionic edge. Charge appears as blue and red halos around positive and negative atoms; halo size and opacity scale with formal-charge magnitude, atoms participating in an ionic bonding system get an additional boost, and ionic edges draw a blue-to-red gradient between those charged atoms. Ordinary covalent edges are dark grey: single bonds draw one line, double bonds draw two lines around the edge axis, triple bonds draw three, and quadruple bonds draw four. Non-standard systems such as pi rings, bridge bonds, and coordination use separate dashed coloured overlays when they overlap. The right panel lists all bonding systems, including `single covalent`, `double covalent`, `triple covalent`, and `quadruple covalent` one-edge systems; bonding-system text labels are not drawn over the molecule. Click an atom to see coordinates, 3D edge lengths, effective orders, bonding systems, and bond angles from the molecule coordinates.
+`make view` opens seven built-in examples in one browser page, including sodium chloride's charged 0e ionic edge. Charge appears as blue and red halos around positive and negative atoms; halo size and opacity scale with formal-charge magnitude, atoms participating in an ionic bonding system get an additional boost, and ionic edges draw a blue-to-red gradient between those charged atoms. Ordinary covalent edges are dark grey: single bonds draw one line, double bonds draw two lines around the edge axis, triple bonds draw three, and quadruple bonds draw four. When an edge belongs to more than one bonding system, each system overlay gets its own dashed lane, including ordinary covalent versus delocalised overlap in ferrocene. Non-standard systems such as pi rings, bridge bonds, and coordination use coloured dashed overlays. The right panel lists all bonding systems, including `single covalent`, `double covalent`, `triple covalent`, and `quadruple covalent` one-edge systems; bonding-system text labels are not drawn over the molecule. Click an atom to see coordinates, 3D edge lengths, effective orders, bonding systems, and bond angles from the molecule coordinates.
 
 Use `OPEN_VIEWER=1` to open generated viewer pages automatically. Viewer commands
 also print a portable `file://` URL, so if the operating system does not open a
