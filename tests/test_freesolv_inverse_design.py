@@ -296,6 +296,21 @@ def test_invalid_molecule_is_rejected_before_scoring() -> None:
         _score_molecule(ExplodingPredictor(), mutable.freeze(), -5.0)
 
 
+def test_inverse_design_generation_contract_runs_generic_validator(monkeypatch) -> None:
+    calls = []
+
+    def recording_validator(molecule):
+        calls.append(molecule)
+        return molecule
+
+    monkeypatch.setattr(inverse_design, "validate_molecule", recording_validator)
+
+    candidate = _score_molecule(FixedPredictor(Prediction(mean=-5.0, sd=1.0)), water, -5.0)
+
+    assert candidate.molecule == water
+    assert calls == [water]
+
+
 def test_underfilled_freesolv_candidate_is_rejected_before_scoring() -> None:
     molecule = _seed_molecule(
         (

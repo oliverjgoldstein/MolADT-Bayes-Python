@@ -93,7 +93,9 @@ def test_morphine_constructs_a_valid_molecule() -> None:
 
 def test_benzene_and_morphine_examples_have_documented_pi_systems() -> None:
     assert _special_tags(benzene_pretty) == ["pi_ring"]
-    assert _special_tags(morphine_pretty) == ["alkene_bridge", "phenyl_pi_ring"]
+    assert _special_tags(morphine_pretty) == ["phenyl_pi_ring"]
+    assert _count_unnamed_edge_systems(morphine_pretty, 2) == 24
+    assert _count_unnamed_edge_systems(morphine_pretty, 4) == 1
 
 
 def test_benchmark_descriptors_do_not_count_conventional_singletons_as_legacy_systems() -> None:
@@ -117,7 +119,7 @@ def test_default_view_examples_are_valid_adt_examples_with_systems_preserved() -
         "cp1_pi",
         "cp2_pi",
     ]
-    assert tags_by_title["Morphine"] == ["alkene_bridge", "phenyl_pi_ring"]
+    assert tags_by_title["Morphine"] == ["phenyl_pi_ring"]
 
 
 def test_morphine_example_keeps_the_documented_stereochemistry_flags() -> None:

@@ -25,7 +25,7 @@ make molecule-viewer VIEWER_EXAMPLES=ferrocene
 | Diborane | Terminal `single covalent` systems plus two explicit `3c-2e` bridge systems. |
 | Ferrocene | Cp/C-H `single covalent` systems plus Fe-centred Cp delocalised systems. |
 | Sodium chloride | Formal charges plus one zero-electron `ionic` edge system. |
-| Morphine | Every graph edge as a system plus named delocalization systems. |
+| Morphine | Every graph edge as a system, including a `double covalent` alkene edge, plus a phenyl delocalization system. |
 
 ## Where They Live
 

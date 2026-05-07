@@ -43,18 +43,6 @@ morphine_pretty = Molecule(
         (
             SystemId(1),
             mk_bonding_system(
-                NonNegative(2),
-                frozenset(
-                    {
-                        Edge(AtomId(5), AtomId(6)),
-                    }
-                ),
-                "alkene_bridge",
-            ),
-        ),
-        (
-            SystemId(2),
-            mk_bonding_system(
                 NonNegative(6),
                 frozenset(
                     {
@@ -70,7 +58,7 @@ morphine_pretty = Molecule(
             ),
         ),
         (
-            SystemId(3),
+            SystemId(2),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -82,7 +70,7 @@ morphine_pretty = Molecule(
             ),
         ),
         (
-            SystemId(4),
+            SystemId(3),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -94,7 +82,7 @@ morphine_pretty = Molecule(
             ),
         ),
         (
-            SystemId(5),
+            SystemId(4),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -106,7 +94,7 @@ morphine_pretty = Molecule(
             ),
         ),
         (
-            SystemId(6),
+            SystemId(5),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -118,7 +106,7 @@ morphine_pretty = Molecule(
             ),
         ),
         (
-            SystemId(7),
+            SystemId(6),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -130,7 +118,7 @@ morphine_pretty = Molecule(
             ),
         ),
         (
-            SystemId(8),
+            SystemId(7),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -142,9 +130,9 @@ morphine_pretty = Molecule(
             ),
         ),
         (
-            SystemId(9),
+            SystemId(8),
             mk_bonding_system(
-                NonNegative(2),
+                NonNegative(4),
                 frozenset(
                     {
                         Edge(AtomId(5), AtomId(6)),
@@ -154,7 +142,7 @@ morphine_pretty = Molecule(
             ),
         ),
         (
-            SystemId(10),
+            SystemId(9),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -166,7 +154,7 @@ morphine_pretty = Molecule(
             ),
         ),
         (
-            SystemId(11),
+            SystemId(10),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -178,7 +166,7 @@ morphine_pretty = Molecule(
             ),
         ),
         (
-            SystemId(12),
+            SystemId(11),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -190,7 +178,7 @@ morphine_pretty = Molecule(
             ),
         ),
         (
-            SystemId(13),
+            SystemId(12),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -202,7 +190,7 @@ morphine_pretty = Molecule(
             ),
         ),
         (
-            SystemId(14),
+            SystemId(13),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -214,7 +202,7 @@ morphine_pretty = Molecule(
             ),
         ),
         (
-            SystemId(15),
+            SystemId(14),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -226,7 +214,7 @@ morphine_pretty = Molecule(
             ),
         ),
         (
-            SystemId(16),
+            SystemId(15),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -238,7 +226,7 @@ morphine_pretty = Molecule(
             ),
         ),
         (
-            SystemId(17),
+            SystemId(16),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -250,7 +238,7 @@ morphine_pretty = Molecule(
             ),
         ),
         (
-            SystemId(18),
+            SystemId(17),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -262,7 +250,7 @@ morphine_pretty = Molecule(
             ),
         ),
         (
-            SystemId(19),
+            SystemId(18),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -274,7 +262,7 @@ morphine_pretty = Molecule(
             ),
         ),
         (
-            SystemId(20),
+            SystemId(19),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -286,7 +274,7 @@ morphine_pretty = Molecule(
             ),
         ),
         (
-            SystemId(21),
+            SystemId(20),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -298,7 +286,7 @@ morphine_pretty = Molecule(
             ),
         ),
         (
-            SystemId(22),
+            SystemId(21),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -310,7 +298,7 @@ morphine_pretty = Molecule(
             ),
         ),
         (
-            SystemId(23),
+            SystemId(22),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -322,7 +310,7 @@ morphine_pretty = Molecule(
             ),
         ),
         (
-            SystemId(24),
+            SystemId(23),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -334,7 +322,7 @@ morphine_pretty = Molecule(
             ),
         ),
         (
-            SystemId(25),
+            SystemId(24),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -346,7 +334,7 @@ morphine_pretty = Molecule(
             ),
         ),
         (
-            SystemId(26),
+            SystemId(25),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -358,7 +346,7 @@ morphine_pretty = Molecule(
             ),
         ),
         (
-            SystemId(27),
+            SystemId(26),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(

@@ -1273,7 +1273,9 @@ _HTML_TEMPLATE = """<!doctype html>
 
     function lineCountFromBond(bond, standardByEdge) {
       const standard = standardByEdge.get(edgeKey(bond));
-      return standardCovalentLineCount(standard) || Math.max(1, Math.min(4, Math.round(Number(bond.order || 1))));
+      const standardLines = standardCovalentLineCount(standard);
+      const effectiveLines = Math.max(1, Math.min(4, Math.round(Number(bond.order || 1))));
+      return Math.max(standardLines, effectiveLines);
     }
 
     function isIonicSystem(system) {

@@ -48,8 +48,8 @@ def test_diborane_pretty_rendering_includes_3c2e_bridges() -> None:
 def test_morphine_pretty_rendering_includes_explicit_ring_and_pi_systems() -> None:
     rendered = pretty_text(morphine_pretty)
     assert "atoms            21" in rendered
-    assert "[#1] alkene_bridge" in rendered
-    assert "[#2] phenyl_pi_ring" in rendered
+    assert "[#1] phenyl_pi_ring" in rendered
+    assert "[#8] double covalent" in rendered
     assert "SMILES Stereochemistry" in rendered
     assert "center #3: TH2 from token @@" in rendered
 

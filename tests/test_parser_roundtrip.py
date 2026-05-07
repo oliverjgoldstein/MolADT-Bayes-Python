@@ -165,7 +165,8 @@ def test_manuscript_example_sdfs_smoke_parse() -> None:
     assert _count_unnamed_edge_systems(ferrocene, 2) == 20
     assert len(morphine.atoms) == 21
     assert len(molecule_edges(morphine)) == 25
-    assert _count_unnamed_edge_systems(morphine, 2) == 25
+    assert _count_unnamed_edge_systems(morphine, 2) == 24
+    assert _count_unnamed_edge_systems(morphine, 4) == 1
 
 
 def test_v3000_water_record_parse_preserves_properties() -> None:

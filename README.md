@@ -127,7 +127,7 @@ Examples:
 | Diborane | four terminal B-H `single covalent` systems plus two explicit `3c-2e` bridge systems; no direct B-B singleton |
 | Ferrocene | Cp/C-H `single covalent` systems plus two Fe-centred Cp delocalised systems; Fe is `+2` and one representative carbon on each Cp ring is `-1` |
 | Sodium chloride | `Na+` and `Cl-` atoms plus one zero-electron `ionic` edge system |
-| Morphine | every graph edge as a system plus named delocalised systems |
+| Morphine | every graph edge as a system, including a `double covalent` alkene edge, plus a phenyl delocalised system |
 
 Ferrocene is a useful example because the metallocene structure is explicit
 without flattening it into a string. Each Cp delocalised system spans the five

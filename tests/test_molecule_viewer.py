@@ -10,7 +10,7 @@ import pytest
 
 from moladt.cli import main
 import moladt.cli as cli
-from moladt.examples import benzene_pretty, diborane_pretty, ferrocene_pretty, sodium_chloride
+from moladt.examples import benzene_pretty, diborane_pretty, ferrocene_pretty, morphine_pretty, sodium_chloride
 from moladt.io import molecule_to_json, parse_smiles
 from moladt.viewer import (
     molecule_viewer_collection_html,
@@ -306,6 +306,19 @@ def test_molecule_viewer_payload_uses_grey_covalent_and_coloured_nonstandard_sys
 
     pi_ring_colour = next(system["color"] for system in benzene_payload["systems"] if system["tag"] == "pi_ring")
     assert pi_ring_colour not in {covalent_colour, "#0f766e"}
+
+
+def test_molecule_viewer_payload_shows_morphine_alkene_as_double_covalent() -> None:
+    payload = molecule_viewer_payload(morphine_pretty, title="Morphine")
+
+    alkene_system = next(system for system in payload["systems"] if system["label"].endswith("double covalent"))
+    alkene_bond = next(bond for bond in payload["bonds"] if {bond["a"], bond["b"]} == {5, 6})
+
+    assert alkene_system["id"] == 8
+    assert alkene_system["kind"] == "covalent"
+    assert alkene_system["sharedElectrons"] == 4
+    assert [tuple(sorted((edge["a"], edge["b"]))) for edge in alkene_system["edges"]] == [(5, 6)]
+    assert alkene_bond["order"] == 2.0
 
 
 def test_molecule_viewer_payload_includes_atom_orbitals() -> None:

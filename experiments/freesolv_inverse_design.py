@@ -22,7 +22,7 @@ from moladt.chem.dietz import AtomId, BondingSystem, Edge, NonNegative, SystemId
 from moladt.chem.molecule import Atom, AtomicSymbol, Molecule, molecule_edges
 from moladt.chem.molecule_ops import effective_order, neighbors_sigma
 from moladt.chem.mutable import MutableMolecule
-from moladt.chem.validate import ValidationError, used_electrons_at
+from moladt.chem.validate import ValidationError, used_electrons_at, validate_molecule
 from moladt.examples.sample_molecules import methane, water
 from moladt.io import molecule_from_dict, molecule_to_json_bytes, read_sdf
 from moladt.viewer import molecule_viewer_uri, open_molecule_viewer, write_molecule_viewer_collection_html
@@ -2105,6 +2105,7 @@ def _shortest_sigma_path_length(molecule: Molecule, start: AtomId, goal: AtomId)
 
 
 def _enforce_generation_contract(molecule: Molecule) -> Molecule:
+    molecule = validate_molecule(molecule)
     if not _is_connected(molecule):
         raise ValidationError("Molecule is disconnected")
     _ensure_supported_symbols(molecule)
