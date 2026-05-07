@@ -41,6 +41,11 @@ ferrocene_pretty = Molecule(
                         Edge(AtomId(3), AtomId(4)),
                         Edge(AtomId(4), AtomId(5)),
                         Edge(AtomId(5), AtomId(6)),
+                        Edge(AtomId(1), AtomId(2)),
+                        Edge(AtomId(1), AtomId(3)),
+                        Edge(AtomId(1), AtomId(4)),
+                        Edge(AtomId(1), AtomId(5)),
+                        Edge(AtomId(1), AtomId(6)),
                     }
                 ),
                 "cp1_pi",
@@ -57,22 +62,6 @@ ferrocene_pretty = Molecule(
                         Edge(AtomId(8), AtomId(9)),
                         Edge(AtomId(9), AtomId(10)),
                         Edge(AtomId(10), AtomId(11)),
-                    }
-                ),
-                "cp2_pi",
-            ),
-        ),
-        (
-            SystemId(3),
-            mk_bonding_system(
-                NonNegative(12),
-                frozenset(
-                    {
-                        Edge(AtomId(1), AtomId(2)),
-                        Edge(AtomId(1), AtomId(3)),
-                        Edge(AtomId(1), AtomId(4)),
-                        Edge(AtomId(1), AtomId(5)),
-                        Edge(AtomId(1), AtomId(6)),
                         Edge(AtomId(1), AtomId(7)),
                         Edge(AtomId(1), AtomId(8)),
                         Edge(AtomId(1), AtomId(9)),
@@ -80,11 +69,11 @@ ferrocene_pretty = Molecule(
                         Edge(AtomId(1), AtomId(11)),
                     }
                 ),
-                "fe_cp_coordination",
+                "cp2_pi",
             ),
         ),
         (
-            SystemId(4),
+            SystemId(3),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -96,7 +85,7 @@ ferrocene_pretty = Molecule(
             ),
         ),
         (
-            SystemId(5),
+            SystemId(4),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -108,7 +97,7 @@ ferrocene_pretty = Molecule(
             ),
         ),
         (
-            SystemId(6),
+            SystemId(5),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -120,7 +109,7 @@ ferrocene_pretty = Molecule(
             ),
         ),
         (
-            SystemId(7),
+            SystemId(6),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -132,7 +121,7 @@ ferrocene_pretty = Molecule(
             ),
         ),
         (
-            SystemId(8),
+            SystemId(7),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -144,7 +133,7 @@ ferrocene_pretty = Molecule(
             ),
         ),
         (
-            SystemId(9),
+            SystemId(8),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -156,7 +145,7 @@ ferrocene_pretty = Molecule(
             ),
         ),
         (
-            SystemId(10),
+            SystemId(9),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -168,7 +157,7 @@ ferrocene_pretty = Molecule(
             ),
         ),
         (
-            SystemId(11),
+            SystemId(10),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -180,7 +169,7 @@ ferrocene_pretty = Molecule(
             ),
         ),
         (
-            SystemId(12),
+            SystemId(11),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -192,7 +181,7 @@ ferrocene_pretty = Molecule(
             ),
         ),
         (
-            SystemId(13),
+            SystemId(12),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -204,7 +193,7 @@ ferrocene_pretty = Molecule(
             ),
         ),
         (
-            SystemId(14),
+            SystemId(13),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -216,7 +205,7 @@ ferrocene_pretty = Molecule(
             ),
         ),
         (
-            SystemId(15),
+            SystemId(14),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -228,7 +217,7 @@ ferrocene_pretty = Molecule(
             ),
         ),
         (
-            SystemId(16),
+            SystemId(15),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -240,7 +229,7 @@ ferrocene_pretty = Molecule(
             ),
         ),
         (
-            SystemId(17),
+            SystemId(16),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -252,7 +241,7 @@ ferrocene_pretty = Molecule(
             ),
         ),
         (
-            SystemId(18),
+            SystemId(17),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -264,7 +253,7 @@ ferrocene_pretty = Molecule(
             ),
         ),
         (
-            SystemId(19),
+            SystemId(18),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -276,7 +265,7 @@ ferrocene_pretty = Molecule(
             ),
         ),
         (
-            SystemId(20),
+            SystemId(19),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -288,7 +277,7 @@ ferrocene_pretty = Molecule(
             ),
         ),
         (
-            SystemId(21),
+            SystemId(20),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -300,7 +289,7 @@ ferrocene_pretty = Molecule(
             ),
         ),
         (
-            SystemId(22),
+            SystemId(21),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(
@@ -312,7 +301,7 @@ ferrocene_pretty = Molecule(
             ),
         ),
         (
-            SystemId(23),
+            SystemId(22),
             mk_bonding_system(
                 NonNegative(2),
                 frozenset(

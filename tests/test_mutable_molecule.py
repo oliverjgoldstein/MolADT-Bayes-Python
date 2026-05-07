@@ -53,6 +53,5 @@ def test_mutable_molecule_system_edits_do_not_touch_original() -> None:
     assert [system.tag for _, system in ferrocene_pretty.systems if system.tag] == [
         "cp1_pi",
         "cp2_pi",
-        "fe_cp_coordination",
     ]
     assert mutable.freeze().systems == ()

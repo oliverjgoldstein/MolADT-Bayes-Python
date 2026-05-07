@@ -125,21 +125,21 @@ Examples:
 | --- | --- |
 | Benzene | `single covalent` one-edge systems on each edge plus a six-electron `pi_ring`; each C-C edge displays as `shared=3e` |
 | Diborane | four terminal B-H `single covalent` systems plus two explicit `3c-2e` bridge systems; no direct B-B singleton |
-| Ferrocene | Cp/C-H `single covalent` systems plus two Cp pi systems and one Fe-Cp coordination system; Fe is `+2` and one representative carbon on each Cp ring is `-1` |
+| Ferrocene | Cp/C-H `single covalent` systems plus two Fe-centred Cp delocalised systems; Fe is `+2` and one representative carbon on each Cp ring is `-1` |
 | Sodium chloride | `Na+` and `Cl-` atoms plus one zero-electron `ionic` edge system |
 | Morphine | every graph edge as a system plus named delocalised systems |
 
 Ferrocene is a useful example because the metallocene structure is explicit
-without flattening it into a string. The Cp pi systems only span Cp ring C-C
-edges. The Fe interaction is one coordination system over the ten Fe-C contacts.
-The ordinary Cp/C-H and Cp/Cp covalent edges are still present as unnamed
-one-edge systems that display as `single covalent`.
+without flattening it into a string. Each Cp delocalised system spans the five
+Cp ring C-C edges and the five Fe-C contacts to the central iron. Overlapping
+non-standard systems are visible in the viewer as separate dashed coloured
+overlays. The ordinary Cp/C-H and Cp/Cp covalent edges are still
+present as unnamed one-edge systems that display as `single covalent`.
 
 | System | Shared electrons | Member edges |
 | --- | --- | --- |
-| `cp1_pi` | `6e` | the five C-C edges in the first Cp ring |
-| `cp2_pi` | `6e` | the five C-C edges in the second Cp ring |
-| `fe_cp_coordination` | `12e` | the ten Fe-C contacts |
+| `cp1_pi` | `6e` | the five C-C edges in the first Cp ring plus the five Fe-C contacts to that ring |
+| `cp2_pi` | `6e` | the five C-C edges in the second Cp ring plus the five Fe-C contacts to that ring |
 
 See the full expanded ADT in [`moladt/examples/ferrocene.py`](moladt/examples/ferrocene.py).
 
@@ -151,7 +151,7 @@ make molecule-viewer VIEWER_EXAMPLES="benzene diborane ferrocene"
 make python-pretty-example EXAMPLE=morphine
 ```
 
-`make view` opens seven built-in examples in one browser page, including sodium chloride's charged 0e ionic edge. Charge appears as blue and red halos around positive and negative atoms; halo size and opacity scale with formal-charge magnitude, atoms participating in an ionic bonding system get an additional boost, and ionic edges draw a blue-to-red gradient between those charged atoms. Ordinary covalent edges are dark grey: single bonds draw one line, double bonds draw two lines around the edge axis, triple bonds draw three, and quadruple bonds draw four. Non-standard systems such as pi rings, bridge bonds, and coordination keep a separate coloured overlay; ordinary covalent systems are not repeated as page labels. Click an atom to see coordinates, 3D edge lengths, effective orders, bonding systems, and bond angles from the molecule coordinates.
+`make view` opens seven built-in examples in one browser page, including sodium chloride's charged 0e ionic edge. Charge appears as blue and red halos around positive and negative atoms; halo size and opacity scale with formal-charge magnitude, atoms participating in an ionic bonding system get an additional boost, and ionic edges draw a blue-to-red gradient between those charged atoms. Ordinary covalent edges are dark grey: single bonds draw one line, double bonds draw two lines around the edge axis, triple bonds draw three, and quadruple bonds draw four. Non-standard systems such as pi rings, bridge bonds, and coordination use separate dashed coloured overlays when they overlap. The right panel lists all bonding systems, including `single covalent`, `double covalent`, `triple covalent`, and `quadruple covalent` one-edge systems; bonding-system text labels are not drawn over the molecule. Click an atom to see coordinates, 3D edge lengths, effective orders, bonding systems, and bond angles from the molecule coordinates.
 
 Use `OPEN_VIEWER=1` to open generated viewer pages automatically. Viewer commands
 also print a portable `file://` URL, so if the operating system does not open a

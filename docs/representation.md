@@ -152,7 +152,7 @@ non-classical bonding in one layer. Examples:
 | --- | --- |
 | Benzene | six `single covalent` one-edge systems plus a six-electron `pi_ring` system |
 | Diborane | four terminal B-H `single covalent` systems plus two `3c-2e` bridge systems |
-| Ferrocene | Cp/C-H `single covalent` systems plus separate Cp pi and Fe-Cp coordination systems; `Fe#1` is `+2`, with one representative `-1` carbon per Cp ring |
+| Ferrocene | Cp/C-H `single covalent` systems plus Fe-centred Cp delocalised systems; `Fe#1` is `+2`, with one representative `-1` carbon per Cp ring |
 | Sodium chloride | `Na+` and `Cl-` atoms plus one zero-electron `ionic` system over the Na-Cl edge |
 | Morphine | every graph edge as a system plus named delocalisation systems |
 

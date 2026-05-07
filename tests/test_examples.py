@@ -67,10 +67,11 @@ def test_ferrocene_example_has_pi_and_coordination_systems() -> None:
     assert [system.tag for system in named] == [
         "cp1_pi",
         "cp2_pi",
-        "fe_cp_coordination",
     ]
-    assert [system.shared_electrons.value for system in named] == [6, 6, 12]
-    assert [len(system.member_edges) for system in named] == [5, 5, 10]
+    assert [system.shared_electrons.value for system in named] == [6, 6]
+    assert [len(system.member_edges) for system in named] == [10, 10]
+    assert AtomId(1) in named[0].member_atoms
+    assert AtomId(1) in named[1].member_atoms
     assert _count_unnamed_edge_systems(ferrocene_pretty, 2) == 20
     assert ferrocene_pretty.atoms[AtomId(1)].formal_charge == 2
     assert ferrocene_pretty.atoms[AtomId(2)].formal_charge == -1
@@ -81,8 +82,8 @@ def test_ferrocene_example_has_pi_and_coordination_systems() -> None:
 def test_ferrocene_typed_descriptors_use_canonical_dietz_edges() -> None:
     descriptors = compute_moladt_featurized_descriptors(ferrocene_pretty)
 
-    assert descriptors["bonding_system_count"] == 3.0
-    assert descriptors["system_shared_electrons_sum"] == 24.0
+    assert descriptors["bonding_system_count"] == 2.0
+    assert descriptors["system_shared_electrons_sum"] == 12.0
     assert descriptors["system_member_edges_max"] == 10.0
 
 
@@ -115,7 +116,6 @@ def test_default_view_examples_are_valid_adt_examples_with_systems_preserved() -
     assert tags_by_title["Ferrocene (Fe(C5H5)2)"] == [
         "cp1_pi",
         "cp2_pi",
-        "fe_cp_coordination",
     ]
     assert tags_by_title["Morphine"] == ["alkene_bridge", "phenyl_pi_ring"]
 

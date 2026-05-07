@@ -22,11 +22,11 @@ def test_ferrocene_pretty_rendering_includes_shells_and_coordination() -> None:
     assert "Molecule Report" in rendered
     assert "heavy atoms      11" in rendered
     assert "atom    Z   chg  degree  used" in rendered
-    assert "bonding systems  23" in rendered
+    assert "bonding systems  22" in rendered
     assert "Bonding Systems" in rendered
-    assert "[#3] fe_cp_coordination" in rendered
+    assert "[#1] cp1_pi" in rendered
     assert "[Fe#1]" in rendered
-    assert "#3[fe_cp_coordination]:1.20e/edge from 12e" in rendered
+    assert "#1[cp1_pi]:0.60e/edge from 6e" in rendered
     assert "Electron Shells" in rendered
     assert "shells:" in rendered
     assert "shared=" in rendered
@@ -84,7 +84,7 @@ def test_manuscript_examples_render_titles_and_notes() -> None:
     morphine_text = MORPHINE_MANUSCRIPT.render()
     sodium_chloride_text = SODIUM_CHLORIDE_MANUSCRIPT.render()
     assert "Ferrocene (Fe(C5H5)2)" in ferrocene_text
-    assert "Fe-Cp coordination system" in ferrocene_text
+    assert "Fe-centred cyclopentadienyl delocalised systems" in ferrocene_text
     assert "Diborane (B2H6)" in diborane_text
     assert "3c-2e bridging hydrogen bonding systems" in diborane_text
     assert "Morphine (explicit Dietz skeleton)" in morphine_text

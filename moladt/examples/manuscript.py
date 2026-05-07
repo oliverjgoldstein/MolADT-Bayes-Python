@@ -35,7 +35,7 @@ BENZENE_MANUSCRIPT = ManuscriptExample(
 FERROCENE_MANUSCRIPT = ManuscriptExample(
     slug="ferrocene",
     title="Ferrocene (Fe(C5H5)2)",
-    note="Dietz-style ADT with two cyclopentadienyl pi systems and an Fe-Cp coordination system.",
+    note="Dietz-style ADT with two Fe-centred cyclopentadienyl delocalised systems.",
     molecule=ferrocene_pretty,
 )
 

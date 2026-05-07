@@ -23,7 +23,7 @@ make molecule-viewer VIEWER_EXAMPLES=ferrocene
 | Benzene | Classical ring plus a six-electron `pi_ring`. |
 | Water | Small parser, validation, and SMILES sanity check. |
 | Diborane | Terminal `single covalent` systems plus two explicit `3c-2e` bridge systems. |
-| Ferrocene | Cp/C-H `single covalent` systems plus Cp pi and Fe-Cp coordination systems. |
+| Ferrocene | Cp/C-H `single covalent` systems plus Fe-centred Cp delocalised systems. |
 | Sodium chloride | Formal charges plus one zero-electron `ionic` edge system. |
 | Morphine | Every graph edge as a system plus named delocalization systems. |
 

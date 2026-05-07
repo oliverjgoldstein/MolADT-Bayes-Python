@@ -85,6 +85,7 @@ def molecule_viewer_payload(molecule: Molecule, *, title: str = "MolADT 3D Viewe
             "label": _system_label(system_id.value, system),
             "tag": system.tag,
             "sharedElectrons": system.shared_electrons.value,
+            "kind": _system_kind(system),
             "color": _system_color(system_id.value, system),
             "atoms": [atom_id.value for atom_id in sorted(system.member_atoms)],
             "edges": [_edge_payload(edge, molecule=molecule) for edge in sorted(system.member_edges)],
@@ -109,6 +110,8 @@ def _system_label(system_id: int, system: BondingSystem) -> str:
 def _system_display_label(system: BondingSystem) -> str | None:
     if system.tag == "ionic" and len(system.member_edges) == 1 and system.shared_electrons.value == 0:
         return "ionic"
+    if _standard_system_key(system) is None and system.tag is not None:
+        return "delocalised bonding"
     if system.tag not in {None, "single", "double", "triple", "quadruple"}:
         return system.tag
     if len(system.member_edges) == 1:
@@ -121,6 +124,15 @@ def _system_display_label(system: BondingSystem) -> str | None:
         if system.shared_electrons.value == 8:
             return "quadruple covalent"
     return system.tag
+
+
+def _system_kind(system: BondingSystem) -> str:
+    standard_key = _standard_system_key(system)
+    if standard_key == "ionic":
+        return "ionic"
+    if standard_key is not None:
+        return "covalent"
+    return "delocalised"
 
 
 def _system_color(system_id: int, system: BondingSystem) -> str:
@@ -1155,6 +1167,7 @@ _HTML_TEMPLATE = """<!doctype html>
         id: Number(system.id),
         label: system.label || systemLabel(Number(system.id), system.tag || null, Number(system.sharedElectrons || 0), system.edges || []),
         sharedElectrons: Number(system.sharedElectrons || 0),
+        kind: system.kind || systemKind(system.tag || null, Number(system.sharedElectrons || 0), system.edges || []),
         color: system.color || systemColor(Number(system.id), system.tag || null, Number(system.sharedElectrons || 0), system.edges || [], index),
         atoms: (system.atoms || []).map(Number),
         edges: (system.edges || []).map((edge) => ({
@@ -1186,9 +1199,9 @@ _HTML_TEMPLATE = """<!doctype html>
         };
       }
 
-      function systemLabel(id, tag, sharedElectrons, edges) {
+    function systemLabel(id, tag, sharedElectrons, edges) {
       const covalent = covalentLabel(tag, sharedElectrons, edges);
-        const display = covalent || tag;
+        const display = covalent || (tag ? "delocalised bonding" : null);
         return display ? "#" + id + " " + display : "#" + id;
       }
 
@@ -1222,12 +1235,19 @@ _HTML_TEMPLATE = """<!doctype html>
       return EXTRA_SYSTEM_COLORS[((offset % EXTRA_SYSTEM_COLORS.length) + EXTRA_SYSTEM_COLORS.length) % EXTRA_SYSTEM_COLORS.length];
     }
 
+    function systemKind(tag, sharedElectrons, edges) {
+      const key = standardSystemKey(tag, sharedElectrons, edges);
+      if (key === "ionic") return "ionic";
+      if (key) return "covalent";
+      return "delocalised";
+    }
+
     function isStandardCovalentSystem(system) {
       return !!standardCovalentLineCount(system);
     }
 
     function displaySystems(systems) {
-      return (systems || []).filter((system) => !isStandardCovalentSystem(system));
+      return systems || [];
     }
 
     function standardCovalentLineCount(system) {
@@ -1384,6 +1404,9 @@ _HTML_TEMPLATE = """<!doctype html>
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.lineWidth = options.width;
+      if (options.dash) {
+        ctx.setLineDash(options.dash);
+      }
       const offset = Number(options.offset || 0);
       let ax = a.x;
       let ay = a.y;
@@ -1427,6 +1450,7 @@ _HTML_TEMPLATE = """<!doctype html>
           colorA: options.colorA || options.color,
           colorB: options.colorB || options.color,
           alpha: options.alpha,
+          dash: options.dash,
           offset: Number(options.offset || 0) + offset
         });
       });
@@ -2012,6 +2036,7 @@ _HTML_TEMPLATE = """<!doctype html>
                 colorA: edgeColor,
                 colorB: edgeColor,
                 alpha: active ? 1 : 0.18,
+                dash: active ? [10, 7] : [8, 8],
                 offset: laneOffset
               });
             }
@@ -2023,9 +2048,6 @@ _HTML_TEMPLATE = """<!doctype html>
       const sortedAtoms = Array.from(points.values()).sort((a, b) => a.z - b.z);
       sortedAtoms.forEach(drawAtom);
       state.screenAtoms = sortedAtoms;
-      if (state.systems) {
-        displaySystems(molecule.systems).forEach((system) => drawSystemLabel(system, points));
-      }
     }
 
     function switchMolecule(index) {
@@ -2082,7 +2104,8 @@ _HTML_TEMPLATE = """<!doctype html>
         button.innerHTML = '<span class="swatch"></span><span><span class="row-title"></span><span class="row-meta"></span></span><span class="pill"></span>';
         button.querySelector(".swatch").style.background = system.color;
         button.querySelector(".row-title").textContent = system.label;
-        button.querySelector(".row-meta").textContent = system.atoms.length + " atoms, " + system.edges.length + " edges";
+        const tagText = system.tag ? ", " + system.tag : "";
+        button.querySelector(".row-meta").textContent = (system.kind || "system") + tagText + ", " + system.atoms.length + " atoms, " + system.edges.length + " edges";
         button.querySelector(".pill").textContent = system.sharedElectrons + "e";
         button.addEventListener("click", () => {
           state.activeSystem = state.activeSystem === system.id ? null : system.id;

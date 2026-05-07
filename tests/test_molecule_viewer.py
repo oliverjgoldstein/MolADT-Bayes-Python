@@ -130,8 +130,11 @@ const systemList = elements.get("system-list");
 const labels = (systemList ? systemList.children : [])
   .map((child) => child._queries && child._queries[".row-title"] ? child._queries[".row-title"].textContent : child.textContent)
   .filter(Boolean);
-if (labels.some((label) => /(single|double|triple|quadruple) covalent/.test(label))) {
-  throw new Error(`ordinary covalent systems should not be page labels: ${labels.join(", ")}`);
+if (!labels.some((label) => /single covalent/.test(label))) {
+  throw new Error(`ordinary covalent systems should be labelled in the side panel: ${labels.join(", ")}`);
+}
+if (!labels.some((label) => /delocalised bonding/.test(label))) {
+  throw new Error(`delocalised systems should be labelled in the side panel: ${labels.join(", ")}`);
 }
 """
     subprocess.run([node, "-e", script, str(html_path)], check=True, capture_output=True, text=True)
@@ -174,7 +177,7 @@ def test_molecule_viewer_payload_marks_ionic_edges_and_draws_charge_field() -> N
     assert "drawBondLines" in html
     assert "chargeGradientForEdge" in html
     assert '"kind":"ionic"' in html
-    assert "setLineDash" not in html
+    assert "ctx.setLineDash(options.dash)" in html
 
 
 def test_molecule_viewer_script_executes_for_ferrocene_and_sodium_chloride(tmp_path: Path) -> None:
@@ -211,16 +214,43 @@ def test_molecule_viewer_selection_keeps_system_lookup_inside_function() -> None
 def test_molecule_viewer_payload_lengths_come_from_3d_coordinates() -> None:
     payload = molecule_viewer_payload(ferrocene_pretty, title="Ferrocene")
     sigma_edges = {tuple(sorted((edge["a"], edge["b"]))): edge for edge in payload["bonds"]}
-    coordination = next(system for system in payload["systems"] if system["tag"] == "fe_cp_coordination")
-    coordination_edges = {
+    cp1 = next(system for system in payload["systems"] if system["tag"] == "cp1_pi")
+    cp1_edges = {
         tuple(sorted((edge["a"], edge["b"]))): edge
-        for edge in coordination["edges"]
+        for edge in cp1["edges"]
     }
 
     assert sigma_edges[(2, 3)]["length"] == pytest.approx(_payload_distance(payload, 2, 3))
     assert sigma_edges[(2, 3)]["length"] == pytest.approx(1.404, abs=0.002)
-    assert coordination_edges[(1, 2)]["length"] == pytest.approx(_payload_distance(payload, 1, 2))
-    assert coordination_edges[(1, 2)]["length"] == pytest.approx(2.046, abs=0.002)
+    assert cp1_edges[(1, 2)]["length"] == pytest.approx(_payload_distance(payload, 1, 2))
+    assert cp1_edges[(1, 2)]["length"] == pytest.approx(2.046, abs=0.002)
+
+
+def test_molecule_viewer_payload_expands_ferrocene_cp_systems_through_iron() -> None:
+    payload = molecule_viewer_payload(ferrocene_pretty, title="Ferrocene")
+    cp1 = next(system for system in payload["systems"] if system["tag"] == "cp1_pi")
+    cp2 = next(system for system in payload["systems"] if system["tag"] == "cp2_pi")
+
+    assert cp1["label"] == "#1 delocalised bonding"
+    assert cp2["label"] == "#2 delocalised bonding"
+    assert cp1["kind"] == "delocalised"
+    assert cp2["kind"] == "delocalised"
+    assert 1 in cp1["atoms"]
+    assert 1 in cp2["atoms"]
+    assert {tuple(sorted((edge["a"], edge["b"]))) for edge in cp1["edges"]} >= {
+        (1, 2),
+        (1, 3),
+        (1, 4),
+        (1, 5),
+        (1, 6),
+    }
+    assert {tuple(sorted((edge["a"], edge["b"]))) for edge in cp2["edges"]} >= {
+        (1, 7),
+        (1, 8),
+        (1, 9),
+        (1, 10),
+        (1, 11),
+    }
 
 
 def test_molecule_viewer_payload_angles_come_from_3d_coordinates() -> None:
@@ -309,6 +339,8 @@ def test_molecule_viewer_html_offsets_overlapping_system_edges() -> None:
     assert "function systemEdgeLaneMap" in html
     assert "offset: laneOffset" in html
     assert "alpha: active ? 1 : 0.18" in html
+    assert "dash: active ? [10, 7] : [8, 8]" in html
+    assert "forEach((system) => drawSystemLabel(system, points))" not in html
 
 
 def test_molecule_viewer_html_can_draw_selected_atom_orbitals() -> None:
@@ -461,7 +493,8 @@ def test_view_examples_cli_uses_builtin_adt_examples_with_bonding_systems(tmp_pa
     assert f"Viewer URL: {molecule_viewer_uri(html_path)}" in output
     assert "moladt-viewer-collection-v1" in html
     assert "bridge_h3_3c2e" in html
-    assert "fe_cp_coordination" in html
+    assert "cp1_pi" in html
+    assert "delocalised bonding" in html
     assert "phenyl_pi_ring" in html
 
 
@@ -545,4 +578,6 @@ def test_pretty_example_cli_can_write_and_open_viewer(tmp_path: Path, capsys, mo
     assert "Viewer:" in output
     assert f"Viewer URL: {molecule_viewer_uri(html_path)}" in output
     assert opened == [html_path]
-    assert "fe_cp_coordination" in html_path.read_text(encoding="utf-8")
+    html = html_path.read_text(encoding="utf-8")
+    assert "cp1_pi" in html
+    assert "delocalised bonding" in html
