@@ -4,6 +4,11 @@ MolADT represents molecules as typed data for Bayesian modelling, feature genera
 
 The core object is not just a string and not just a graph. It keeps atoms, coordinates, bonding systems, formal charge, and optional shell/orbital data in explicit fields that can be inspected, mutated, scored, serialized, and shared with the Haskell repo. The edge set is derived from bonding-system member edges.
 
+<p align="center">
+  <img src="docs/assets/ferrocene.png" alt="Ferrocene in the MolADT viewer" width="280">
+  <img src="docs/assets/diborane.png" alt="Diborane in the MolADT viewer" width="280">
+</p>
+
 [Quickstart](docs/quickstart.md) · [Representation](docs/representation.md) · [Examples](docs/examples.md) · [Equality](docs/molecule-equality.md) · [CLI](docs/cli.md) · [Models](docs/models.md) · [Benchmarks](docs/inference-and-benchmarks.md) · [Outputs](docs/outputs.md)
 
 ## What It Does
