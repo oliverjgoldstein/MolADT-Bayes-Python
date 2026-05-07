@@ -1,8 +1,19 @@
 # MolADT-Bayes-Python
 
-MolADT represents molecules as typed data for Bayesian modelling, feature generation, inverse design, validation, and viewing.
+MolADT represents molecules as typed data for Bayesian modelling, feature
+generation, inverse design, validation, and viewing.
 
-The core object is not just a string and not just a graph. It keeps atoms, coordinates, bonding systems, formal charge, and optional shell/orbital data in explicit fields that can be inspected, mutated, scored, serialized, and shared with the Haskell repo. The edge set is derived from bonding-system member edges.
+The core object is not just a string and not just a graph. It keeps:
+
+- atoms
+- coordinates
+- bonding systems
+- formal charge
+- optional shell/orbital data
+- an edge set derived from bonding-system member edges
+
+Those fields can be inspected, mutated, scored, serialized, and shared with the
+Haskell repo.
 
 <p align="center">
   <img src="docs/assets/ferrocene.png" alt="Ferrocene in the MolADT viewer" width="280">
@@ -37,15 +48,34 @@ make freesolv
 make inverse-design TARGET=-5.0
 ```
 
-`make python-setup` creates `./.venv`. `make python-cmdstan-install` creates `./.cmdstan`. Both stay inside this checkout.
+Setup artifacts stay inside this checkout:
+
+- `make python-setup` creates `./.venv`
+- `make python-cmdstan-install` creates `./.cmdstan`
 
 ## Why The ADT Matters
 
-MolADT gives Bayesian molecular work a typed support: priors, proposal kernels, validators, feature maps, posterior predictive scores, and exported candidates all talk about the same molecule object.
+MolADT gives Bayesian molecular work a typed support where the same molecule
+object is used by:
 
-That matters for inverse design. The FreeSolv task can start from a FreeSolv-derived molecule prior, grow typed candidates, score each molecule with the unchanged GP posterior predictive distribution, and write the exact generated ADT back to disk.
+- priors
+- proposal kernels
+- validators
+- feature maps
+- posterior predictive scores
+- exported candidates
 
-The FreeSolv model is posterior predictive: it gives a distribution over hydration free energy for a given molecule. It is not itself a molecule-generating prior.
+That matters for inverse design because the FreeSolv task can:
+
+- start from a FreeSolv-derived molecule prior
+- grow typed candidates
+- score each molecule with the unchanged GP posterior predictive distribution
+- write the exact generated ADT back to disk
+
+The FreeSolv model is posterior predictive:
+
+- it gives a distribution over hydration free energy for a given molecule
+- it is not itself a molecule-generating prior
 
 ## The Representation
 
@@ -67,30 +97,47 @@ class Molecule:
     smiles_stereochemistry: SmilesStereochemistry = field(default_factory=SmilesStereochemistry)
 ```
 
-The canonical Dietz bonding layer is `systems`: every edge is an instance of a
-`BondingSystem`. A conventional single, double, triple, or quadruple bond is a
-one-edge Dietz system with `2`, `4`, `6`, or `8` shared electrons respectively.
-Pretty printers and viewers display those as `single covalent`,
-`double covalent`, `triple covalent`, or `quadruple covalent`.
-In the Dietz representation an ionic contact is also a one-edge
-`BondingSystem`, but it shares `0` electrons, carries tag `ionic`, and keeps
-the formal charge on the atoms rather than on the edge itself.
-For example, sodium chloride stores `Na#1` as `+1`, `Cl#2` as `-1`, and the
-Na-Cl edge as one `ionic` system.
+The canonical Dietz bonding layer is `systems`:
 
-Pretty printers derive their edge rows from the bonding systems. They show the
-total electrons shared over each edge, then the effective order. For example, a
-benzene C-C edge displays as `shared=3e` and `order=1.50`: `2e` from its
-unnamed one-edge system plus `1e/edge` from the six-electron `pi_ring`
-system. The viewer lists the same explicit bonding systems.
+- every edge is an instance of a `BondingSystem`
+- a single covalent bond is a one-edge `2e` system
+- a double covalent bond is a one-edge `4e` system
+- a triple covalent bond is a one-edge `6e` system
+- a quadruple covalent bond is a one-edge `8e` system
+- an ionic contact is a one-edge `0e` system tagged `ionic`
+- formal charge stays on atoms rather than on the edge
 
-System identifiers are stable display IDs, not chemistry. Checked examples and
-parsers put named or multi-edge systems first, so benzene uses `SystemId(1)` for
-`pi_ring` and then numbers the ordinary one-edge covalent systems after it.
+For example, sodium chloride stores:
 
-Use [`same_molecule`](docs/molecule-equality.md) when you want equality modulo
-container ordering, such as atom maps, system tuples, member-edge sets, and
-annotation tuples. It keeps atom and system identifiers meaningful.
+- `Na#1` as `+1`
+- `Cl#2` as `-1`
+- the Na-Cl edge as one `ionic` system
+
+Pretty printers and viewers derive display from the bonding systems:
+
+- ordinary `2e`, `4e`, `6e`, and `8e` one-edge systems display as
+  `single covalent`, `double covalent`, `triple covalent`, and
+  `quadruple covalent`
+- edge rows show the total electrons shared over each edge
+- edge rows also show the effective order
+- a benzene C-C edge displays as `shared=3e` and `order=1.50`
+- that benzene value is `2e` from the unnamed one-edge system plus `1e/edge`
+  from the six-electron `pi_ring`
+
+System identifiers are stable display IDs, not chemistry:
+
+- checked examples and parsers put named or multi-edge systems first
+- benzene uses `SystemId(1)` for `pi_ring`
+- ordinary one-edge covalent systems are then numbered after it
+
+Use [`same_molecule`](docs/molecule-equality.md) when you want equality modulo:
+
+- atom-map ordering
+- system-tuple ordering
+- member-edge set ordering
+- annotation tuple ordering
+
+It keeps atom and system identifiers meaningful.
 
 An atom carries element data, position, formal charge, and shell data:
 
@@ -104,9 +151,11 @@ class Atom:
     formal_charge: int = 0
 ```
 
-`ElementAttributes` also carries the default shell data, so simple atom
-builders can use `element_attributes(symbol)` and omit `shells`; there is no
-separate shell lookup layer.
+`ElementAttributes` also carries the default shell data:
+
+- simple atom builders can use `element_attributes(symbol)`
+- atom builders can omit `shells`
+- there is no separate shell lookup layer
 
 Delocalised and multicentre bonding is represented explicitly:
 
@@ -129,12 +178,15 @@ Examples:
 | Sodium chloride | `Na+` and `Cl-` atoms plus one zero-electron `ionic` edge system |
 | Morphine | every graph edge as a system, including a `double covalent` alkene edge, plus a phenyl delocalised system |
 
-Ferrocene is a useful example because the metallocene structure is explicit
-without flattening it into a string. Each Cp delocalised system spans the five
-Cp ring C-C edges and the five Fe-C contacts to the central iron. When those
-delocalised systems overlap ordinary covalent edges, the viewer gives each
-system a separate dashed lane. The ordinary Cp/C-H and Cp/Cp covalent edges are
-still present as unnamed one-edge systems that display as `single covalent`.
+Ferrocene is a useful example because the metallocene structure stays explicit:
+
+- it is not flattened into a string
+- each Cp delocalised system spans five Cp ring C-C edges
+- each Cp delocalised system also spans five Fe-C contacts to the central iron
+- overlapping delocalised and covalent systems get separate dashed lanes in the
+  viewer
+- ordinary Cp/C-H and Cp/Cp covalent edges are still present as unnamed
+  one-edge systems that display as `single covalent`
 
 | System | Shared electrons | Member edges |
 | --- | --- | --- |
@@ -184,11 +236,43 @@ make molecule-viewer VIEWER_EXAMPLES="benzene diborane ferrocene"
 make python-pretty-example EXAMPLE=morphine
 ```
 
-`make view` opens seven built-in examples in one browser page, including sodium chloride's charged 0e ionic edge. Charge appears as blue and red halos around positive and negative atoms; halo size and opacity scale with formal-charge magnitude, atoms participating in an ionic bonding system get an additional boost, and ionic edges draw a blue-to-red gradient between those charged atoms. Ordinary covalent edges are dark grey: single bonds draw one line, double bonds draw two lines around the edge axis, triple bonds draw three, and quadruple bonds draw four. When an edge belongs to more than one bonding system, each system overlay gets its own dashed lane, including ordinary covalent versus delocalised overlap in ferrocene. Non-standard systems such as pi rings, bridge bonds, and coordination use coloured dashed overlays. The right panel lists all bonding systems, including `single covalent`, `double covalent`, `triple covalent`, and `quadruple covalent` one-edge systems; bonding-system text labels are not drawn over the molecule. Click an atom to see coordinates, 3D edge lengths, effective orders, bonding systems, and bond angles from the molecule coordinates.
+`make view` opens seven built-in examples in one browser page.
 
-Use `OPEN_VIEWER=1` to open generated viewer pages automatically. Viewer commands
-also print a portable `file://` URL, so if the operating system does not open a
-browser you can open the reported URL manually.
+The viewer renders:
+
+- sodium chloride's charged `0e` ionic edge
+- positive and negative formal charge as blue and red halos
+- charge halo size and opacity proportional to formal-charge magnitude
+- an extra halo boost for atoms in an ionic bonding system
+- ionic edges as blue-to-red gradients between charged atoms
+- ordinary covalent edges in dark grey
+- single covalent bonds as one line
+- double covalent bonds as two lines around the edge axis
+- triple covalent bonds as three lines
+- quadruple covalent bonds as four lines
+- overlapping bonding systems as separate dashed lanes, including ordinary
+  covalent versus delocalised overlap in ferrocene
+- non-standard systems such as pi rings, bridge bonds, and coordination as
+  coloured dashed overlays
+
+The right panel lists:
+
+- all bonding systems
+- `single covalent`, `double covalent`, `triple covalent`, and
+  `quadruple covalent` one-edge systems
+- selected atom coordinates
+- 3D edge lengths
+- effective orders
+- bonding systems and bond angles from molecule coordinates
+
+Bonding-system text labels are not drawn over the molecule.
+
+Viewer opening behavior:
+
+- use `OPEN_VIEWER=1` to open generated viewer pages automatically
+- viewer commands also print a portable `file://` URL
+- if the operating system does not open a browser, open the reported URL
+  manually
 
 ```bash
 OPEN_VIEWER=1 make molecule-viewer VIEWER_EXAMPLES=diborane
@@ -205,11 +289,19 @@ make inverse-design TARGET=-5.0
 make inverse-design-view
 ```
 
-`make inverse-design` uses the latest `results/freesolv/run_*` Bayesian GP artifact. It samples initial chains from the MolADT FreeSolv prior, reweights that prior with the unchanged GP target likelihood, generates 1,000 candidates, and writes the top 10 by Bayesian credible score.
+`make inverse-design`:
 
-Geometry values are audited in the outputs. The sampler is not conditioned on physical plausibility.
+- uses the latest `results/freesolv/run_*` Bayesian GP artifact
+- samples initial chains from the MolADT FreeSolv prior
+- reweights that prior with the unchanged GP target likelihood
+- generates 1,000 candidates
+- writes the top 10 by Bayesian credible score
 
-Generated reference outputs live in `results/inverse_design/reference/`.
+Output notes:
+
+- geometry values are audited in the outputs
+- the sampler is not conditioned on physical plausibility
+- generated reference outputs live in `results/inverse_design/reference/`
 
 ## Benchmarks
 
@@ -224,7 +316,12 @@ Benchmark details are in [Inference and benchmarks](docs/inference-and-benchmark
 
 ## Python And Haskell
 
-MolADT JSON is the boundary shared by the Python and Haskell repos.
+MolADT JSON is the boundary shared by the Python and Haskell repos:
+
+- Python writes MolADT JSON
+- Haskell reads the same MolADT JSON shape
+- atom IDs, system IDs, bonding systems, charges, and stereochemistry remain
+  explicit
 
 ```bash
 ./.venv/bin/python - <<'PY' > morphine.moladt.json
