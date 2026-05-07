@@ -62,13 +62,14 @@ class Molecule:
     smiles_stereochemistry: SmilesStereochemistry = field(default_factory=SmilesStereochemistry)
 ```
 
-The canonical bonding layer is `systems`: every edge is an instance of a
+The canonical Dietz bonding layer is `systems`: every edge is an instance of a
 `BondingSystem`. A conventional single, double, triple, or quadruple bond is a
-one-edge system with `2`, `4`, `6`, or `8` shared electrons respectively.
+one-edge Dietz system with `2`, `4`, `6`, or `8` shared electrons respectively.
 Pretty printers and viewers display those as `single covalent`,
 `double covalent`, `triple covalent`, or `quadruple covalent`.
-An ionic contact is also a one-edge `BondingSystem`, but it shares `0`
-electrons, carries tag `ionic`, and keeps the formal charge on the atoms.
+In the Dietz representation an ionic contact is also a one-edge
+`BondingSystem`, but it shares `0` electrons, carries tag `ionic`, and keeps
+the formal charge on the atoms rather than on the edge itself.
 For example, sodium chloride stores `Na#1` as `+1`, `Cl#2` as `-1`, and the
 Na-Cl edge as one `ionic` system.
 
@@ -145,7 +146,7 @@ make molecule-viewer VIEWER_EXAMPLES="benzene diborane ferrocene"
 make python-pretty-example EXAMPLE=morphine
 ```
 
-`make view` opens seven built-in examples in one browser page, including sodium chloride's charged 0e ionic edge. Charge appears as blue and red halos around positive and negative atoms; atoms participating in an ionic bonding system get larger, more opaque charge gradients, and ionic edges draw a blue-to-red gradient between those charged atoms. Ordinary covalent edges are dark grey: single bonds draw one line, double bonds draw two lines around the edge axis, triple bonds draw three, and quadruple bonds draw four. Non-standard systems such as pi rings, bridge bonds, and coordination keep a separate coloured overlay; ordinary covalent systems are not repeated as page labels. Click an atom to see coordinates, 3D edge lengths, effective orders, bonding systems, and bond angles from the molecule coordinates.
+`make view` opens seven built-in examples in one browser page, including sodium chloride's charged 0e ionic edge. Charge appears as blue and red halos around positive and negative atoms; halo size and opacity scale with formal-charge magnitude, atoms participating in an ionic bonding system get an additional boost, and ionic edges draw a blue-to-red gradient between those charged atoms. Ordinary covalent edges are dark grey: single bonds draw one line, double bonds draw two lines around the edge axis, triple bonds draw three, and quadruple bonds draw four. Non-standard systems such as pi rings, bridge bonds, and coordination keep a separate coloured overlay; ordinary covalent systems are not repeated as page labels. Click an atom to see coordinates, 3D edge lengths, effective orders, bonding systems, and bond angles from the molecule coordinates.
 
 Use `OPEN_VIEWER=1` to open generated viewer pages automatically. Viewer commands
 also print a portable `file://` URL, so if the operating system does not open a

@@ -167,8 +167,10 @@ def test_molecule_viewer_payload_marks_ionic_edges_and_draws_charge_field() -> N
     assert "drawChargeField" in html
     assert "function ionicAtomIdSet" in html
     assert "ionicAtomIds.has(point.atom.id)" in html
-    assert "Math.max(120, point.radius * (9.8 + magnitude * 1.2))" in html
-    assert "hexToRgba(color, ionic ? 0.58 : 0.30)" in html
+    assert "const strength = Math.min(5, Math.abs(charge));" in html
+    assert "const radiusFactor = ionic ? 10.5 + strength * 3.0 : 5.2 + strength * 2.2;" in html
+    assert "Math.max(120, point.radius * radiusFactor)" in html
+    assert "hexToRgba(color, centerAlpha)" in html
     assert "drawBondLines" in html
     assert "chargeGradientForEdge" in html
     assert '"kind":"ionic"' in html
