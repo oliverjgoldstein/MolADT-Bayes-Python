@@ -149,21 +149,32 @@ See the full expanded ADT in [`moladt/examples/ferrocene.py`](moladt/examples/fe
 chemistry oracle. It rejects malformed MolADT values before parsing, viewing,
 feature extraction, or inverse-design scoring continue.
 
-It checks that atom map keys match the atom IDs, coordinates and element
-metadata are finite, `SystemId`s are positive and unique, bonding systems are
-non-empty and reference existing atoms, cached member atoms match the member
-edges, duplicate bonding systems are not present, and SMILES stereochemistry
-annotations only point at known atoms. It also enforces the MolADT edge contract:
-ordinary one-edge covalent systems with `2`, `4`, `6`, or `8` shared electrons
-must be unnamed and display as single/double/triple/quadruple covalent bonds;
-one-edge `0e` systems must be tagged `ionic`; and `ionic` systems must share
-zero electrons over exactly one edge.
+It checks:
 
-The validator deliberately does not prove a molecule is physically realistic,
-choose protonation states, infer missing hydrogens, or decide whether a
-delocalised system is chemically preferred. Task-specific checks can add those
-rules separately. The FreeSolv inverse-design task now runs this generic
-validator before its own FreeSolv geometry and generation-contract checks.
+- atom map keys match the atom IDs
+- coordinates and element metadata are finite
+- `SystemId`s are positive and unique
+- bonding systems are non-empty
+- bonding-system edges reference existing atoms
+- cached member atoms match the member edges
+- duplicate bonding systems are not present
+- SMILES stereochemistry annotations only point at known atoms
+- ordinary one-edge covalent systems with `2`, `4`, `6`, or `8` shared
+  electrons are unnamed and display as single/double/triple/quadruple covalent
+  bonds
+- one-edge `0e` systems are tagged `ionic`
+- `ionic` systems share zero electrons over exactly one edge
+
+It deliberately does not:
+
+- prove a molecule is physically realistic
+- choose protonation states
+- infer missing hydrogens
+- decide whether a delocalised system is chemically preferred
+
+Task-specific checks can add those rules separately. The FreeSolv
+inverse-design task now runs this generic validator before its own FreeSolv
+geometry and generation-contract checks.
 
 ## View Molecules
 
