@@ -379,6 +379,17 @@ def test_write_molecule_viewer_html_writes_standalone_file(tmp_path: Path) -> No
     ] == "Diborane"
 
 
+def test_molecule_viewer_uri_uses_windows_file_url_for_wsl_drive_paths() -> None:
+    uri = molecule_viewer_uri(
+        "/mnt/c/Users/samma/Documents/MolADT/MolADT-Bayes-Python/results/viewer/examples viewer.html"
+    )
+
+    assert (
+        uri
+        == "file:///C:/Users/samma/Documents/MolADT/MolADT-Bayes-Python/results/viewer/examples%20viewer.html"
+    )
+
+
 def test_view_html_cli_accepts_moladt_json(tmp_path: Path, capsys) -> None:
     json_path = tmp_path / "diborane.moladt.json"
     html_path = tmp_path / "diborane.viewer.html"

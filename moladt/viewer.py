@@ -10,6 +10,7 @@ import webbrowser
 from html import escape
 from pathlib import Path
 from typing import Any, Sequence
+from urllib.parse import quote
 
 from .chem.dietz import AtomId, BondingSystem, Edge
 from .chem.molecule import Molecule, molecule_edges
@@ -285,7 +286,25 @@ def _run_viewer_opener(command: Sequence[str]) -> bool:
 def molecule_viewer_uri(path: str | Path) -> str:
     """Return the portable file URI for a written molecule viewer HTML file."""
 
-    return Path(path).resolve().as_uri()
+    resolved = Path(path).resolve()
+    wsl_uri = _wsl_drive_file_uri(resolved)
+    if wsl_uri is not None:
+        return wsl_uri
+    return resolved.as_uri()
+
+
+def _wsl_drive_file_uri(path: Path) -> str | None:
+    """Return a Windows file URI for WSL /mnt/<drive>/... paths."""
+
+    parts = path.parts
+    if len(parts) < 3 or parts[0] != "/" or parts[1] != "mnt":
+        return None
+    drive = parts[2]
+    if len(drive) != 1 or not drive.isalpha():
+        return None
+    remainder = "/".join(parts[3:])
+    suffix = quote(remainder, safe="/")
+    return f"file:///{drive.upper()}:/{suffix}"
 
 
 def _edge_payload(edge: Edge, *, molecule: Molecule | None = None) -> dict[str, int | float]:
