@@ -393,7 +393,7 @@ python-activate:
 refresh-python-cache:
 	@printf "%s\n" "Refreshing Python bytecode cache under the repo."
 	find . -path "./.venv" -prune -o -path "./.git" -prune -o -type d -name "__pycache__" -exec rm -rf {} +
-	find . -path "./.venv" -prune -o -path "./.git" -prune -o -type f -name "*.pyc" -delete
+	find . -path "./.venv" -prune -o -path "./.git" -prune -o -type f -name "*.pyc" -exec rm -f {} +
 
 python-parse:
 	$(PYTHON_CMD) -m moladt.cli parse molecules/benzene.sdf
