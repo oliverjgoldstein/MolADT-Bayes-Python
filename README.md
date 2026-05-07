@@ -20,7 +20,7 @@ Haskell repo.
   <img src="docs/assets/diborane.png" alt="Diborane in the MolADT viewer" width="280">
 </p>
 
-[Quickstart](docs/quickstart.md) · [Representation](docs/representation.md) · [Validator](#validator) · [Examples](docs/examples.md) · [Equality](docs/molecule-equality.md) · [CLI](docs/cli.md) · [Models](docs/models.md) · [Benchmarks](docs/inference-and-benchmarks.md) · [Outputs](docs/outputs.md)
+[Quickstart](docs/quickstart.md) · [Representation](docs/representation.md) · [Parsing](docs/parsing.md) · [Validator](#validator) · [Examples](docs/examples.md) · [Equality](docs/molecule-equality.md) · [CLI](docs/cli.md) · [Models](docs/models.md) · [Benchmarks](docs/inference-and-benchmarks.md) · [Outputs](docs/outputs.md)
 
 ## What It Does
 
