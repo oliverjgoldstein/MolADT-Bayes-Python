@@ -169,25 +169,25 @@ def test_build_simple_review_frame_prefers_best_validation_representation_per_da
             },
             {
                 "dataset": "freesolv",
-                "representation": "moladt_featurized",
-                "model": "bayes_gp_rbf_screened",
-                "method": "laplace",
-                "split_scheme": "fractional:0.800/0.100/0.100",
+                "representation": "moladt",
+                "model": "moladt_wl_system_gp",
+                "method": "empirical_bayes_exact_gp",
+                "split_scheme": "moleculenet_random_like:513/64/65;final_refit=train+valid",
                 "source_row_count": 642,
                 "used_row_count": 642,
-                "train_n_eval": 513,
+                "train_n_eval": 577,
                 "valid_n_eval": 64,
                 "test_n_eval": 65,
-                "train_rmse": 0.51,
-                "valid_rmse": 1.12,
-                "test_rmse": 0.74,
-                "test_minus_train_rmse": 0.23,
-                "train_mae": 0.33,
-                "valid_mae": 0.77,
-                "test_mae": 0.53,
-                "train_r2": 0.98,
-                "valid_r2": 0.94,
-                "test_r2": 0.94,
+                "train_rmse": 0.12,
+                "valid_rmse": 0.91,
+                "test_rmse": 0.64,
+                "test_minus_train_rmse": 0.52,
+                "train_mae": 0.08,
+                "valid_mae": 0.61,
+                "test_mae": 0.41,
+                "train_r2": 0.99,
+                "valid_r2": 0.95,
+                "test_r2": 0.96,
                 "fit_runtime_seconds": 20.0,
             },
         ]
@@ -197,11 +197,11 @@ def test_build_simple_review_frame_prefers_best_validation_representation_per_da
 
     assert len(review) == 1
     freesolv = review.iloc[0]
-    assert freesolv["representation"] == "moladt_featurized"
-    assert freesolv["model"] == "bayes_gp_rbf_screened"
-    assert freesolv["method"] == "laplace"
-    assert freesolv["valid_metric_value"] == pytest.approx(1.12)
-    assert freesolv["test_metric_value"] == pytest.approx(0.74)
+    assert freesolv["representation"] == "moladt"
+    assert freesolv["model"] == "moladt_wl_system_gp"
+    assert freesolv["method"] == "empirical_bayes_exact_gp"
+    assert freesolv["valid_metric_value"] == pytest.approx(0.91)
+    assert freesolv["test_metric_value"] == pytest.approx(0.64)
 
 
 def test_moleculenet_comparison_graphs_write_expected_svg_files(tmp_path) -> None:
@@ -210,14 +210,14 @@ def test_moleculenet_comparison_graphs_write_expected_svg_files(tmp_path) -> Non
             {
                 "dataset": "freesolv",
                 "dataset_label": "FreeSolv",
-                "representation": "moladt_featurized",
+                "representation": "moladt",
                 "local_metric_name": "RMSE",
                 "train_metric_value": 1.00,
                 "valid_metric_value": 1.05,
                 "test_metric_value": 1.10,
                 "local_metric_value": 1.10,
-                "model": "bayes_hierarchical_shrinkage",
-                "method": "optimize",
+                "model": "moladt_wl_system_gp",
+                "method": "empirical_bayes_exact_gp",
                 "paper_metric_value": 1.15,
                 "selection_split": "valid",
                 "paper_model_name": "MPNN",
@@ -258,9 +258,9 @@ def test_moleculenet_comparison_graphs_write_expected_svg_files(tmp_path) -> Non
     assert "Paper" in freesolv_svg
     assert '>RMSE</text>' in freesolv_svg
     assert 'font-size="18" font-family="Helvetica, Arial, sans-serif" fill="#111827" font-weight="600">Training</text>' in freesolv_svg
-    assert "moladt_featurized" not in freesolv_svg
+    assert "moladt_wl_system_gp" not in freesolv_svg
     assert "MPNN" not in freesolv_svg
-    assert "moladt_featurized" in freesolv_caption
+    assert "moladt_wl_system_gp" in freesolv_caption
     assert "MPNN" in freesolv_caption
     assert "QM9 on MolADT: MAE" in qm9_svg
     assert "Training" in qm9_svg
@@ -281,15 +281,15 @@ def test_attach_moleculenet_uncertainty_adds_freesolv_intervals() -> None:
             {
                 "dataset": "freesolv",
                 "dataset_label": "FreeSolv",
-                "representation": "moladt_featurized",
+                "representation": "moladt",
                 "metric_name": "RMSE",
-                "train_value": 0.510,
-                "valid_value": 1.127,
-                "test_value": 0.738,
-                "local_value": 0.738,
+                "train_value": 0.120,
+                "valid_value": 0.910,
+                "test_value": 0.638,
+                "local_value": 0.638,
                 "paper_value": 1.150,
-                "model": "bayes_gp_rbf_screened",
-                "method": "laplace",
+                "model": "moladt_wl_system_gp",
+                "method": "empirical_bayes_exact_gp",
                 "selection_split": "valid",
                 "paper_model_name": "MPNN",
                 "note": "Local split differs from the paper split.",
@@ -298,12 +298,12 @@ def test_attach_moleculenet_uncertainty_adds_freesolv_intervals() -> None:
     )
     predictions = pd.DataFrame(
         [
-            {"dataset": "freesolv", "representation": "moladt_featurized", "model": "bayes_gp_rbf_screened", "method": "laplace", "split": "train", "actual": 0.0, "predicted_mean": 0.0, "predictive_sd": 0.2},
-            {"dataset": "freesolv", "representation": "moladt_featurized", "model": "bayes_gp_rbf_screened", "method": "laplace", "split": "train", "actual": 1.0, "predicted_mean": 1.0, "predictive_sd": 0.2},
-            {"dataset": "freesolv", "representation": "moladt_featurized", "model": "bayes_gp_rbf_screened", "method": "laplace", "split": "valid", "actual": 0.0, "predicted_mean": 0.2, "predictive_sd": 0.3},
-            {"dataset": "freesolv", "representation": "moladt_featurized", "model": "bayes_gp_rbf_screened", "method": "laplace", "split": "valid", "actual": 1.0, "predicted_mean": 0.9, "predictive_sd": 0.3},
-            {"dataset": "freesolv", "representation": "moladt_featurized", "model": "bayes_gp_rbf_screened", "method": "laplace", "split": "test", "actual": 0.0, "predicted_mean": 0.1, "predictive_sd": 0.25},
-            {"dataset": "freesolv", "representation": "moladt_featurized", "model": "bayes_gp_rbf_screened", "method": "laplace", "split": "test", "actual": 1.0, "predicted_mean": 1.1, "predictive_sd": 0.25},
+            {"dataset": "freesolv", "representation": "moladt", "model": "moladt_wl_system_gp", "method": "empirical_bayes_exact_gp", "split": "train", "actual": 0.0, "predicted_mean": 0.0, "predictive_sd": 0.2},
+            {"dataset": "freesolv", "representation": "moladt", "model": "moladt_wl_system_gp", "method": "empirical_bayes_exact_gp", "split": "train", "actual": 1.0, "predicted_mean": 1.0, "predictive_sd": 0.2},
+            {"dataset": "freesolv", "representation": "moladt", "model": "moladt_wl_system_gp", "method": "empirical_bayes_exact_gp", "split": "valid", "actual": 0.0, "predicted_mean": 0.2, "predictive_sd": 0.3},
+            {"dataset": "freesolv", "representation": "moladt", "model": "moladt_wl_system_gp", "method": "empirical_bayes_exact_gp", "split": "valid", "actual": 1.0, "predicted_mean": 0.9, "predictive_sd": 0.3},
+            {"dataset": "freesolv", "representation": "moladt", "model": "moladt_wl_system_gp", "method": "empirical_bayes_exact_gp", "split": "test", "actual": 0.0, "predicted_mean": 0.1, "predictive_sd": 0.25},
+            {"dataset": "freesolv", "representation": "moladt", "model": "moladt_wl_system_gp", "method": "empirical_bayes_exact_gp", "split": "test", "actual": 1.0, "predicted_mean": 1.1, "predictive_sd": 0.25},
         ]
     )
 
@@ -321,12 +321,12 @@ def test_freesolv_graph_omits_uncertainty_bar_markup(tmp_path) -> None:
             {
                 "dataset": "freesolv",
                 "dataset_label": "FreeSolv",
-                "representation": "moladt_featurized",
+                "representation": "moladt",
                 "metric_name": "RMSE",
-                "train_value": 0.510,
-                "valid_value": 1.127,
-                "test_value": 0.738,
-                "local_value": 0.738,
+                "train_value": 0.120,
+                "valid_value": 0.910,
+                "test_value": 0.638,
+                "local_value": 0.638,
                 "paper_value": 1.150,
                 "train_interval_low": 0.540,
                 "train_interval_high": 0.810,
@@ -334,8 +334,8 @@ def test_freesolv_graph_omits_uncertainty_bar_markup(tmp_path) -> None:
                 "valid_interval_high": 1.520,
                 "test_interval_low": 0.790,
                 "test_interval_high": 1.060,
-                "model": "bayes_gp_rbf_screened",
-                "method": "laplace",
+                "model": "moladt_wl_system_gp",
+                "method": "empirical_bayes_exact_gp",
                 "selection_split": "valid",
                 "paper_model_name": "MPNN",
                 "paper_source_title": "MoleculeNet: a benchmark for molecular machine learning",
@@ -401,11 +401,11 @@ def test_build_freesolv_bayesian_artifact_formats_uncertainty_and_model_text() -
         [
             {
                 "dataset": "freesolv",
-                "representation": "moladt_featurized",
-                "model": "bayes_gp_rbf_screened",
-                "method": "laplace",
-                "split_scheme": "fractional:0.800/0.100/0.100",
-                "train_n_eval": 513,
+                "representation": "moladt",
+                "model": "moladt_wl_system_gp",
+                "method": "empirical_bayes_exact_gp",
+                "split_scheme": "moleculenet_random_like:513/64/65;final_refit=train+valid",
+                "train_n_eval": 577,
                 "valid_n_eval": 64,
                 "test_n_eval": 65,
             }
@@ -415,50 +415,50 @@ def test_build_freesolv_bayesian_artifact_formats_uncertainty_and_model_text() -
         [
             {
                 "dataset": "freesolv",
-                "representation": "moladt_featurized",
-                "model": "bayes_gp_rbf_screened",
-                "method": "laplace",
+                "representation": "moladt",
+                "model": "moladt_wl_system_gp",
+                "method": "empirical_bayes_exact_gp",
                 "split": "train",
-                "n_eval": 513,
-                "rmse": 0.510,
-                "mae": 0.330,
-                "r2": 0.980,
-                "predictive_sd_mean": 0.145,
+                "n_eval": 577,
+                "rmse": 0.120,
+                "mae": 0.080,
+                "r2": 0.990,
+                "predictive_sd_mean": 0.745,
                 "coverage_90": 0.912,
                 "mean_log_predictive_density": -0.440,
-                "draw_count": 2000,
+                "draw_count": 1,
                 "runtime_seconds": 77.5,
             },
             {
                 "dataset": "freesolv",
-                "representation": "moladt_featurized",
-                "model": "bayes_gp_rbf_screened",
-                "method": "laplace",
+                "representation": "moladt",
+                "model": "moladt_wl_system_gp",
+                "method": "empirical_bayes_exact_gp",
                 "split": "valid",
                 "n_eval": 64,
-                "rmse": 1.127,
-                "mae": 0.812,
+                "rmse": 0.910,
+                "mae": 0.612,
                 "r2": 0.950,
-                "predictive_sd_mean": 0.201,
+                "predictive_sd_mean": 1.001,
                 "coverage_90": 0.844,
                 "mean_log_predictive_density": -1.102,
-                "draw_count": 2000,
+                "draw_count": 1,
                 "runtime_seconds": 77.5,
             },
             {
                 "dataset": "freesolv",
-                "representation": "moladt_featurized",
-                "model": "bayes_gp_rbf_screened",
-                "method": "laplace",
+                "representation": "moladt",
+                "model": "moladt_wl_system_gp",
+                "method": "empirical_bayes_exact_gp",
                 "split": "test",
                 "n_eval": 65,
-                "rmse": 0.738,
-                "mae": 0.530,
-                "r2": 0.941,
-                "predictive_sd_mean": 0.212,
+                "rmse": 0.638,
+                "mae": 0.412,
+                "r2": 0.962,
+                "predictive_sd_mean": 1.142,
                 "coverage_90": 0.877,
                 "mean_log_predictive_density": -0.691,
-                "draw_count": 2000,
+                "draw_count": 1,
                 "runtime_seconds": 77.5,
             },
         ]
@@ -467,47 +467,51 @@ def test_build_freesolv_bayesian_artifact_formats_uncertainty_and_model_text() -
         [
             {
                 "dataset": "freesolv",
-                "representation": "moladt_featurized",
-                "model": "bayes_gp_rbf_screened",
-                "method": "laplace",
-                "parameter_name": "alpha",
+                "representation": "moladt",
+                "model": "moladt_wl_system_gp",
+                "method": "empirical_bayes_exact_gp",
+                "parameter_name": "w_wl_system",
                 "posterior_mean": 0.111111,
                 "posterior_sd": 0.010000,
                 "posterior_p05": 0.095000,
                 "posterior_p95": 0.128000,
+                "importance_rank": 1,
             },
             {
                 "dataset": "freesolv",
-                "representation": "moladt_featurized",
-                "model": "bayes_gp_rbf_screened",
-                "method": "laplace",
-                "parameter_name": "signal_scale",
+                "representation": "moladt",
+                "model": "moladt_wl_system_gp",
+                "method": "empirical_bayes_exact_gp",
+                "parameter_name": "w_system",
                 "posterior_mean": 1.234567,
                 "posterior_sd": 0.050000,
                 "posterior_p05": 1.160000,
                 "posterior_p95": 1.320000,
+                "importance_rank": 2,
             },
             {
                 "dataset": "freesolv",
-                "representation": "moladt_featurized",
-                "model": "bayes_gp_rbf_screened",
-                "method": "laplace",
-                "parameter_name": "lengthscale",
+                "representation": "moladt",
+                "model": "moladt_wl_system_gp",
+                "method": "empirical_bayes_exact_gp",
+                "parameter_name": "w_wl",
                 "posterior_mean": 2.345678,
                 "posterior_sd": 0.080000,
                 "posterior_p05": 2.220000,
                 "posterior_p95": 2.480000,
+                "importance_rank": 3,
             },
             {
                 "dataset": "freesolv",
-                "representation": "moladt_featurized",
-                "model": "bayes_gp_rbf_screened",
-                "method": "laplace",
-                "parameter_name": "sigma",
+                "representation": "moladt",
+                "model": "moladt_wl_system_gp",
+                "method": "empirical_bayes_exact_gp",
+                "parameter_name": "noise_variance",
                 "posterior_mean": 0.222222,
                 "posterior_sd": 0.020000,
                 "posterior_p05": 0.190000,
                 "posterior_p95": 0.255000,
+                "importance_rank": 4,
             },
         ]
     )
@@ -518,10 +522,10 @@ def test_build_freesolv_bayesian_artifact_formats_uncertainty_and_model_text() -
     uncertainty = artifact["uncertainty_frame"]
     assert list(uncertainty["split"].astype(str)) == ["train", "test"]
     assert "Train/test predictive uncertainty" in artifact["model_text"]
-    assert "Posterior hyperparameters" in artifact["model_text"]
-    assert "signal_scale = 1.234567" in artifact["model_text"]
-    assert "lengthscale = 2.345678" in artifact["model_text"]
-    assert "sigma = 0.222222" in artifact["model_text"]
+    assert "Empirical-Bayes GP hyperparameters" in artifact["model_text"]
+    assert "w_system = 1.234567" in artifact["model_text"]
+    assert "w_wl = 2.345678" in artifact["model_text"]
+    assert "noise_variance = 0.222222" in artifact["model_text"]
     assert "coverage_90=0.912" in "\n".join(artifact["summary_lines"])
 
 

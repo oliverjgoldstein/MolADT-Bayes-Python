@@ -40,10 +40,9 @@ make python-parse
 make view
 ```
 
-For Stan-backed FreeSolv runs:
+For the default FreeSolv model and inverse-design loop:
 
 ```bash
-make python-cmdstan-install
 make freesolv
 make inverse-design TARGET=-5.0
 ```
@@ -51,7 +50,7 @@ make inverse-design TARGET=-5.0
 Setup artifacts stay inside this checkout:
 
 - `make python-setup` creates `./.venv`
-- `make python-cmdstan-install` creates `./.cmdstan`
+- `make python-cmdstan-install` creates `./.cmdstan` only when you explicitly run legacy Stan model overrides
 
 ## Why The ADT Matters
 
@@ -338,8 +337,7 @@ Python also writes standardized benchmark matrices that Haskell can consume:
 
 ```bash
 ./.venv/bin/python -m scripts.run_all freesolv
-MOLADT_PROCESSED_DATA_DIR=../MolADT-Bayes-Python/data/processed \
-  stack run moladtbayes -- infer-benchmark freesolv_moladt_featurized lwis
+stack run moladtbayes -- freesolv-wl-system-gp
 ```
 
 ## Repo Map

@@ -5,7 +5,6 @@ This page is the run contract.
 ## Commands
 
 ```bash
-make python-cmdstan-install
 make freesolv
 make inverse-design TARGET=-5.0
 OPEN_VIEWER=1 make inverse-design TARGET=-5.0
@@ -31,13 +30,16 @@ browser automatically.
 `make freesolv` runs:
 
 - dataset: FreeSolv, `642` SDF-backed rows
-- split: deterministic `513 / 64 / 65`
-- representation: `moladt_featurized`
-- model: `bayes_gp_rbf_screened`
-- method: Stan `laplace`
+- split: deterministic `513 / 64 / 65`, seed `18`
+- final fit: train plus validation rows, tested on the held-out 65 rows
+- representation: `moladt`
+- model: `moladt_wl_system_gp`
+- method: empirical-Bayes exact GP
+- kernel: weighted Tanimoto over WL graph tokens, bonding-system tokens, and the combined token set
+- tokens include element, formal charge, shells, orbitals, shared electrons, effective order, overlap counts, and bonding-system kind
 - metric: RMSE
 
-The result is a local benchmark artifact, not a universal leaderboard claim. Recent local runs land around `0.74` test RMSE on this split.
+The result is a local benchmark artifact, not a universal leaderboard claim. The committed seed-18 run lands around `0.638` kcal/mol test RMSE on this split.
 
 The comparison figure uses the MoleculeNet MPNN RMSE row `1.15` as the paper bar.
 
@@ -45,7 +47,7 @@ The comparison figure uses the MoleculeNet MPNN RMSE row `1.15` as the paper bar
 
 `make inverse-design TARGET=-5.0` does this:
 
-1. Loads the latest `results/freesolv/run_*` Bayesian GP artifact.
+1. Loads the latest `results/freesolv/run_*` MolADT WL + bonding-system GP artifact.
 2. Samples initial molecules from the valid MolADT FreeSolv prior by default, reweighted by the unchanged GP target likelihood.
 3. Generates at least `1,000` unique valid molecules.
 4. Prints progress and ETA while loading/scoring the FreeSolv prior, periodic proposal-attempt progress, then one progress line per generated molecule with count and elapsed time.

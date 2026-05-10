@@ -261,7 +261,7 @@ def write_inference_sweep_overview(metrics: pd.DataFrame, destination: Path) -> 
     parts.append(f'<text x="{margin}" y="{margin + 22}" font-size="22" font-family="Helvetica, Arial, sans-serif" fill="{TEXT}" font-weight="700">Inference sweep on local test splits</text>')
     parts.append(
         f'<text x="{margin}" y="{margin + 42}" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="{MUTED}">'
-        "Each bar is one fitted Stan model and inference-method combination on the test split. Lower RMSE is better."
+        "Each bar is one fitted predictive model and inference-method combination on the test split. Lower RMSE is better."
         "</text>"
     )
     for index, ((dataset, representation), frame) in enumerate(groups):

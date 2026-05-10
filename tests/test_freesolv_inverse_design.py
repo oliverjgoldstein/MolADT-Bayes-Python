@@ -15,7 +15,6 @@ from experiments.freesolv_inverse_design import (
     Prediction,
     _carbon_six_ring_seed,
     _ensure_plausible_freesolv_geometry,
-    _find_gp_draws_path,
     _find_model_dir,
     _geometry_summary,
     _add_single_covalent_system,
@@ -525,25 +524,36 @@ def test_freesolv_predictor_loads_committed_freesolv_gp_parameters() -> None:
     model_dir = _find_model_dir()
 
     assert predictor.parameter_source_path == model_dir / "details" / "model_coefficients.csv"
-    assert predictor.draw_source_path == _find_gp_draws_path(model_dir)
-    assert predictor.signal_scale > 0.0
-    assert predictor.lengthscale > 0.0
-    assert predictor.sigma > 0.0
-    assert predictor.alpha_draws.shape == (2000,)
-    assert predictor.draw_weights.shape == (2000, 513)
+    assert predictor.draw_source_path == model_dir / "details" / "model_artifacts.csv"
+    assert predictor.model_name == "moladt_wl_system_gp"
+    assert predictor.method_name == "empirical_bayes_exact_gp"
+    assert predictor.state.seed == 18
+    assert predictor.state.fit.weights.shape == (3,)
+    assert predictor.state.fit.noise_variance > 0.0
+    assert predictor.state.fit.alpha.shape == (577,)
 
 
 def _write_minimal_freesolv_model_run(run_dir):
-    draws_dir = (
-        run_dir
-        / "details"
-        / "stan_output"
-        / "freesolv"
-        / "moladt_featurized"
-        / "bayes_gp_rbf_screened"
-        / "laplace"
+    details_dir = run_dir / "details"
+    details_dir.mkdir(parents=True)
+    (details_dir / "model_coefficients.csv").write_text(
+        "\n".join(
+            [
+                "dataset,representation,target,model,method,parameter_name,posterior_mean",
+                "freesolv,moladt,expt,moladt_wl_system_gp,empirical_bayes_exact_gp,noise_variance,0.001",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
     )
-    draws_dir.mkdir(parents=True)
-    (run_dir / "details" / "model_coefficients.csv").write_text("parameter_name,posterior_mean\n", encoding="utf-8")
-    (draws_dir / "draws.csv").write_text("alpha,signal_scale,lengthscale,sigma\n", encoding="utf-8")
+    (details_dir / "model_artifacts.csv").write_text(
+        "\n".join(
+            [
+                "dataset,representation,model,method,artifact_type,seed",
+                "freesolv,moladt,moladt_wl_system_gp,empirical_bayes_exact_gp,moladt_token_gp,18",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     return run_dir

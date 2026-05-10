@@ -39,7 +39,8 @@ OPEN_VIEWER_ARG := $(if $(filter 1 true yes TRUE YES,$(OPEN_VIEWER)),--open-view
 PRETTY_VIEWER_OUTPUT_ARG := $(if $(PRETTY_VIEWER_OUTPUT),--viewer-output "$(PRETTY_VIEWER_OUTPUT)",)
 INVERSE_VIEWER_COUNT_ARG := $(if $(filter 1 true yes TRUE YES,$(OPEN_VIEWER)),--viewer-count $(VIEWER_COUNT),)
 MODELS ?= bayes_linear_student_t,bayes_hierarchical_shrinkage
-FREESOLV_MODELS ?= bayes_gp_rbf_screened
+FREESOLV_MODELS ?= moladt_wl_system_gp
+FREESOLV_SEED ?= 18
 QM9_MODELS ?= bayes_linear_student_t
 PYTHON_EXTRAS ?= dev,ml,geom
 RESULTS_SUBDIR ?=
@@ -93,7 +94,7 @@ RESULTS_ENV := MOLADT_RESULTS_DIR=$(RESULTS_ROOT)
 BENCHMARK_LOG ?= $(RESULTS_ROOT)/benchmark.out
 
 METHODS ?= $(METHODS_DEFAULT)
-FREESOLV_METHODS ?= laplace
+FREESOLV_METHODS ?= empirical_bayes_exact_gp
 QM9_METHODS ?= optimize
 SAMPLE_CHAINS ?= $(SAMPLE_CHAINS_DEFAULT)
 SAMPLE_WARMUP ?= $(SAMPLE_WARMUP_DEFAULT)
@@ -105,7 +106,7 @@ PATHFINDER_PATHS ?= $(PATHFINDER_PATHS_DEFAULT)
 PREDICTIVE_DRAWS ?= $(PREDICTIVE_DRAWS_DEFAULT)
 
 BENCHMARK_ARGS := --methods $(METHODS) --models $(MODELS) --sample-chains $(SAMPLE_CHAINS) --sample-warmup $(SAMPLE_WARMUP) --sample-draws $(SAMPLE_DRAWS) --approximation-draws $(APPROXIMATION_DRAWS) --variational-iterations $(VARIATIONAL_ITERATIONS) --optimize-iterations $(OPTIMIZE_ITERATIONS) --pathfinder-paths $(PATHFINDER_PATHS) --predictive-draws $(PREDICTIVE_DRAWS)
-FREESOLV_BENCHMARK_ARGS := --methods $(FREESOLV_METHODS) --models $(FREESOLV_MODELS) --sample-chains $(SAMPLE_CHAINS) --sample-warmup $(SAMPLE_WARMUP) --sample-draws $(SAMPLE_DRAWS) --approximation-draws $(APPROXIMATION_DRAWS) --variational-iterations $(VARIATIONAL_ITERATIONS) --optimize-iterations $(OPTIMIZE_ITERATIONS) --pathfinder-paths $(PATHFINDER_PATHS) --predictive-draws $(PREDICTIVE_DRAWS)
+FREESOLV_BENCHMARK_ARGS := --seed $(FREESOLV_SEED) --methods $(FREESOLV_METHODS) --models $(FREESOLV_MODELS) --sample-chains $(SAMPLE_CHAINS) --sample-warmup $(SAMPLE_WARMUP) --sample-draws $(SAMPLE_DRAWS) --approximation-draws $(APPROXIMATION_DRAWS) --variational-iterations $(VARIATIONAL_ITERATIONS) --optimize-iterations $(OPTIMIZE_ITERATIONS) --pathfinder-paths $(PATHFINDER_PATHS) --predictive-draws $(PREDICTIVE_DRAWS)
 QM9_BENCHMARK_ARGS := --methods $(QM9_METHODS) --models $(QM9_MODELS) --sample-chains $(SAMPLE_CHAINS) --sample-warmup $(SAMPLE_WARMUP) --sample-draws $(SAMPLE_DRAWS) --approximation-draws $(APPROXIMATION_DRAWS) --variational-iterations $(VARIATIONAL_ITERATIONS) --optimize-iterations $(OPTIMIZE_ITERATIONS) --pathfinder-paths $(PATHFINDER_PATHS) --predictive-draws $(PREDICTIVE_DRAWS)
 QM9_LIMIT_QM9_ARG := $(if $(QM9_LIMIT),--limit $(QM9_LIMIT),)
 QM9_LIMIT_BENCHMARK_ARG := $(if $(QM9_LIMIT),--qm9-limit $(QM9_LIMIT),)
@@ -487,7 +488,7 @@ freesolv:
 	@printf "%s\n" \
 	"Running reviewer-facing FreeSolv comparison." \
 	"  repo: MolADT-Bayes-Python" \
-	"  first benchmark run prerequisite: make python-cmdstan-install" \
+	"  default model: MolADT WL + bonding-system empirical-Bayes GP; CmdStan is only needed for explicit Stan overrides" \
 	"  command: scripts.run_all freesolv" \
 	"  dataset: FreeSolv" \
 	"  results_dir: results/$(FREESOLV_RESULTS_SUBDIR)" \
@@ -504,7 +505,7 @@ inverse-design:
 	"Running reviewer-facing FreeSolv inverse design." \
 	"  repo: MolADT-Bayes-Python" \
 	"  command: experiments.freesolv_inverse_design" \
-	"  model: latest results/freesolv/run_* moladt_featurized Bayesian GP artifact" \
+	"  model: latest results/freesolv/run_* MolADT WL + bonding-system GP artifact" \
 	"  cli_flags: --target, --seed-molecule, --open-viewer, --viewer-count" \
 	"  target: $(if $(TARGET),$(TARGET),median experimental FreeSolv value)" \
 	"  seed_molecule: $(if $(SEED_MOLECULE),$(SEED_MOLECULE),freesolv-prior)" \

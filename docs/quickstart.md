@@ -10,7 +10,7 @@ make python-setup
 
 This creates `./.venv` and installs the package locally. It does not touch your system Python.
 
-For Stan-backed FreeSolv runs, install CmdStan once:
+The default FreeSolv benchmark does not need CmdStan. Install CmdStan only if you explicitly run the legacy Stan model overrides:
 
 ```bash
 make python-cmdstan-install
@@ -49,7 +49,7 @@ make qm9long
 make timing
 ```
 
-- `make freesolv` runs the FreeSolv Bayesian GP benchmark.
+- `make freesolv` runs the FreeSolv MolADT WL + bonding-system empirical-Bayes GP benchmark.
 - `make inverse-design TARGET=-5.0` samples initial molecules from the valid FreeSolv prior, generates 1,000 valid FreeSolv candidates, and writes the top 10 by the model's Bayesian credible score.
 - `make inverse-design-view` opens those saved top 10 molecules in one viewer page.
 - `make qm9long` runs the full local QM9 `mu` path.

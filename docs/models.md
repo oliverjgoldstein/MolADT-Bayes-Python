@@ -14,12 +14,24 @@ make timing
 
 Current path:
 
-- representation: `moladt_featurized`
-- model: `bayes_gp_rbf_screened`
-- method: Stan `laplace`
+- representation: `moladt`
+- model: `moladt_wl_system_gp`
+- method: empirical-Bayes exact GP
 - target: hydration free energy, `expt`
 
-The GP uses screened MolADT features and writes coefficients plus posterior draws under `results/freesolv/run_<timestamp>/details/`.
+The GP uses only the parsed MolADT representation. It vectorizes Weisfeiler-Lehman graph tokens and Dietz bonding-system tokens, then fits a weighted Tanimoto-kernel exact GP on the deterministic seed-18 FreeSolv split.
+
+The tokens include:
+
+- element
+- formal charge
+- shell and orbital occupancy
+- shared electrons
+- effective bond order
+- bonding-system overlap counts
+- bonding-system kind, including covalent, ionic, bridge, pi, and coordination tags
+
+The benchmark writes predictive metrics, predictions, fitted kernel weights, target scaling, and noise variance under `results/freesolv/run_<timestamp>/details/`.
 
 Inverse design always loads the latest `results/freesolv/run_*` artifact.
 
@@ -75,9 +87,9 @@ The key point: all features are computed from the typed `Molecule`, not from a l
 
 ## Registered Model Names
 
+- `moladt_wl_system_gp`
 - `bayes_linear_student_t`
 - `bayes_hierarchical_shrinkage`
-- `bayes_gp_rbf_screened`
 - `catboost_uncertainty`
 - `visnet_ensemble`
 - `dimenetpp_ensemble`

@@ -85,8 +85,8 @@ def test_makefile_freesolv_target_prints_verbose_context(tmp_path: Path) -> None
     assert "Running reviewer-facing FreeSolv comparison." in result.stdout
     assert "paper baseline: MoleculeNet MPNN RMSE 1.15" in result.stdout
     assert "./.venv/bin/python -m scripts.run_all freesolv" in result.stdout
-    assert "methods: laplace" in result.stdout
-    assert "models: bayes_gp_rbf_screened" in result.stdout
+    assert "methods: empirical_bayes_exact_gp" in result.stdout
+    assert "models: moladt_wl_system_gp" in result.stdout
 
 
 def test_makefile_inverse_design_target_uses_target_and_seed_flags(tmp_path: Path) -> None:
@@ -101,7 +101,7 @@ def test_makefile_inverse_design_target_uses_target_and_seed_flags(tmp_path: Pat
     )
 
     assert "Running reviewer-facing FreeSolv inverse design." in result.stdout
-    assert "model: latest results/freesolv/run_* moladt_featurized Bayesian GP artifact" in result.stdout
+    assert "model: latest results/freesolv/run_* MolADT WL + bonding-system GP artifact" in result.stdout
     assert "cli_flags: --target, --seed-molecule, --open-viewer, --viewer-count" in result.stdout
     assert "seed_molecule: freesolv-prior" in result.stdout
     assert "open_viewer: 0" in result.stdout

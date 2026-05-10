@@ -349,7 +349,7 @@ def test_run_all_defaults_freesolv_to_single_best_model() -> None:
 
     args = build_parser().parse_args(["freesolv"])
 
-    assert _stan_models_for_artifacts(artifacts, args) == ("bayes_gp_rbf_screened",)
+    assert _stan_models_for_artifacts(artifacts, args) == ("moladt_wl_system_gp",)
 
 
 def test_run_all_defaults_qm9_to_single_best_model() -> None:
@@ -435,7 +435,7 @@ def test_run_all_defaults_freesolv_to_single_best_algorithm() -> None:
 
     args = build_parser().parse_args(["freesolv"])
 
-    assert _stan_methods_for_artifacts(artifacts, args) == ("laplace",)
+    assert _stan_methods_for_artifacts(artifacts, args) == ("empirical_bayes_exact_gp",)
 
 
 def test_run_all_defaults_qm9_to_single_best_algorithm() -> None:

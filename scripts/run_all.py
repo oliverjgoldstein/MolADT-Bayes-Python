@@ -16,6 +16,12 @@ from .model_errors import OptionalModelDependencyError
 from .model_registry import GEOMETRIC_MODEL_REGISTRY, TABULAR_MODEL_REGISTRY
 from .process_freesolv import FreeSolvArtifacts, process_freesolv_dataset
 from .process_qm9 import QM9Artifacts, process_qm9_dataset
+from .freesolv_wl_system_gp import (
+    DEFAULT_SINGLE_SPLIT_SEED as DEFAULT_FREESOLV_WL_SYSTEM_SEED,
+    METHOD_NAME as FREESOLV_WL_SYSTEM_METHOD,
+    MODEL_NAME as FREESOLV_WL_SYSTEM_MODEL,
+    run_freesolv_wl_system_gp,
+)
 from .predictive_metrics import aggregate_seed_metrics, build_calibration_rows
 from .report_graphs import (
     write_moleculenet_comparison_overviews,
@@ -29,8 +35,8 @@ DEFAULT_STAN_METHODS = tuple(ALL_METHODS)
 DEFAULT_STAN_METHODS_ARG = ",".join(DEFAULT_STAN_METHODS)
 DEFAULT_STAN_MODELS = ("bayes_linear_student_t", "bayes_hierarchical_shrinkage")
 DEFAULT_STAN_MODELS_ARG = ",".join(DEFAULT_STAN_MODELS)
-DEFAULT_FREESOLV_STAN_METHODS = ("laplace",)
-DEFAULT_FREESOLV_STAN_MODELS = ("bayes_gp_rbf_screened",)
+DEFAULT_FREESOLV_MODELS = (FREESOLV_WL_SYSTEM_MODEL,)
+DEFAULT_FREESOLV_MODELS_ARG = ",".join(DEFAULT_FREESOLV_MODELS)
 DEFAULT_QM9_STAN_METHODS = ("optimize",)
 DEFAULT_QM9_STAN_MODELS = ("bayes_linear_student_t",)
 
@@ -41,6 +47,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     freesolv = subparsers.add_parser("freesolv", help="Run the FreeSolv benchmark")
     _add_common_benchmark_args(freesolv)
+    freesolv.set_defaults(
+        seed=DEFAULT_FREESOLV_WL_SYSTEM_SEED,
+        models=DEFAULT_FREESOLV_MODELS_ARG,
+        methods=FREESOLV_WL_SYSTEM_METHOD,
+    )
     freesolv.add_argument("--include-moladt-predictive", action="store_true")
     freesolv.add_argument("--skip-moladt", dest="skip_moladt", action="store_true")
     freesolv.add_argument("--skip-sdf", dest="skip_moladt", action="store_true", help=argparse.SUPPRESS)
@@ -92,7 +103,7 @@ def _add_common_benchmark_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--models",
         default=DEFAULT_STAN_MODELS_ARG,
-        help="Comma-separated Stan models to run",
+        help="Comma-separated model names. FreeSolv defaults to moladt_wl_system_gp.",
     )
     parser.add_argument("--sample-chains", type=int, default=2)
     parser.add_argument("--sample-warmup", type=int, default=200)
@@ -123,7 +134,7 @@ def _parsed_models_arg(args: argparse.Namespace) -> tuple[str, ...]:
 
 def _uses_fixed_freesolv_contract(args: argparse.Namespace) -> bool:
     requested = _parsed_models_arg(args)
-    return requested in (DEFAULT_FREESOLV_STAN_MODELS, DEFAULT_STAN_MODELS)
+    return requested in (DEFAULT_FREESOLV_MODELS, DEFAULT_STAN_MODELS)
 
 
 def _uses_fixed_qm9_contract(args: argparse.Namespace) -> bool:
@@ -215,7 +226,7 @@ def main(argv: list[str] | None = None) -> int:
             log(
                 "Starting full benchmark "
                 f"(qm9_limit={qm9_limit}, qm9_split_mode={qm9_split_mode}, "
-                f"MolADT-only Stan comparison, extra_models={','.join(extra_models) or '(none)'})"
+                f"MolADT-only comparison, extra_models={','.join(extra_models) or '(none)'})"
             )
             log("QM9 target: mu (dipole moment)")
             log(f"Results directory: {display_path(RESULTS_DIR)}")
@@ -403,6 +414,17 @@ def _extend_with_property_results(
 ) -> None:
     methods = _stan_methods_for_artifacts(artifacts, args)
     models = _stan_models_for_artifacts(artifacts, args)
+    if isinstance(artifacts, FreeSolvArtifacts) and models == DEFAULT_FREESOLV_MODELS:
+        result = run_freesolv_wl_system_gp(
+            artifacts,
+            seed=int(args.seed),
+            verbose=bool(args.verbose),
+        )
+        metrics_rows.extend(result.metric_rows)
+        prediction_rows.extend(result.prediction_rows)
+        coefficient_rows.extend(result.coefficient_rows)
+        model_artifact_rows.extend(result.artifact_rows)
+        return
     config = StanRunConfig(
         methods=methods,
         seed=args.seed,
@@ -418,14 +440,10 @@ def _extend_with_property_results(
     )
     moladt_featurized_bundle = getattr(artifacts, "moladt_featurized_export", None)
     moladt_bundle = getattr(artifacts, "moladt_export", None)
-    if isinstance(artifacts, FreeSolvArtifacts) and models == DEFAULT_FREESOLV_STAN_MODELS:
-        if moladt_featurized_bundle is None:
-            raise RuntimeError("FreeSolv featurized export is required for the reviewer benchmark")
-        bundles: list[ExportedDataset] = [moladt_featurized_bundle]
-    elif isinstance(artifacts, QM9Artifacts) and models == DEFAULT_QM9_STAN_MODELS:
+    if isinstance(artifacts, QM9Artifacts) and models == DEFAULT_QM9_STAN_MODELS:
         if moladt_featurized_bundle is None:
             raise RuntimeError("QM9 featurized export is required for the reviewer benchmark")
-        bundles = [moladt_featurized_bundle]
+        bundles: list[ExportedDataset] = [moladt_featurized_bundle]
     else:
         if moladt_bundle is None:
             raise RuntimeError("MolADT export is required for the Stan benchmark")
@@ -503,8 +521,10 @@ def _stan_models_for_artifacts(
     args: argparse.Namespace,
 ) -> tuple[str, ...]:
     requested = tuple(model.strip() for model in args.models.split(",") if model.strip())
+    if isinstance(artifacts, FreeSolvArtifacts) and args.models == DEFAULT_FREESOLV_MODELS_ARG:
+        return DEFAULT_FREESOLV_MODELS
     if isinstance(artifacts, FreeSolvArtifacts) and args.models == DEFAULT_STAN_MODELS_ARG:
-        return DEFAULT_FREESOLV_STAN_MODELS
+        return DEFAULT_FREESOLV_MODELS
     if isinstance(artifacts, QM9Artifacts) and args.models == DEFAULT_STAN_MODELS_ARG:
         return DEFAULT_QM9_STAN_MODELS
     return requested
@@ -515,8 +535,13 @@ def _stan_methods_for_artifacts(
     args: argparse.Namespace,
 ) -> tuple[str, ...]:
     requested = tuple(method.strip() for method in args.methods.split(",") if method.strip())
-    if isinstance(artifacts, FreeSolvArtifacts) and args.methods == DEFAULT_STAN_METHODS_ARG:
-        return DEFAULT_FREESOLV_STAN_METHODS
+    requested_models = tuple(model.strip() for model in args.models.split(",") if model.strip())
+    if (
+        isinstance(artifacts, FreeSolvArtifacts)
+        and requested_models in (DEFAULT_FREESOLV_MODELS, DEFAULT_STAN_MODELS)
+        and args.methods in (DEFAULT_STAN_METHODS_ARG, FREESOLV_WL_SYSTEM_METHOD)
+    ):
+        return (FREESOLV_WL_SYSTEM_METHOD,)
     if isinstance(artifacts, QM9Artifacts) and args.methods == DEFAULT_STAN_METHODS_ARG:
         return DEFAULT_QM9_STAN_METHODS
     return requested
@@ -803,6 +828,34 @@ def _format_freesolv_bayesian_model_text(
                 f"  mean_log_predictive_density = {float(row['mean_log_predictive_density']):.6f}",
             ]
         )
+    if str(selected.get("model", "")) == FREESOLV_WL_SYSTEM_MODEL:
+        lines.extend(
+            [
+                "",
+                "Empirical-Bayes GP hyperparameters",
+                "- kernel = w_wl_system * Tanimoto(WL + bonding-system tokens)",
+                "-        + w_system * Tanimoto(bonding-system tokens)",
+                "-        + w_wl * Tanimoto(WL graph tokens)",
+                "- atom tokens include element, formal charge, shells, orbitals, and shell occupancy",
+                "- edge/system tokens include shared electrons, effective order, overlap counts, and bonding-system kind",
+            ]
+        )
+        for _, row in coefficient_rows.sort_values("importance_rank").iterrows():
+            lines.append(f"- {row['parameter_name']} = {_posterior_summary(row)}")
+        lines.extend(
+            [
+                "",
+                "Posterior-mean predictive model",
+                (
+                    "mu(x*) = target_mean + target_scale * "
+                    "k(x*, X_train)^T [K(X_train, X_train) + noise_variance I]^-1 "
+                    "((y_train - target_mean) / target_scale)"
+                ),
+                "y(x*) | data is summarized by Normal(mu(x*), predictive_sd(x*)^2).",
+            ]
+        )
+        return "\n".join(lines) + "\n"
+
     lines.extend(["", "Posterior hyperparameters"])
     for name in ("alpha", "signal_scale", "lengthscale", "sigma"):
         row = parameter_lookup.get(name)

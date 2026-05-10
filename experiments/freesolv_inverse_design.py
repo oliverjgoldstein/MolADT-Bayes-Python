@@ -27,8 +27,14 @@ from moladt.examples.sample_molecules import methane, water
 from moladt.io import molecule_from_dict, molecule_to_json_bytes, read_sdf
 from moladt.viewer import molecule_viewer_uri, open_molecule_viewer, write_molecule_viewer_collection_html
 from scripts.common import PROCESSED_DATA_DIR, PROJECT_ROOT, configured_results_dir, ensure_directory
-from scripts.features import compute_moladt_featurized_descriptors
-from scripts.stan_runner import GP_SCREENED_FEATURE_COUNT
+from scripts.freesolv_wl_system_gp import (
+    DEFAULT_SINGLE_SPLIT_SEED as DEFAULT_FREESOLV_MODEL_SEED,
+    METHOD_NAME as WL_SYSTEM_METHOD_NAME,
+    MODEL_NAME as WL_SYSTEM_MODEL_NAME,
+    WLSystemPredictorState,
+    load_wl_system_predictor_state,
+    predict_with_wl_system_state,
+)
 
 
 N_STEPS = 2000
@@ -50,10 +56,10 @@ FREESOLV_PRIOR_PROGRESS_INTERVAL = 25
 PROPOSAL_PROGRESS_INTERVAL = 100
 _FREESOLV_PRIOR_CACHE: tuple[Molecule, ...] | None = None
 
-DATASET_PREFIX = "freesolv_moladt_featurized"
+FREESOLV_TARGET_PREFIX = "freesolv_moladt_featurized"
 FREESOLV_RESULTS_DIR = PROJECT_ROOT / "results" / "freesolv"
-MODEL_NAME = "bayes_gp_rbf_screened"
-METHOD_NAME = "laplace"
+MODEL_NAME = WL_SYSTEM_MODEL_NAME
+METHOD_NAME = WL_SYSTEM_METHOD_NAME
 TARGET_NAME = "expt"
 
 ALLOWED_FREE_SOLV_SYMBOLS = (
@@ -195,116 +201,27 @@ class SearchResult:
 
 
 @dataclass(frozen=True, slots=True)
-class FreeSolvModelParameters:
-    alpha: float
-    signal_scale: float
-    lengthscale: float
-    sigma: float
-    source_path: Path
-
-
-@dataclass(frozen=True, slots=True)
-class FreeSolvPosteriorDraws:
-    alpha: np.ndarray
-    signal_scale: np.ndarray
-    lengthscale: np.ndarray
-    sigma: np.ndarray
-    source_path: Path
-
-
-@dataclass(frozen=True, slots=True)
 class FreeSolvBayesianPredictor:
-    feature_names: tuple[str, ...]
-    train_mean: np.ndarray
-    train_std: np.ndarray
-    selected_indices: tuple[int, ...]
-    X_train: np.ndarray
-    y_train: np.ndarray
-    alpha: float
-    signal_scale: float
-    lengthscale: float
-    sigma: float
-    alpha_draws: np.ndarray
-    signal_scale_draws: np.ndarray
-    lengthscale_draws: np.ndarray
-    sigma_draws: np.ndarray
-    draw_weights: np.ndarray
-    chol: np.ndarray
+    state: WLSystemPredictorState
     parameter_source_path: Path
     draw_source_path: Path
+    model_name: str = MODEL_NAME
+    method_name: str = METHOD_NAME
 
     @classmethod
     def load(cls) -> FreeSolvBayesianPredictor:
-        metadata_path = PROCESSED_DATA_DIR / f"{DATASET_PREFIX}_metadata.json"
-        if not metadata_path.exists():
-            raise FileNotFoundError(f"Missing FreeSolv metadata: {metadata_path}")
-        metadata = pd.read_json(metadata_path, typ="series")
-        _validate_freesolv_metadata(metadata, metadata_path)
-        feature_names = tuple(str(name) for name in metadata["feature_names"])
-        train_mean = np.asarray(metadata["train_mean"], dtype=float)
-        train_std = np.asarray(metadata["train_std"], dtype=float)
-
-        X_train_all = pd.read_csv(PROCESSED_DATA_DIR / f"{DATASET_PREFIX}_X_train.csv").to_numpy(dtype=float)
-        y_frame = pd.read_csv(PROCESSED_DATA_DIR / f"{DATASET_PREFIX}_y_train.csv")
-        y_train = y_frame.iloc[:, 0].to_numpy(dtype=float)
-        selected_indices = _screen_top_correlation_features(X_train_all, y_train, top_k=GP_SCREENED_FEATURE_COUNT)
-        X_train = X_train_all[:, selected_indices]
         model_dir = _find_model_dir()
-        parameters = _load_gp_parameter_means(model_dir)
-        draws = _load_gp_posterior_draws(model_dir)
-        draw_weights = _precompute_gp_draw_weights(
-            X_train=X_train,
-            y_train=y_train,
-            alpha=draws.alpha,
-            signal_scale=draws.signal_scale,
-            lengthscale=draws.lengthscale,
-            sigma=draws.sigma,
-        )
-
-        train_kernel = _rbf_kernel(X_train, X_train, lengthscale=parameters.lengthscale, signal_scale=parameters.signal_scale)
-        train_kernel[np.diag_indices_from(train_kernel)] += parameters.sigma**2 + 1e-8
-        chol = np.linalg.cholesky(train_kernel)
+        seed = _load_wl_system_seed(model_dir)
+        state = load_wl_system_predictor_state(seed=seed)
         return cls(
-            feature_names=feature_names,
-            train_mean=train_mean,
-            train_std=train_std,
-            selected_indices=selected_indices,
-            X_train=X_train,
-            y_train=y_train,
-            alpha=parameters.alpha,
-            signal_scale=parameters.signal_scale,
-            lengthscale=parameters.lengthscale,
-            sigma=parameters.sigma,
-            alpha_draws=draws.alpha,
-            signal_scale_draws=draws.signal_scale,
-            lengthscale_draws=draws.lengthscale,
-            sigma_draws=draws.sigma,
-            draw_weights=draw_weights,
-            chol=chol,
-            parameter_source_path=parameters.source_path,
-            draw_source_path=draws.source_path,
+            state=state,
+            parameter_source_path=model_dir / "details" / "model_coefficients.csv",
+            draw_source_path=model_dir / "details" / "model_artifacts.csv",
         )
 
     def predict(self, molecule: Molecule) -> Prediction:
-        descriptors = compute_moladt_featurized_descriptors(molecule)
-        raw = np.asarray([float(descriptors.get(name, 0.0)) for name in self.feature_names], dtype=float)
-        standardized = (raw - self.train_mean) / self.train_std
-        x_eval = standardized[list(self.selected_indices)].reshape(1, -1)
-        mean_by_draw = _gp_mean_by_draw(
-            x_eval=x_eval,
-            X_train=self.X_train,
-            alpha=self.alpha_draws,
-            signal_scale=self.signal_scale_draws,
-            lengthscale=self.lengthscale_draws,
-            draw_weights=self.draw_weights,
-        )
-        predictive_mean = float(np.mean(mean_by_draw))
-
-        cross_kernel = _rbf_kernel(x_eval, self.X_train, lengthscale=self.lengthscale, signal_scale=self.signal_scale)
-        solve = np.linalg.solve(self.chol, cross_kernel.T)
-        conditional_var = self.signal_scale**2 + self.sigma**2 - float(np.sum(np.square(solve), axis=0)[0])
-        predictive_var = max(conditional_var, 1e-9) + float(np.var(mean_by_draw))
-        return Prediction(mean=predictive_mean, sd=math.sqrt(max(predictive_var, 1e-9)))
+        mean, sd = predict_with_wl_system_state(self.state, molecule)
+        return Prediction(mean=mean, sd=sd)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -707,7 +624,7 @@ def _weighted_index(weights: Sequence[float], rng: random.Random) -> int:
 def default_target_from_freesolv_dataset() -> float:
     values: list[np.ndarray] = []
     for split in ("train", "valid", "test"):
-        path = PROCESSED_DATA_DIR / f"{DATASET_PREFIX}_y_{split}.csv"
+        path = PROCESSED_DATA_DIR / f"{FREESOLV_TARGET_PREFIX}_y_{split}.csv"
         if path.exists():
             values.append(pd.read_csv(path).iloc[:, 0].to_numpy(dtype=float))
     if not values:
@@ -1314,86 +1231,6 @@ def _bayesian_credible_score_percent(score: float) -> float:
     return max(0.0, min(100.0, 100.0 * math.exp(min(0.0, score))))
 
 
-def _load_gp_parameter_means(model_dir: Path) -> FreeSolvModelParameters:
-    coefficients_path = model_dir / "details" / "model_coefficients.csv"
-    coefficients = pd.read_csv(coefficients_path)
-    rows = coefficients.loc[
-        (coefficients["dataset"] == "freesolv")
-        & (coefficients["representation"] == "moladt_featurized")
-        & (coefficients["target"] == TARGET_NAME)
-        & (coefficients["model"] == MODEL_NAME)
-        & (coefficients["method"] == METHOD_NAME)
-    ]
-    if len(rows) != 4:
-        raise RuntimeError(
-            "Expected exactly four FreeSolv GP parameter rows "
-            f"for freesolv/moladt_featurized/{TARGET_NAME}/{MODEL_NAME}/{METHOD_NAME}; "
-            f"found {len(rows)} in {coefficients_path}"
-        )
-    parameter_means = {
-        str(row["parameter_name"]): float(row["posterior_mean"])
-        for _, row in rows.iterrows()
-    }
-    required = ("alpha", "signal_scale", "lengthscale", "sigma")
-    missing = [name for name in required if name not in parameter_means]
-    if missing:
-        raise RuntimeError(f"Missing FreeSolv GP parameters: {', '.join(missing)}")
-    return FreeSolvModelParameters(
-        alpha=parameter_means["alpha"],
-        signal_scale=parameter_means["signal_scale"],
-        lengthscale=parameter_means["lengthscale"],
-        sigma=parameter_means["sigma"],
-        source_path=coefficients_path,
-    )
-
-
-def _load_gp_posterior_draws(model_dir: Path) -> FreeSolvPosteriorDraws:
-    draws_path = _find_gp_draws_path(model_dir)
-    draw_frame = pd.read_csv(draws_path, comment="#")
-    required = ("alpha", "signal_scale", "lengthscale", "sigma")
-    missing = [name for name in required if name not in draw_frame.columns]
-    if missing:
-        raise RuntimeError(f"Missing FreeSolv GP posterior draw columns: {', '.join(missing)}")
-    alpha = draw_frame["alpha"].to_numpy(dtype=float)
-    signal_scale = draw_frame["signal_scale"].to_numpy(dtype=float)
-    lengthscale = draw_frame["lengthscale"].to_numpy(dtype=float)
-    sigma = draw_frame["sigma"].to_numpy(dtype=float)
-    finite_mask = (
-        np.isfinite(alpha)
-        & np.isfinite(signal_scale)
-        & np.isfinite(lengthscale)
-        & np.isfinite(sigma)
-        & (signal_scale > 0.0)
-        & (lengthscale > 0.0)
-        & (sigma > 0.0)
-    )
-    if not np.any(finite_mask):
-        raise RuntimeError(f"No finite FreeSolv GP posterior draws found in {draws_path}")
-    return FreeSolvPosteriorDraws(
-        alpha=alpha[finite_mask],
-        signal_scale=signal_scale[finite_mask],
-        lengthscale=lengthscale[finite_mask],
-        sigma=sigma[finite_mask],
-        source_path=draws_path,
-    )
-
-
-def _find_gp_draws_path(model_dir: Path) -> Path:
-    draws_dir = (
-        model_dir
-        / "details"
-        / "stan_output"
-        / "freesolv"
-        / "moladt_featurized"
-        / MODEL_NAME
-        / METHOD_NAME
-    )
-    draw_files = tuple(sorted(draws_dir.glob("*.csv")))
-    if len(draw_files) != 1:
-        raise FileNotFoundError(f"Expected one latest FreeSolv GP posterior draw CSV in {draws_dir}; found {len(draw_files)}")
-    return draw_files[0]
-
-
 def _find_model_dir() -> Path:
     run_dirs = tuple(
         sorted(
@@ -1408,87 +1245,55 @@ def _find_model_dir() -> Path:
     coefficients_path = model_dir / "details" / "model_coefficients.csv"
     if not coefficients_path.exists():
         raise FileNotFoundError(
-            "Latest FreeSolv run is missing the Bayesian GP coefficient artifact: "
+            "Latest FreeSolv run is missing the MolADT WL + bonding-system GP coefficient artifact: "
             f"{coefficients_path}"
         )
-    _find_gp_draws_path(model_dir)
+    if not _run_contains_wl_system_model(model_dir):
+        raise FileNotFoundError(
+            "Latest FreeSolv run is not the MolADT WL + bonding-system GP model. "
+            f"Expected {MODEL_NAME}/{METHOD_NAME} in {coefficients_path}"
+        )
     return model_dir
 
 
-def _validate_freesolv_metadata(metadata: pd.Series, metadata_path: Path) -> None:
-    expected = {
-        "dataset": "freesolv",
-        "representation": "moladt_featurized",
-        "target_name": TARGET_NAME,
-    }
-    mismatches = [
-        f"{key}={metadata.get(key)!r}, expected {expected_value!r}"
-        for key, expected_value in expected.items()
-        if metadata.get(key) != expected_value
+def _run_contains_wl_system_model(model_dir: Path) -> bool:
+    coefficients_path = model_dir / "details" / "model_coefficients.csv"
+    try:
+        coefficients = pd.read_csv(coefficients_path)
+    except pd.errors.EmptyDataError:
+        return False
+    required = {"dataset", "representation", "model", "method"}
+    if not required.issubset(coefficients.columns):
+        return False
+    rows = coefficients.loc[
+        (coefficients["dataset"] == "freesolv")
+        & (coefficients["representation"] == "moladt")
+        & (coefficients["model"] == MODEL_NAME)
+        & (coefficients["method"] == METHOD_NAME)
     ]
-    if mismatches:
-        raise RuntimeError(f"FreeSolv metadata mismatch in {metadata_path}: {'; '.join(mismatches)}")
+    return not rows.empty
 
 
-def _screen_top_correlation_features(X_train: np.ndarray, y_train: np.ndarray, *, top_k: int) -> tuple[int, ...]:
-    feature_count = min(int(top_k), X_train.shape[1])
-    if feature_count <= 0:
-        raise ValueError("GP feature screening requires at least one feature")
-    y_centered = y_train - np.mean(y_train)
-    scores: list[tuple[float, int]] = []
-    for feature_index in range(X_train.shape[1]):
-        column = X_train[:, feature_index]
-        denominator = float(np.linalg.norm(column) * np.linalg.norm(y_centered))
-        score = 0.0 if denominator == 0.0 else abs(float(np.dot(column, y_centered) / denominator))
-        scores.append((score, feature_index))
-    return tuple(sorted(index for _, index in sorted(scores, reverse=True)[:feature_count]))
-
-
-def _precompute_gp_draw_weights(
-    *,
-    X_train: np.ndarray,
-    y_train: np.ndarray,
-    alpha: np.ndarray,
-    signal_scale: np.ndarray,
-    lengthscale: np.ndarray,
-    sigma: np.ndarray,
-) -> np.ndarray:
-    weights = np.empty((alpha.shape[0], X_train.shape[0]), dtype=float)
-    for draw_index, (draw_alpha, draw_signal, draw_length, draw_sigma) in enumerate(
-        zip(alpha, signal_scale, lengthscale, sigma, strict=True)
-    ):
-        train_kernel = _rbf_kernel(X_train, X_train, lengthscale=draw_length, signal_scale=draw_signal)
-        train_kernel[np.diag_indices_from(train_kernel)] += draw_sigma**2 + 1e-8
-        try:
-            chol = np.linalg.cholesky(train_kernel)
-        except np.linalg.LinAlgError as exc:
-            raise RuntimeError(f"FreeSolv GP covariance was not positive definite for posterior draw {draw_index}") from exc
-        centered_y = y_train - draw_alpha
-        weights[draw_index] = np.linalg.solve(chol.T, np.linalg.solve(chol, centered_y))
-    return weights
-
-
-def _gp_mean_by_draw(
-    *,
-    x_eval: np.ndarray,
-    X_train: np.ndarray,
-    alpha: np.ndarray,
-    signal_scale: np.ndarray,
-    lengthscale: np.ndarray,
-    draw_weights: np.ndarray,
-) -> np.ndarray:
-    sqdist = np.sum(np.square(X_train - x_eval.reshape(1, -1)), axis=1)
-    cross_kernel_by_draw = np.square(signal_scale)[:, np.newaxis] * np.exp(
-        -0.5 * sqdist[np.newaxis, :] / np.maximum(np.square(lengthscale), 1e-9)[:, np.newaxis]
-    )
-    return alpha + np.einsum("dn,dn->d", cross_kernel_by_draw, draw_weights)
-
-
-def _rbf_kernel(X_left: np.ndarray, X_right: np.ndarray, *, lengthscale: float, signal_scale: float) -> np.ndarray:
-    left_sq = np.sum(np.square(X_left), axis=1)[:, np.newaxis]
-    right_sq = np.sum(np.square(X_right), axis=1)[np.newaxis, :]
-    sqdist = np.maximum(left_sq + right_sq - 2.0 * (X_left @ X_right.T), 0.0)
-    return (signal_scale**2) * np.exp(-0.5 * sqdist / max(lengthscale**2, 1e-9))
+def _load_wl_system_seed(model_dir: Path) -> int:
+    artifacts_path = model_dir / "details" / "model_artifacts.csv"
+    if not artifacts_path.exists():
+        return DEFAULT_FREESOLV_MODEL_SEED
+    try:
+        artifacts = pd.read_csv(artifacts_path)
+    except pd.errors.EmptyDataError:
+        return DEFAULT_FREESOLV_MODEL_SEED
+    required = {"dataset", "representation", "model", "method", "seed"}
+    if not required.issubset(artifacts.columns):
+        return DEFAULT_FREESOLV_MODEL_SEED
+    rows = artifacts.loc[
+        (artifacts["dataset"] == "freesolv")
+        & (artifacts["representation"] == "moladt")
+        & (artifacts["model"] == MODEL_NAME)
+        & (artifacts["method"] == METHOD_NAME)
+    ]
+    if rows.empty:
+        return DEFAULT_FREESOLV_MODEL_SEED
+    return int(rows.iloc[0]["seed"])
 
 
 def _candidate_sort_key(target: float) -> Callable[[Candidate], tuple[float, float, float, int, int]]:
