@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import argparse
 from collections import Counter
 from dataclasses import dataclass
+from datetime import datetime
 import math
+from pathlib import Path
 import time
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 import pandas as pd
@@ -16,9 +19,9 @@ from moladt.chem.molecule import Atom, Molecule, molecule_edges
 from moladt.chem.molecule_ops import effective_order
 from moladt.io.sdf import read_sdf_record
 
-from .common import PROCESSED_DATA_DIR, RAW_DATA_DIR
+from .common import PROCESSED_DATA_DIR, RAW_DATA_DIR, ensure_directory
 from .predictive_metrics import build_metric_row, build_prediction_rows
-from .process_freesolv import FreeSolvArtifacts
+from .process_freesolv import FreeSolvArtifacts, process_freesolv_dataset
 from .splits import ExportedDataset
 
 
@@ -26,6 +29,7 @@ MODEL_NAME = "moladt_wl_system_gp"
 METHOD_NAME = "empirical_bayes_exact_gp"
 REPRESENTATION = "moladt"
 DEFAULT_SINGLE_SPLIT_SEED = 18
+DEFAULT_SPLIT_COUNT = 20
 SPLIT_SCHEME = "moleculenet_random_like:513/64/65;final_refit=train+valid"
 TRAIN_SIZE = 513
 VALID_SIZE = 64
@@ -87,6 +91,61 @@ def run_freesolv_wl_system_gp(
         raise RuntimeError("FreeSolv MolADT featurized export is required for the WL + bonding-system GP")
     start = time.perf_counter()
     bundle = _load_bundle(artifacts.moladt_featurized_export)
+    components = _build_kernel_components(bundle)
+    return _evaluate_wl_system_gp_bundle(
+        bundle,
+        artifacts.moladt_featurized_export,
+        components=components,
+        seed=seed,
+        verbose=verbose,
+        start_time=start,
+    )
+
+
+def run_freesolv_wl_system_gp_splits(
+    artifacts: FreeSolvArtifacts,
+    *,
+    seeds: Sequence[int],
+    verbose: bool = False,
+) -> FreeSolvWLSystemResult:
+    if artifacts.moladt_featurized_export is None:
+        raise RuntimeError("FreeSolv MolADT featurized export is required for the WL + bonding-system GP")
+    bundle = _load_bundle(artifacts.moladt_featurized_export)
+    components = _build_kernel_components(bundle)
+    metric_rows: list[dict[str, Any]] = []
+    prediction_rows: list[dict[str, Any]] = []
+    coefficient_rows: list[dict[str, Any]] = []
+    artifact_rows: list[dict[str, Any]] = []
+    for seed in seeds:
+        result = _evaluate_wl_system_gp_bundle(
+            bundle,
+            artifacts.moladt_featurized_export,
+            components=components,
+            seed=int(seed),
+            verbose=verbose,
+        )
+        metric_rows.extend(result.metric_rows)
+        prediction_rows.extend(result.prediction_rows)
+        coefficient_rows.extend(result.coefficient_rows)
+        artifact_rows.extend(result.artifact_rows)
+    return FreeSolvWLSystemResult(
+        metric_rows=metric_rows,
+        prediction_rows=prediction_rows,
+        coefficient_rows=coefficient_rows,
+        artifact_rows=artifact_rows,
+    )
+
+
+def _evaluate_wl_system_gp_bundle(
+    bundle: _Bundle,
+    export: ExportedDataset,
+    *,
+    components: dict[str, np.ndarray],
+    seed: int,
+    verbose: bool = False,
+    start_time: float | None = None,
+) -> FreeSolvWLSystemResult:
+    start = time.perf_counter() if start_time is None else start_time
     train_idx, valid_idx, test_idx = train_valid_test_indices(len(bundle.y), seed)
 
     if verbose:
@@ -97,18 +156,16 @@ def run_freesolv_wl_system_gp(
             flush=True,
         )
 
-    train_components = _build_kernel_components(bundle)
-    selection_fit = _fit_gp(train_components, bundle.y, train_idx)
+    selection_fit = _fit_gp(components, bundle.y, train_idx)
     valid_mean, valid_sd = _predict_gp(selection_fit, valid_idx)
 
     final_train_idx = np.sort(np.concatenate([train_idx, valid_idx]))
-    final_components = _build_kernel_components(bundle)
-    final_fit = _fit_gp(final_components, bundle.y, final_train_idx)
+    final_fit = _fit_gp(components, bundle.y, final_train_idx)
     train_mean, train_sd = _predict_gp(final_fit, final_train_idx)
     test_mean, test_sd = _predict_gp(final_fit, test_idx)
 
     runtime = time.perf_counter() - start
-    source_row_count = artifacts.moladt_featurized_export.source_row_count
+    source_row_count = export.source_row_count
     used_row_count = int(len(train_idx) + len(valid_idx) + len(test_idx))
     feature_count = int(bundle.wl_matrix.shape[1] + bundle.system_matrix.shape[1])
     parameter_count = int(len(final_fit.weights) + 3)
@@ -229,7 +286,7 @@ def run_freesolv_wl_system_gp(
             "test_mol_ids": ";".join(bundle.mol_ids[int(index)] for index in test_idx),
             "wl_token_count": int(bundle.wl_matrix.shape[1]),
             "system_token_count": int(bundle.system_matrix.shape[1]),
-            "source_feature_table": str(artifacts.moladt_featurized_export.feature_csv_path),
+            "source_feature_table": str(export.feature_csv_path),
         }
     ]
     return FreeSolvWLSystemResult(
@@ -238,6 +295,36 @@ def run_freesolv_wl_system_gp(
         coefficient_rows=coefficient_rows,
         artifact_rows=artifact_rows,
     )
+
+
+def write_freesolv_wl_system_split_outputs(
+    result: FreeSolvWLSystemResult,
+    output_dir: Path,
+) -> dict[str, Path]:
+    output_dir = ensure_directory(output_dir)
+    metrics_path = output_dir / "predictive_metrics.csv"
+    predictions_path = output_dir / "predictions.csv"
+    coefficients_path = output_dir / "model_coefficients.csv"
+    artifacts_path = output_dir / "model_artifacts.csv"
+    assignments_path = output_dir / "split_assignments.csv"
+    summary_path = output_dir / "summary.csv"
+    pd.DataFrame(result.metric_rows).to_csv(metrics_path, index=False)
+    pd.DataFrame(result.prediction_rows).to_csv(predictions_path, index=False)
+    pd.DataFrame(result.coefficient_rows).to_csv(coefficients_path, index=False)
+    artifact_frame = pd.DataFrame(result.artifact_rows)
+    artifact_frame.to_csv(artifacts_path, index=False)
+    assignment_frame = pd.DataFrame(_split_assignment_rows(result.artifact_rows))
+    assignment_frame.to_csv(assignments_path, index=False)
+    summary_frame = _split_summary_frame(pd.DataFrame(result.metric_rows))
+    summary_frame.to_csv(summary_path, index=False)
+    return {
+        "predictive_metrics": metrics_path,
+        "predictions": predictions_path,
+        "model_coefficients": coefficients_path,
+        "model_artifacts": artifacts_path,
+        "split_assignments": assignments_path,
+        "summary": summary_path,
+    }
 
 
 def load_wl_system_predictor_state(seed: int = DEFAULT_SINGLE_SPLIT_SEED) -> WLSystemPredictorState:
@@ -635,3 +722,93 @@ def _coefficient_rows(fit: _GPFit, *, runtime_seconds: float) -> list[dict[str, 
             }
         )
     return rows
+
+
+def _split_assignment_rows(artifact_rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for artifact in artifact_rows:
+        seed = int(artifact["seed"])
+        for split_name, field_name in (
+            ("train", "train_mol_ids"),
+            ("valid", "valid_mol_ids"),
+            ("test", "test_mol_ids"),
+        ):
+            mol_ids = [mol_id for mol_id in str(artifact.get(field_name, "")).split(";") if mol_id]
+            rows.extend({"seed": seed, "split": split_name, "mol_id": mol_id} for mol_id in mol_ids)
+    return rows
+
+
+def _split_summary_frame(metrics: pd.DataFrame) -> pd.DataFrame:
+    if metrics.empty:
+        return pd.DataFrame()
+    metric_columns = ["rmse", "mae", "r2", "predictive_sd_mean", "coverage_90"]
+    rows: list[dict[str, Any]] = []
+    for split_name, frame in metrics.groupby("split", sort=True):
+        row: dict[str, Any] = {
+            "split": split_name,
+            "n_splits": int(frame["seed"].nunique()),
+            "n_eval_mean": float(frame["n_eval"].mean()),
+        }
+        for column in metric_columns:
+            values = frame[column].astype(float)
+            row[f"{column}_mean"] = float(values.mean())
+            row[f"{column}_std"] = float(values.std(ddof=1)) if len(values) > 1 else 0.0
+            row[f"{column}_min"] = float(values.min())
+            row[f"{column}_max"] = float(values.max())
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def _default_split_output_dir() -> Path:
+    return Path("results") / "freesolv_20split" / f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="python -m scripts.freesolv_wl_system_gp",
+        description="Run the MolADT WL + bonding-system FreeSolv GP over repeated random splits.",
+    )
+    parser.add_argument("--split-count", type=int, default=DEFAULT_SPLIT_COUNT)
+    parser.add_argument("--seed-start", type=int, default=0)
+    parser.add_argument("--output-dir", type=Path, default=_default_split_output_dir())
+    parser.add_argument("--force", action="store_true", help="Regenerate processed FreeSolv exports before fitting")
+    parser.add_argument("--verbose", action="store_true")
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    if args.split_count <= 0:
+        raise ValueError("--split-count must be positive")
+    seeds = tuple(range(int(args.seed_start), int(args.seed_start) + int(args.split_count)))
+    artifacts = process_freesolv_dataset(
+        seed=DEFAULT_SINGLE_SPLIT_SEED,
+        force=bool(args.force),
+        include_moladt=True,
+        include_legacy_tabular=False,
+        verbose=bool(args.verbose),
+    )
+    result = run_freesolv_wl_system_gp_splits(artifacts, seeds=seeds, verbose=bool(args.verbose))
+    paths = write_freesolv_wl_system_split_outputs(result, args.output_dir)
+    summary = pd.read_csv(paths["summary"])
+    test_summary = summary.loc[summary["split"] == "test"]
+    print("FreeSolv MolADT WL + bonding-system GP repeated splits")
+    print(f"  seeds: {seeds[0]}..{seeds[-1]} ({len(seeds)} splits)")
+    print(f"  output_dir: {args.output_dir}")
+    if not test_summary.empty:
+        row = test_summary.iloc[0]
+        print(
+            "  test RMSE: "
+            f"{float(row['rmse_mean']):.6f} +/- {float(row['rmse_std']):.6f} kcal/mol"
+        )
+        print(
+            "  test MAE: "
+            f"{float(row['mae_mean']):.6f} +/- {float(row['mae_std']):.6f} kcal/mol"
+        )
+    print(f"  summary: {paths['summary']}")
+    print(f"  split assignments: {paths['split_assignments']}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

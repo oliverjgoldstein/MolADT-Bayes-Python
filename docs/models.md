@@ -6,6 +6,7 @@ Models do not consume SMILES strings directly. They consume numeric features exp
 
 ```bash
 make freesolv
+make freesolv-20split
 make qm9long
 make timing
 ```
@@ -21,7 +22,7 @@ Current path:
 
 The GP uses only the parsed MolADT representation. It vectorizes Weisfeiler-Lehman graph tokens and Dietz bonding-system tokens, then fits a weighted Tanimoto-kernel exact GP on the deterministic seed-18 FreeSolv split.
 
-The tokens include:
+The token features include:
 
 - element
 - formal charge
@@ -31,9 +32,42 @@ The tokens include:
 - bonding-system overlap counts
 - bonding-system kind, including covalent, ionic, bridge, pi, and coordination tags
 
+The fitted kernel is:
+
+```text
+k(x, x') =
+  w_all    * Tanimoto(WL + bonding-system tokens)
+  + w_sys  * Tanimoto(bonding-system tokens)
+  + w_wl   * Tanimoto(WL graph tokens)
+```
+
+Tanimoto is used because these are sparse non-negative token counts. It measures
+shared token support relative to the active-token union, which is a better match
+to the representation than Euclidean distance over a standardized descriptor
+table.
+
 The benchmark writes predictive metrics, predictions, fitted kernel weights, target scaling, and noise variance under `results/freesolv/run_<timestamp>/details/`.
 
 Inverse design always loads the latest `results/freesolv/run_*` artifact.
+
+For repeated-split uncertainty, run:
+
+```bash
+make freesolv-20split
+```
+
+That target writes split-level metrics and the exact molecule assignments under
+`results/freesolv_20split/run_<timestamp>/`.
+
+Difference from the previous GP:
+
+- previous path: screened `moladt_featurized` scalar descriptor columns,
+  standardized Euclidean distances, and an RBF kernel
+- current default: sparse MolADT token counts from atoms, formal charges,
+  orbitals, edges, and explicit bonding systems, compared with Tanimoto kernels
+- no molecular fingerprints are used in the current default
+- for a representation-led result, the current default is the primary model;
+  the previous RBF GP is best treated as a baseline or ablation
 
 Feature example:
 

@@ -89,6 +89,24 @@ def test_makefile_freesolv_target_prints_verbose_context(tmp_path: Path) -> None
     assert "models: moladt_wl_system_gp" in result.stdout
 
 
+def test_makefile_freesolv_20split_target_prints_output_contract(tmp_path: Path) -> None:
+    _copy_makefile(tmp_path)
+    _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
+
+    result = subprocess.run(
+        ["make", "-C", str(tmp_path), "-n", "freesolv-20split", "SYSTEM_PYTHON=python3"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "Running FreeSolv 20-split MolADT WL + bonding-system GP." in result.stdout
+    assert "split_count: 20" in result.stdout
+    assert "seed_start: 0" in result.stdout
+    assert "results/freesolv_20split/run_" in result.stdout
+    assert "./.venv/bin/python -m scripts.freesolv_wl_system_gp --split-count 20 --seed-start 0" in result.stdout
+
+
 def test_makefile_inverse_design_target_uses_target_and_seed_flags(tmp_path: Path) -> None:
     _copy_makefile(tmp_path)
     _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")

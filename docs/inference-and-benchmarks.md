@@ -6,6 +6,7 @@ This page is the run contract.
 
 ```bash
 make freesolv
+make freesolv-20split
 make inverse-design TARGET=-5.0
 OPEN_VIEWER=1 make inverse-design TARGET=-5.0
 make inverse-design-view
@@ -42,6 +43,19 @@ browser automatically.
 The result is a local benchmark artifact, not a universal leaderboard claim. The committed seed-18 run lands around `0.638` kcal/mol test RMSE on this split.
 
 The comparison figure uses the MoleculeNet MPNN RMSE row `1.15` as the paper bar.
+
+`make freesolv-20split` runs the same MolADT WL + bonding-system GP on 20
+deterministic random splits, using seeds `0..19` by default. It writes:
+
+- `predictive_metrics.csv`
+- `predictions.csv`
+- `model_coefficients.csv`
+- `model_artifacts.csv`
+- `split_assignments.csv`
+- `summary.csv`
+
+The target is for repeated-split uncertainty checks. It is separate from the
+single seed-18 artifact used by inverse design.
 
 ## FreeSolv Inverse Design
 

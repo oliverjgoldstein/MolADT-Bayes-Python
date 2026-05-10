@@ -28,9 +28,87 @@ Haskell repo.
 | --- | --- | --- |
 | View examples | `make view` | Browser viewer for built-in MolADT examples |
 | FreeSolv benchmark | `make freesolv` | Bayesian GP benchmark for hydration free energy |
+| FreeSolv 20 split | `make freesolv-20split` | Repeated-split check for the MolADT WL + bonding-system GP |
 | FreeSolv inverse design | `make inverse-design TARGET=-5.0` | 1,000 generated candidates, ranked by Bayesian credible score |
 | QM9 benchmark | `make qm9long` | QM9 dipole moment `mu` benchmark using geometry features |
 | Timing benchmark | `make timing` | ZINC representation timing comparison |
+
+## FreeSolv GP Model
+
+The default FreeSolv model is `moladt_wl_system_gp`, an exact Gaussian process
+over the MolADT representation:
+
+- input molecules are parsed from SDF into `Molecule`; the model does not use
+  SMILES, RDKit fingerprints, or a plain graph proxy
+- atom tokens include element, formal charge, shell count, orbital count,
+  shell electron count, and orbital occupancy signatures
+- edge tokens include element pair, effective order, shared electrons,
+  bonding-system overlap count, and bonding-system kind
+- system tokens include covalent, ionic, bridge, pi, coordination, and other
+  Dietz bonding systems
+- the kernel is a fitted weighted sum of Tanimoto similarities over:
+  WL graph tokens, bonding-system tokens, and the combined token set
+- the empirical-Bayes fit optimizes the kernel weights and noise variance, then
+  gives posterior predictive means and standard deviations in kcal/mol
+
+`make freesolv` writes the current single-split artifact under
+`results/freesolv/run_<timestamp>/` and removes older FreeSolv `run_*`
+directories first. `make freesolv-20split` writes repeated-split uncertainty
+outputs under `results/freesolv_20split/run_<timestamp>/` with the same cleanup
+policy for that folder.
+
+### Feature Map
+
+The feature map is deliberately tied to the typed ADT:
+
+- **Atom labels** encode the element, formal-charge bucket, shell count,
+  orbital count, total shell electrons, and a compact orbital occupancy
+  signature.
+- **Edge labels** encode the element pair, effective bond-order bucket, number
+  of bonding systems sharing the edge, and the electron-sharing signature of
+  every system using that edge.
+- **Bonding-system labels** encode the shared electron count, number of member
+  atoms, number of member edges, atom symbols, edge element pairs, and system
+  kind.
+- **WL graph tokens** are built by iterating those atom and edge labels through
+  local neighborhoods, so local chemical environments become count features.
+- **System tokens** preserve information that a plain graph or ordinary
+  bond-order graph would lose, such as ionic contacts, delocalised rings,
+  bridges, coordination systems, and overlapping bonding systems.
+
+### Kernel Choice
+
+The kernel is a weighted Tanimoto GP because the feature vectors are sparse
+non-negative token counts. Tanimoto similarity compares overlap relative to the
+union of active tokens, which is a better fit here than an RBF distance over
+arbitrary standardized coordinates.
+
+The fitted kernel is:
+
+```text
+k(x, x') =
+  w_all    * Tanimoto(WL + bonding-system tokens)
+  + w_sys  * Tanimoto(bonding-system tokens)
+  + w_wl   * Tanimoto(WL graph tokens)
+```
+
+Those three weights and the observation-noise variance are optimized by
+empirical Bayes on the training split. The model then uses exact GP conditioning
+to produce a predictive mean and standard deviation for hydration free energy.
+
+### Difference From The Previous GP
+
+The previous FreeSolv GP used the exported `moladt_featurized` scalar descriptor
+table, screened the strongest descriptor columns on the training split,
+standardized them, and applied an RBF kernel over Euclidean distance. That path
+is useful as a baseline or ablation.
+
+The default GP now uses sparse MolADT token counts from atoms, formal charges,
+orbitals, edges, and explicit bonding systems, then compares molecules with
+Tanimoto kernels. No molecular fingerprints are used. For a representation-led
+paper, this is the stronger headline model because the kernel directly measures
+overlap in typed MolADT chemistry rather than distance in a generic numeric
+descriptor table.
 
 ## Start
 
@@ -307,6 +385,7 @@ Output notes:
 | Benchmark | Target | Main command |
 | --- | --- | --- |
 | FreeSolv | hydration free energy | `make freesolv` |
+| FreeSolv 20 split | hydration free energy | `make freesolv-20split` |
 | FreeSolv inverse design | target hydration free energy | `make inverse-design TARGET=-5.0` |
 | QM9 | dipole moment `mu` | `make qm9long` |
 | ZINC timing | representation throughput | `make timing` |

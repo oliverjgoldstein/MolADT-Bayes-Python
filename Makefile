@@ -41,6 +41,8 @@ INVERSE_VIEWER_COUNT_ARG := $(if $(filter 1 true yes TRUE YES,$(OPEN_VIEWER)),--
 MODELS ?= bayes_linear_student_t,bayes_hierarchical_shrinkage
 FREESOLV_MODELS ?= moladt_wl_system_gp
 FREESOLV_SEED ?= 18
+FREESOLV_SPLIT_COUNT ?= 20
+FREESOLV_SPLIT_SEED_START ?= 0
 QM9_MODELS ?= bayes_linear_student_t
 PYTHON_EXTRAS ?= dev,ml,geom
 RESULTS_SUBDIR ?=
@@ -130,12 +132,13 @@ TOOLCHAIN_ENV := $(if $(DARWIN_SDKROOT),env CC="$(DARWIN_CLANG)" CXX="$(DARWIN_C
 MODEL_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),models/paper/run_$(RUN_TIMESTAMP),models/run_$(RUN_TIMESTAMP))
 TIMING_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),timing/paper/run_$(RUN_TIMESTAMP),timing/run_$(RUN_TIMESTAMP))
 FREESOLV_RESULTS_SUBDIR := freesolv/run_$(RUN_TIMESTAMP)
+FREESOLV_20_SPLIT_RESULTS_SUBDIR := freesolv_20split/run_$(RUN_TIMESTAMP)
 INVERSE_DESIGN_RESULTS_SUBDIR := inverse_design/run_$(RUN_TIMESTAMP)
 BEST_QM9_EXTRA_MODELS := visnet_ensemble
 QM9_LONG_RESULTS_SUBDIR := qm9/long/run_$(RUN_TIMESTAMP)
 QM9_LONG_SEED := 102
 
-.PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-activate refresh-python-cache python-parse python-parse-smiles python-to-smiles python-pretty-example view molecule-viewer test-molecule-viewer python-benchmark-qm9 python-benchmark-zinc freesolv inverse-design inverse-design-view qm9long benchmark benchmark-bg timing catboost-geom-model catboost-geom-model-paper model
+.PHONY: help python-setup python-cmdstan-install python-test python-typecheck python-activate refresh-python-cache python-parse python-parse-smiles python-to-smiles python-pretty-example view molecule-viewer test-molecule-viewer python-benchmark-qm9 python-benchmark-zinc freesolv freesolv-20split inverse-design inverse-design-view qm9long benchmark benchmark-bg timing catboost-geom-model catboost-geom-model-paper model
 
 help:
 	@printf "%s\n" \
@@ -154,6 +157,7 @@ help:
 		"  make molecule-viewer        Export a standalone 3D molecule viewer HTML file; add OPEN_VIEWER=1 to open it" \
 		"  make test-molecule-viewer   Run the molecule viewer tests, then open the viewer" \
 		"  make freesolv              Run the long FreeSolv MolADT-vs-MoleculeNet comparison" \
+		"  make freesolv-20split      Run the FreeSolv MolADT WL + bonding-system GP over 20 random splits" \
 		"  make inverse-design        Run the FreeSolv MolADT inverse-design proof of concept" \
 		"  make inverse-design-view   Open saved inverse-design molecules in the viewer" \
 		"  make qm9long               Run the full-data QM9 ViSNet benchmark on rich SDF-backed MolADT geometry" \
@@ -167,6 +171,7 @@ help:
 		"Current inference configuration:" \
 		"  preset=$(INFERENCE_PRESET)" \
 		"  results_root=$(RESULTS_ROOT)" \
+		"  freesolv_split_count=$(FREESOLV_SPLIT_COUNT)" \
 		"  qm9_split_mode=$(QM9_SPLIT_MODE)" \
 		"  qm9_limit=$(if $(QM9_LIMIT),$(QM9_LIMIT),full-local-download)" \
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
@@ -498,7 +503,23 @@ freesolv:
 	"  models: $(FREESOLV_MODELS)" \
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
 	"  expected figure: results/$(FREESOLV_RESULTS_SUBDIR)/freesolv_rmse_vs_moleculenet.svg"
+	@find results/freesolv -mindepth 1 -maxdepth 1 -type d -name 'run_*' -exec rm -rf {} + 2>/dev/null || true
 	MOLADT_RESULTS_DIR=results/$(FREESOLV_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all freesolv $(VERBOSE_ARG) $(FREESOLV_BENCHMARK_ARGS)
+
+freesolv-20split:
+	@printf "%s\n" \
+	"Running FreeSolv 20-split MolADT WL + bonding-system GP." \
+	"  repo: MolADT-Bayes-Python" \
+	"  command: scripts.freesolv_wl_system_gp" \
+	"  dataset: FreeSolv" \
+	"  model: moladt_wl_system_gp" \
+	"  method: empirical_bayes_exact_gp" \
+	"  split_count: $(FREESOLV_SPLIT_COUNT)" \
+	"  seed_start: $(FREESOLV_SPLIT_SEED_START)" \
+	"  results_dir: results/$(FREESOLV_20_SPLIT_RESULTS_SUBDIR)" \
+	"  expected outputs: predictive_metrics.csv, summary.csv, split_assignments.csv"
+	@find results/freesolv_20split -mindepth 1 -maxdepth 1 -type d -name 'run_*' -exec rm -rf {} + 2>/dev/null || true
+	MOLADT_RESULTS_DIR=results/$(FREESOLV_20_SPLIT_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.freesolv_wl_system_gp --split-count $(FREESOLV_SPLIT_COUNT) --seed-start $(FREESOLV_SPLIT_SEED_START) --output-dir results/$(FREESOLV_20_SPLIT_RESULTS_SUBDIR) $(VERBOSE_ARG)
 
 inverse-design:
 	@printf "%s\n" \
