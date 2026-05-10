@@ -29,6 +29,7 @@ Haskell repo.
 | View examples | `make view` | Browser viewer for built-in MolADT examples |
 | FreeSolv benchmark | `make freesolv` | Bayesian GP benchmark for hydration free energy |
 | FreeSolv 20 split | `make freesolv-20split` | Repeated-split check for the MolADT WL + bonding-system GP |
+| FreeSolv ablation | `make freesolv-ablation` | A-F representation ablation for graph, multigraph, and full Dietz components |
 | FreeSolv inverse design | `make inverse-design TARGET=-5.0` | 1,000 generated candidates, ranked by Bayesian credible score |
 | QM9 benchmark | `make qm9long` | QM9 dipole moment `mu` benchmark using geometry features |
 | Timing benchmark | `make timing` | ZINC representation timing comparison |
@@ -96,19 +97,32 @@ Those three weights and the observation-noise variance are optimized by
 empirical Bayes on the training split. The model then uses exact GP conditioning
 to produce a predictive mean and standard deviation for hydration free energy.
 
-### Difference From The Previous GP
+### Representation Ablation
 
-The previous FreeSolv GP used the exported `moladt_featurized` scalar descriptor
-table, screened the strongest descriptor columns on the training split,
-standardized them, and applied an RBF kernel over Euclidean distance. That path
-is useful as a baseline or ablation.
+The main FreeSolv evidence is the A-F ablation, not the legacy descriptor RBF
+GP. It asks whether Dietz/multigraph bonding-system components add predictive
+signal beyond non-multigraph graph structure.
 
-The default GP now uses sparse MolADT token counts from atoms, formal charges,
-orbitals, edges, and explicit bonding systems, then compares molecules with
-Tanimoto kernels. No molecular fingerprints are used. For a representation-led
-paper, this is the stronger headline model because the kernel directly measures
-overlap in typed MolADT chemistry rather than distance in a generic numeric
-descriptor table.
+Run it with:
+
+```bash
+make freesolv-ablation
+```
+
+The current 20-split result is:
+
+| Label | Variant | Meaning | Test RMSE |
+| --- | --- | --- | ---: |
+| A | atom bag | atoms only, no connectivity | `1.857 +/- 0.361` |
+| B | simple graph WL | atoms plus binary adjacency | `1.060 +/- 0.131` |
+| C | bond-order graph WL | one edge per atom pair with bond-order labels | `1.049 +/- 0.142` |
+| D | multigraph multiplicity WL | parallel-edge-style multiplicity from effective order | `1.020 +/- 0.123` |
+| E | Dietz edge WL | Dietz-derived edge labels without separate system tokens | `1.049 +/- 0.142` |
+| F | full MolADT | Dietz edge labels plus explicit bonding-system tokens | `0.904 +/- 0.168` |
+
+The useful comparison is B/C/D/E against F. Full MolADT wins because bonding
+systems are represented as explicit objects in addition to graph edges; Dietz
+labels on edges alone do not explain the gain.
 
 ## Start
 

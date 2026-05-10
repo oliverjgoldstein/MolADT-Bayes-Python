@@ -7,6 +7,7 @@ This page is the run contract.
 ```bash
 make freesolv
 make freesolv-20split
+make freesolv-ablation
 make inverse-design TARGET=-5.0
 OPEN_VIEWER=1 make inverse-design TARGET=-5.0
 make inverse-design-view
@@ -56,6 +57,27 @@ deterministic random splits, using seeds `0..19` by default. It writes:
 
 The target is for repeated-split uncertainty checks. It is separate from the
 single seed-18 artifact used by inverse design.
+
+`make freesolv-ablation` runs the A-F representation ladder over the same 20
+split seeds:
+
+- A: atom bag
+- B: simple graph WL
+- C: bond-order graph WL
+- D: multigraph multiplicity WL
+- E: Dietz edge WL without separate system tokens
+- F: full MolADT WL + bonding-system GP
+
+It writes:
+
+- `metrics_by_seed.csv`
+- `summary.csv`
+- `paired_against_full.csv`
+- `metadata.csv`
+
+The current result has full MolADT at `0.904 +/- 0.168` kcal/mol test RMSE,
+ahead of simple graph WL (`1.060 +/- 0.131`), bond-order graph WL
+(`1.049 +/- 0.142`), and multigraph multiplicity WL (`1.020 +/- 0.123`).
 
 ## FreeSolv Inverse Design
 

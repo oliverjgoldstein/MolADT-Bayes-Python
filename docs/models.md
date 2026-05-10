@@ -7,6 +7,7 @@ Models do not consume SMILES strings directly. They consume numeric features exp
 ```bash
 make freesolv
 make freesolv-20split
+make freesolv-ablation
 make qm9long
 make timing
 ```
@@ -59,15 +60,28 @@ make freesolv-20split
 That target writes split-level metrics and the exact molecule assignments under
 `results/freesolv_20split/run_<timestamp>/`.
 
-Difference from the previous GP:
+For the representation ablation, run:
 
-- previous path: screened `moladt_featurized` scalar descriptor columns,
-  standardized Euclidean distances, and an RBF kernel
-- current default: sparse MolADT token counts from atoms, formal charges,
-  orbitals, edges, and explicit bonding systems, compared with Tanimoto kernels
-- no molecular fingerprints are used in the current default
-- for a representation-led result, the current default is the primary model;
-  the previous RBF GP is best treated as a baseline or ablation
+```bash
+make freesolv-ablation
+```
+
+That target writes `metrics_by_seed.csv`, `summary.csv`, and
+`paired_against_full.csv` under `results/freesolv_ablation/run_<timestamp>/`.
+The A-F ladder is the main empirical test of the Dietz/multigraph claim:
+
+| Label | Variant | Meaning | Test RMSE |
+| --- | --- | --- | ---: |
+| A | atom bag | atoms only, no connectivity | `1.857 +/- 0.361` |
+| B | simple graph WL | atoms plus binary adjacency | `1.060 +/- 0.131` |
+| C | bond-order graph WL | one edge per atom pair with bond-order labels | `1.049 +/- 0.142` |
+| D | multigraph multiplicity WL | parallel-edge-style multiplicity from effective order | `1.020 +/- 0.123` |
+| E | Dietz edge WL | Dietz-derived edge labels without separate system tokens | `1.049 +/- 0.142` |
+| F | full MolADT | Dietz edge labels plus explicit bonding-system tokens | `0.904 +/- 0.168` |
+
+This table is preferred over the legacy RBF descriptor comparison because it
+isolates the representation question directly: non-multigraph graph structure
+versus multigraph-like order versus explicit Dietz bonding systems.
 
 Feature example:
 

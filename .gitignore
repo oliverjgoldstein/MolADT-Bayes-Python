@@ -64,6 +64,7 @@ results/**
 !results/freesolv/**/*.svg
 !results/freesolv/**/*.txt
 !results/freesolv_20split/**/*.csv
+!results/freesolv_ablation/**/*.csv
 !results/qm9/**/*.svg
 !results/qm9/**/caption.txt
 !results/timing/**/*.svg

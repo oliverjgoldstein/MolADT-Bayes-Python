@@ -7,6 +7,8 @@ Runs write timestamped folders under `results/`.
 | Command | Folder |
 | --- | --- |
 | `make freesolv` | `results/freesolv/run_<timestamp>/` |
+| `make freesolv-20split` | `results/freesolv_20split/run_<timestamp>/` |
+| `make freesolv-ablation` | `results/freesolv_ablation/run_<timestamp>/` |
 | `make inverse-design` | `results/inverse_design/run_<timestamp>/` and `results/inverse_design/reference/` |
 | `make qm9long` | `results/qm9/long/run_<timestamp>/` |
 | `make timing` | `results/timing/paper/run_<timestamp>/` |
@@ -28,6 +30,18 @@ Useful detail files:
 - `details/predictions.csv`
 - `details/model_coefficients.csv`
 - `details/moleculenet_comparison.csv`
+
+## FreeSolv A-F Ablation
+
+`make freesolv-ablation` writes compact CSVs:
+
+- `metrics_by_seed.csv`
+- `summary.csv`
+- `paired_against_full.csv`
+- `metadata.csv`
+
+This is the main representation ablation for graph, multigraph-like, and full
+Dietz bonding-system variants.
 
 ## Inverse Design
 
