@@ -118,8 +118,8 @@ def test_makefile_freesolv_ablation_target_prints_output_contract(tmp_path: Path
         check=True,
     )
 
-    assert "Running FreeSolv A-F MolADT representation ablation." in result.stdout
-    assert "variants: A atom bag; B simple graph WL; C bond-order graph WL; D multigraph multiplicity WL; E Dietz edge WL; F full MolADT" in result.stdout
+    assert "Running FreeSolv A/B/C MolADT representation ablation." in result.stdout
+    assert "variants: A atom bag; B standard covalent graph WL; C full MolADT" in result.stdout
     assert "split_count: 20" in result.stdout
     assert "seed_start: 0" in result.stdout
     assert "results/freesolv_ablation/run_" in result.stdout

@@ -68,20 +68,24 @@ make freesolv-ablation
 
 That target writes `metrics_by_seed.csv`, `summary.csv`, and
 `paired_against_full.csv` under `results/freesolv_ablation/run_<timestamp>/`.
-The A-F ladder is the main empirical test of the Dietz/multigraph claim:
+The A/B/C ladder is the main empirical test of the Dietz claim:
+
+- A is an atom bag: atom labels only, no connectivity.
+- B is a standard covalent graph WL encoding: atom labels plus ordinary
+  covalent bond-order edges labelled as `single_covalent`, `double_covalent`,
+  `triple_covalent`, `quadruple_covalent`, or `aromatic_covalent`.
+- C is the full MolADT encoding: WL edge labels include Dietz-derived
+  edge/system information and a separate bonding-system token view.
 
 | Label | Variant | Meaning | Test RMSE |
 | --- | --- | --- | ---: |
 | A | atom bag | atoms only, no connectivity | `1.857 +/- 0.361` |
-| B | simple graph WL | atoms plus binary adjacency | `1.060 +/- 0.131` |
-| C | bond-order graph WL | one edge per atom pair with bond-order labels | `1.049 +/- 0.142` |
-| D | multigraph multiplicity WL | parallel-edge-style multiplicity from effective order | `1.020 +/- 0.123` |
-| E | Dietz edge WL | Dietz-derived edge labels without separate system tokens | `1.049 +/- 0.142` |
-| F | full MolADT | Dietz edge labels plus explicit bonding-system tokens | `0.904 +/- 0.168` |
+| B | standard covalent graph WL | atom labels plus a standard covalent bond-order adjacency graph | `1.049 +/- 0.142` |
+| C | full MolADT | Dietz edge labels plus explicit bonding-system tokens | `0.904 +/- 0.168` |
 
 This table is preferred over the legacy RBF descriptor comparison because it
-isolates the representation question directly: non-multigraph graph structure
-versus multigraph-like order versus explicit Dietz bonding systems.
+isolates the representation question directly: ordinary graph structure versus
+explicit Dietz bonding systems.
 
 Feature example:
 

@@ -18,14 +18,11 @@ from moladt.chem.molecule_ops import effective_order
 from .common import PROCESSED_DATA_DIR, ensure_directory
 from .freesolv_wl_system_gp import (
     _Bundle,
-    _build_kernel_components,
     _fit_gp,
     _graph_token_counts,
     _load_bundle_from_rows,
-    _order_bucket,
     _predict_gp,
     _shell_stats,
-    _system_kind,
     _system_token_counts,
     _vectorize,
     train_valid_test_indices,
@@ -77,40 +74,24 @@ def _atom_label(atom: Atom) -> str:
     )
 
 
-def _edge_multiplicity(order: float) -> int:
+def _standard_covalent_bond_label(order: float) -> str | None:
     if order <= 0.25:
-        return 1
+        return None
     if order < 1.25:
-        return 1
+        return "single_covalent"
+    if order < 1.80:
+        return "aromatic_covalent"
     if order < 2.50:
-        return 2
+        return "double_covalent"
     if order < 3.50:
-        return 3
-    return 4
+        return "triple_covalent"
+    return "quadruple_covalent"
 
 
-def _edge_labels_for_mode(molecule: Molecule, edge: Edge, mode: str) -> list[str]:
+def _standard_graph_edge_labels(molecule: Molecule, edge: Edge) -> list[str]:
     pair = _edge_symbol_pair(molecule, edge)
-    order = effective_order(molecule, edge)
-    order_bucket = _order_bucket(order)
-    systems = [system for _, system in molecule.systems]
-    containing = [system for system in systems if edge in system.member_edges]
-
-    if mode == "simple_graph_wl":
-        return [f"{pair}:adjacency"]
-    if mode == "bond_order_graph_wl":
-        return [f"{pair}:{order_bucket}"]
-    if mode == "multigraph_multiplicity_wl":
-        return [f"{pair}:parallel_edge"] * _edge_multiplicity(order)
-    if mode == "dietz_edge_wl":
-        signature = ".".join(
-            sorted(
-                f"{system.shared_electrons.value}e:{len(system.member_edges)}m:{_system_kind(system)}"
-                for system in containing
-            )
-        )
-        return [f"{pair}:{order_bucket}:overlap{len(containing)}:{signature}"]
-    raise ValueError(f"Unsupported graph mode: {mode}")
+    bond_label = _standard_covalent_bond_label(effective_order(molecule, edge))
+    return [] if bond_label is None else [f"{pair}:{bond_label}"]
 
 
 def _graph_counts(molecule: Molecule, mode: str, radius: int = WL_RADIUS) -> Counter[str]:
@@ -124,7 +105,10 @@ def _graph_counts(molecule: Molecule, mode: str, radius: int = WL_RADIUS) -> Cou
 
     adjacency: dict[Any, list[tuple[Any, str]]] = {}
     for edge in sorted(molecule_edges(molecule)):
-        for edge_label in _edge_labels_for_mode(molecule, edge, mode):
+        edge_labels = _standard_graph_edge_labels(molecule, edge) if mode == "standard_covalent_graph_wl" else []
+        if mode != "standard_covalent_graph_wl":
+            raise ValueError(f"Unsupported graph mode: {mode}")
+        for edge_label in edge_labels:
             counts[f"edge_label:{edge_label}"] += 1
             adjacency.setdefault(edge.a, []).append((edge.b, edge_label))
             adjacency.setdefault(edge.b, []).append((edge.a, edge_label))
@@ -180,36 +164,15 @@ def _variants() -> tuple[AblationVariant, ...]:
         ),
         AblationVariant(
             code="B",
-            label="simple_graph_wl",
-            description="atoms plus binary adjacency",
-            wl_counter_fn=lambda molecule: _graph_counts(molecule, "simple_graph_wl"),
+            label="standard_covalent_graph_wl",
+            description="atom labels plus a standard covalent bond-order adjacency graph",
+            wl_counter_fn=lambda molecule: _graph_counts(molecule, "standard_covalent_graph_wl"),
             system_counter_fn=_empty_counts,
         ),
         AblationVariant(
             code="C",
-            label="bond_order_graph_wl",
-            description="one edge per atom pair with effective bond-order labels",
-            wl_counter_fn=lambda molecule: _graph_counts(molecule, "bond_order_graph_wl"),
-            system_counter_fn=_empty_counts,
-        ),
-        AblationVariant(
-            code="D",
-            label="multigraph_multiplicity_wl",
-            description="parallel-edge-style multiplicity from effective bond order",
-            wl_counter_fn=lambda molecule: _graph_counts(molecule, "multigraph_multiplicity_wl"),
-            system_counter_fn=_empty_counts,
-        ),
-        AblationVariant(
-            code="E",
-            label="dietz_edge_wl",
-            description="Dietz-derived edge labels without a separate bonding-system view",
-            wl_counter_fn=lambda molecule: _graph_counts(molecule, "dietz_edge_wl"),
-            system_counter_fn=_empty_counts,
-        ),
-        AblationVariant(
-            code="F",
             label="full_moladt",
-            description="Dietz edge labels plus explicit bonding-system token view",
+            description="full MolADT WL plus explicit bonding-system token view",
             wl_counter_fn=_graph_token_counts,
             system_counter_fn=_system_token_counts,
         ),
@@ -390,7 +353,7 @@ def _default_output_dir() -> Path:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m scripts.freesolv_representation_ablation",
-        description="Run the FreeSolv A-F representation ablation for the MolADT WL + bonding-system GP.",
+        description="Run the FreeSolv A/B/C representation ablation for the MolADT WL + bonding-system GP.",
     )
     parser.add_argument("--split-count", type=int, default=DEFAULT_SPLIT_COUNT)
     parser.add_argument("--seed-start", type=int, default=DEFAULT_SEED_START)
@@ -407,7 +370,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     paths = run_ablation(seeds=seeds, output_dir=args.output_dir, verbose=bool(args.verbose))
     summary = pd.read_csv(paths["summary"])
     test_summary = summary.loc[summary["split"] == "test"].copy()
-    print("FreeSolv A-F MolADT representation ablation")
+    print("FreeSolv A/B/C MolADT representation ablation")
     print(f"  seeds: {seeds[0]}..{seeds[-1]} ({len(seeds)} splits)")
     print(f"  output_dir: {args.output_dir}")
     for row in test_summary.itertuples(index=False):

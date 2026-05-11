@@ -53,7 +53,7 @@ make timing
 
 - `make freesolv` runs the FreeSolv MolADT WL + bonding-system empirical-Bayes GP benchmark.
 - `make freesolv-20split` runs the same GP on 20 deterministic random splits and writes a summary plus split assignments under `results/freesolv_20split/`.
-- `make freesolv-ablation` runs the A-F graph/multigraph/Dietz representation ablation and writes compact CSVs under `results/freesolv_ablation/`.
+- `make freesolv-ablation` runs the A/B/C atom-bag/standard-covalent-graph/full-MolADT representation ablation and writes compact CSVs under `results/freesolv_ablation/`.
 - `make inverse-design TARGET=-5.0` samples initial molecules from the valid FreeSolv prior, generates 1,000 valid FreeSolv candidates, and writes the top 10 by the model's Bayesian credible score.
 - `make inverse-design-view` opens those saved top 10 molecules in one viewer page.
 - `make qm9long` runs the full local QM9 `mu` path.

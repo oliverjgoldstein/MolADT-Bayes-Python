@@ -31,7 +31,7 @@ Useful detail files:
 - `details/model_coefficients.csv`
 - `details/moleculenet_comparison.csv`
 
-## FreeSolv A-F Ablation
+## FreeSolv A/B/C Ablation
 
 `make freesolv-ablation` writes compact CSVs:
 
@@ -40,8 +40,8 @@ Useful detail files:
 - `paired_against_full.csv`
 - `metadata.csv`
 
-This is the main representation ablation for graph, multigraph-like, and full
-Dietz bonding-system variants.
+This is the main representation ablation for atom-bag, standard covalent graph,
+and full MolADT bonding-system variants.
 
 ## Inverse Design
 

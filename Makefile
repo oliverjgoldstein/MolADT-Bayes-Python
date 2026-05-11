@@ -161,7 +161,7 @@ help:
 		"  make test-molecule-viewer   Run the molecule viewer tests, then open the viewer" \
 		"  make freesolv              Run the long FreeSolv MolADT-vs-MoleculeNet comparison" \
 		"  make freesolv-20split      Run the FreeSolv MolADT WL + bonding-system GP over 20 random splits" \
-		"  make freesolv-ablation     Run the A-F FreeSolv representation ablation over 20 random splits" \
+		"  make freesolv-ablation     Run the A/B/C FreeSolv representation ablation over 20 random splits" \
 		"  make inverse-design        Run the FreeSolv MolADT inverse-design proof of concept" \
 		"  make inverse-design-view   Open saved inverse-design molecules in the viewer" \
 		"  make qm9long               Run the full-data QM9 ViSNet benchmark on rich SDF-backed MolADT geometry" \
@@ -528,11 +528,11 @@ freesolv-20split:
 
 freesolv-ablation:
 	@printf "%s\n" \
-	"Running FreeSolv A-F MolADT representation ablation." \
+	"Running FreeSolv A/B/C MolADT representation ablation." \
 	"  repo: MolADT-Bayes-Python" \
 	"  command: scripts.freesolv_representation_ablation" \
 	"  dataset: FreeSolv" \
-	"  variants: A atom bag; B simple graph WL; C bond-order graph WL; D multigraph multiplicity WL; E Dietz edge WL; F full MolADT" \
+	"  variants: A atom bag; B standard covalent graph WL; C full MolADT" \
 	"  split_count: $(FREESOLV_ABLATION_SPLIT_COUNT)" \
 	"  seed_start: $(FREESOLV_ABLATION_SEED_START)" \
 	"  results_dir: results/$(FREESOLV_ABLATION_RESULTS_SUBDIR)" \

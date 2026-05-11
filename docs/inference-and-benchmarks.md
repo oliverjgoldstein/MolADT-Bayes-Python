@@ -58,15 +58,12 @@ deterministic random splits, using seeds `0..19` by default. It writes:
 The target is for repeated-split uncertainty checks. It is separate from the
 single seed-18 artifact used by inverse design.
 
-`make freesolv-ablation` runs the A-F representation ladder over the same 20
+`make freesolv-ablation` runs the A/B/C representation ladder over the same 20
 split seeds:
 
 - A: atom bag
-- B: simple graph WL
-- C: bond-order graph WL
-- D: multigraph multiplicity WL
-- E: Dietz edge WL without separate system tokens
-- F: full MolADT WL + bonding-system GP
+- B: standard covalent graph WL
+- C: full MolADT WL + bonding-system GP
 
 It writes:
 
@@ -75,9 +72,13 @@ It writes:
 - `paired_against_full.csv`
 - `metadata.csv`
 
-The current result has full MolADT at `0.904 +/- 0.168` kcal/mol test RMSE,
-ahead of simple graph WL (`1.060 +/- 0.131`), bond-order graph WL
-(`1.049 +/- 0.142`), and multigraph multiplicity WL (`1.020 +/- 0.123`).
+In B, graph edges are standard covalent labels only: sorted element pair plus
+`single_covalent`, `double_covalent`, `triple_covalent`,
+`quadruple_covalent`, or `aromatic_covalent`. B has no ionic contacts,
+zero-electron systems, non-covalent bonding-system edges, edge multiplicity, 3D
+geometry, shared-electron count, or bonding-system token view. The current
+result has full MolADT at `0.904 +/- 0.168` kcal/mol test RMSE, ahead of
+standard covalent graph WL (`1.049 +/- 0.142`).
 
 ## FreeSolv Inverse Design
 

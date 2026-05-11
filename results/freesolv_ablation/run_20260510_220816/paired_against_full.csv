@@ -1,6 +1,0 @@
-variant_code,variant,description,splits,full_lower_rmse_splits,rmse_variant_minus_full_mean,rmse_variant_minus_full_std,mae_variant_minus_full_mean,mlpd_full_minus_variant_mean
-A,atom_bag,"atoms only, no connectivity",20,20,0.9529919912368301,0.2950825675115575,0.7817183500367018,0.8152728936814768
-B,simple_graph_wl,atoms plus binary adjacency,20,16,0.15623932834865956,0.15785427594994864,0.12533554039483424,0.21842462709685345
-C,bond_order_graph_wl,one edge per atom pair with effective bond-order labels,20,16,0.14492506467972943,0.1619898192565108,0.11817854795368735,0.2205477511113772
-D,multigraph_multiplicity_wl,parallel-edge-style multiplicity from effective bond order,20,15,0.11620395244406378,0.17325028902826584,0.09621175529245043,0.18514181697771753
-E,dietz_edge_wl,Dietz-derived edge labels without a separate bonding-system view,20,16,0.14482129176835282,0.1620355656861597,0.11808311086226495,0.22054747860803917

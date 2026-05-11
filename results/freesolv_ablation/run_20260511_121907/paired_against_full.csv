@@ -1,0 +1,3 @@
+variant_code,variant,description,splits,full_lower_rmse_splits,rmse_variant_minus_full_mean,rmse_variant_minus_full_std,mae_variant_minus_full_mean,mlpd_full_minus_variant_mean
+A,atom_bag,"atoms only, no connectivity",20,20,0.9529919912368301,0.2950825675115575,0.7817183500367018,0.8152728936814768
+B,standard_covalent_graph_wl,atom labels plus a standard covalent bond-order adjacency graph,20,16,0.14492506467972943,0.1619898192565108,0.11817854795368735,0.2205477511113772
