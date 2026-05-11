@@ -20,7 +20,7 @@ Haskell repo.
   <img src="docs/assets/diborane.png" alt="Diborane in the MolADT viewer" width="280">
 </p>
 
-[Quickstart](docs/quickstart.md) · [Representation](docs/representation.md) · [Parsing](docs/parsing.md) · [Validator](#validator) · [Examples](docs/examples.md) · [Equality](docs/molecule-equality.md) · [CLI](docs/cli.md) · [Models](docs/models.md) · [Benchmarks](docs/inference-and-benchmarks.md) · [Outputs](docs/outputs.md)
+[Quickstart](docs/quickstart.md) · [Representation](docs/representation.md) · [Parsing](docs/parsing.md) · [Validator](#validator) · [Examples](docs/examples.md) · [Equality](docs/molecule-equality.md) · [CLI](docs/cli.md) · [Models](docs/models.md) · [GP Features](docs/freesolv-gp-feature-list.md) · [Benchmarks](docs/inference-and-benchmarks.md) · [Outputs](docs/outputs.md)
 
 ## What It Does
 
@@ -76,6 +76,9 @@ The feature map is deliberately tied to the typed ADT:
 - **System tokens** preserve information that a plain graph or ordinary
   bond-order graph would lose, such as ionic contacts, delocalised rings,
   bridges, coordination systems, and overlapping bonding systems.
+
+The literal FreeSolv GP feature names are listed in
+[GP Features](docs/freesolv-gp-feature-list.md).
 
 ### Kernel Choice
 
