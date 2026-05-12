@@ -16,6 +16,8 @@ Start here when you need more than the root [README](../README.md).
 ## Reference
 
 - [Orbitals](orbitals.md): local shell and orbital records on atoms.
+- [FreeSolv GP feature list](freesolv-gp-feature-list.md): literal sparse token vocabulary for the default FreeSolv GP.
+- [FreeSolv GP feature translations](freesolv-gp-feature-layman.md): plain-English explanation for each feature index.
 - [Molecule equality](molecule-equality.md): compare MolADT values modulo container ordering.
 - [SMILES scope](smiles-scope-and-validation.md): what the conservative SMILES parser and renderer support.
 - [Haskell interop](haskell_interop.md): shared JSON and processed matrix contracts.

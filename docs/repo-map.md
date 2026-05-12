@@ -22,3 +22,5 @@ Useful entrypoints:
 - `experiments/freesolv_inverse_design.py`
 - `scripts/run_all.py`
 - `Makefile`
+- [`docs/freesolv-gp-feature-list.md`](freesolv-gp-feature-list.md): exact sparse token vocabulary for the default FreeSolv GP.
+- [`docs/freesolv-gp-feature-layman.md`](freesolv-gp-feature-layman.md): plain-English descriptions for each FreeSolv GP feature index.

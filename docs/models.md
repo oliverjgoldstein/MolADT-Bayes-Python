@@ -33,6 +33,11 @@ The token features include:
 - bonding-system overlap counts
 - bonding-system kind, including covalent, ionic, bridge, pi, and coordination tags
 
+The exact sparse token vocabulary is listed in
+[FreeSolv GP feature list](freesolv-gp-feature-list.md), with a
+feature-by-feature plain-English companion in
+[FreeSolv GP feature translations](freesolv-gp-feature-layman.md).
+
 The fitted kernel is:
 
 ```text
