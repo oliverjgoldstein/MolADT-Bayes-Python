@@ -1080,7 +1080,7 @@ def _log_stage_result(stage: TimingStageResult, *, stage_index: int, total_stage
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="python -m scripts.benchmark_zinc")
+    parser = argparse.ArgumentParser(prog="python -m benchmarking.benchmark_zinc")
     parser.add_argument("--dataset-size", default="250K")
     parser.add_argument("--dataset-dimension", default="2D")
     parser.add_argument("--limit", type=int, default=None)

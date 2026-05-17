@@ -20,7 +20,7 @@ Haskell repo.
   <img src="docs/assets/diborane.png" alt="Diborane in the MolADT viewer" width="280">
 </p>
 
-[Quickstart](docs/quickstart.md) · [Representation](docs/representation.md) · [Parsing](docs/parsing.md) · [Validator](#validator) · [Examples](docs/examples.md) · [Equality](docs/molecule-equality.md) · [CLI](docs/cli.md) · [Models](docs/models.md) · [GP Features](docs/freesolv-gp-feature-list.md) · [Feature Translations](docs/freesolv-gp-feature-layman.md) · [Benchmarks](docs/inference-and-benchmarks.md) · [Outputs](docs/outputs.md)
+[Quickstart](docs/quickstart.md) · [Representation](docs/representation.md) · [Parsing](docs/parsing.md) · [Validator](#validator) · [Examples](docs/examples.md) · [Equality](docs/molecule-equality.md) · [CLI](docs/cli.md) · [Benchmarking Models](docs/models.md) · [Benchmarks](docs/inference-and-benchmarks.md) · [Outputs](docs/outputs.md)
 
 ## What It Does
 
@@ -28,85 +28,61 @@ Haskell repo.
 | --- | --- | --- |
 | View examples | `make view` | Browser viewer for built-in MolADT examples |
 | FreeSolv benchmark | `make freesolv` | Bayesian GP benchmark for hydration free energy |
-| FreeSolv 20 split | `make freesolv-20split` | Repeated-split check for the MolADT WL + bonding-system GP |
-| FreeSolv ablation | `make freesolv-ablation` | A/B/C representation ablation for atom bag, standard covalent graph, and full MolADT components |
+| FreeSolv 20 split | `make freesolv-20split` | Repeated-split check for the 30-feature full MolADT GP |
+| FreeSolv ablation | `make freesolv-ablation` | Representation ablation for atom bag, SMILES adjacency graph, and full MolADT components |
 | FreeSolv inverse design | `make inverse-design TARGET=-5.0` | 1,000 generated candidates, ranked by Bayesian credible score |
 | QM9 benchmark | `make qm9long` | QM9 dipole moment `mu` benchmark using geometry features |
 | Timing benchmark | `make timing` | ZINC representation timing comparison |
 
 ## FreeSolv GP Model
 
-The default FreeSolv model is `moladt_wl_system_gp`, an exact Gaussian process
-over the MolADT representation:
+The default FreeSolv model is `moladt_full30_rbf_gp`, an exact Gaussian process
+over a deliberately small, listable feature set:
 
-- input molecules are parsed from SDF into `Molecule`; the model does not use
-  SMILES, RDKit fingerprints, or a plain graph proxy
-- atom tokens include element, formal charge, shell count, orbital count,
-  shell electron count, and orbital occupancy signatures
-- edge tokens include element pair, effective order, shared electrons,
-  bonding-system overlap count, and bonding-system kind
-- system tokens include covalent, ionic, bridge, pi, coordination, and other
-  Dietz bonding systems
-- the kernel is a fitted weighted sum of Tanimoto similarities over:
-  WL graph tokens, bonding-system tokens, and the combined token set
-- the empirical-Bayes fit optimizes the kernel weights and noise variance, then
-  gives posterior predictive means and standard deviations in kcal/mol
+- 20 features come only from a SMILES-decoded graph: atom counts, bond-order
+  counts, component count, cycle rank, and heavy-atom degree summaries
+- 10 features add MolADT information: size, polarity, surface proxy,
+  bonding-system counts, shared-electron total, and a short-range
+  bonding-system radial descriptor
+- no Weisfeiler-Lehman tokens, hashed fingerprints, or large sparse feature
+  vocabularies are used
+- the empirical-Bayes fit optimizes the RBF kernel signal variance, lengthscale,
+  and observation-noise variance, then gives posterior predictive means and
+  standard deviations in kcal/mol
 
 `make freesolv` writes the current single-split artifact under
 `results/freesolv/run_<timestamp>/` and removes older FreeSolv `run_*`
 directories first. `make freesolv-20split` writes repeated-split uncertainty
-outputs under `results/freesolv_20split/run_<timestamp>/` with the same cleanup
-policy for that folder.
+outputs under `results/freesolv_small_feature_gp/run_<timestamp>/` with the
+same cleanup policy for that folder.
 
 ### Feature Map
 
-The feature map is deliberately tied to the typed ADT:
-
-- **Atom labels** encode the element, formal-charge bucket, shell count,
-  orbital count, total shell electrons, and a compact orbital occupancy
-  signature.
-- **Edge labels** encode the element pair, effective bond-order bucket, number
-  of bonding systems sharing the edge, and the electron-sharing signature of
-  every system using that edge.
-- **Bonding-system labels** encode the shared electron count, number of member
-  atoms, number of member edges, atom symbols, edge element pairs, and system
-  kind.
-- **WL graph tokens** are built by iterating those atom and edge labels through
-  local neighborhoods, so local chemical environments become count features.
-- **System tokens** preserve information that a plain graph or ordinary
-  bond-order graph would lose, such as ionic contacts, delocalised rings,
-  bridges, coordination systems, and overlapping bonding systems.
-
-The literal FreeSolv GP feature names are listed in
-[GP Features](docs/freesolv-gp-feature-list.md). A feature-by-feature plain
-English companion is in
-[Feature Translations](docs/freesolv-gp-feature-layman.md).
+The feature manifest for each run is written to `feature_manifest.csv`.
 
 ### Kernel Choice
 
-The kernel is a weighted Tanimoto GP because the feature vectors are sparse
-non-negative token counts. Tanimoto similarity compares overlap relative to the
-union of active tokens, which is a better fit here than an RBF distance over
-arbitrary standardized coordinates.
+The kernel is an RBF GP over standardized small descriptors. This keeps the
+model interpretable and avoids a high-dimensional token vocabulary on the
+642-molecule FreeSolv dataset.
 
 The fitted kernel is:
 
 ```text
 k(x, x') =
-  w_all    * Tanimoto(WL + bonding-system tokens)
-  + w_sys  * Tanimoto(bonding-system tokens)
-  + w_wl   * Tanimoto(WL graph tokens)
+  signal_variance * exp(-||z(x) - z(x')||^2 / (2 * lengthscale^2))
 ```
 
-Those three weights and the observation-noise variance are optimized by
-empirical Bayes on the training split. The model then uses exact GP conditioning
-to produce a predictive mean and standard deviation for hydration free energy.
+The signal variance, lengthscale, and observation-noise variance are optimized
+by empirical Bayes on the training split. The model then uses exact GP
+conditioning to produce a predictive mean and standard deviation for hydration
+free energy.
 
 ### Representation Ablation
 
-The main FreeSolv evidence is the A/B/C ablation, not the legacy descriptor RBF
-GP. It asks whether explicit Dietz bonding systems add predictive signal beyond
-an atom bag and a standard covalent bond-order graph.
+The main FreeSolv evidence is the A/B/C small-feature ablation. It asks whether
+the 10 MolADT descriptor additions improve an exact RBF GP beyond an atom bag and
+a graph-only baseline while keeping the whole feature set listable.
 
 Run it with:
 
@@ -114,29 +90,27 @@ Run it with:
 make freesolv-ablation
 ```
 
-Graph encoding for B is deliberately standard:
+The ladder is deliberately compact:
 
-- atoms are labelled with element, formal charge, shell count, orbital count,
-  shell electrons, and orbital occupancy
-- edges are standard covalent adjacency only; each edge label is the sorted
-  element pair plus `single_covalent`, `double_covalent`, `triple_covalent`,
-  `quadruple_covalent`, or `aromatic_covalent`
-- WL tokens repeatedly summarize each atom's sorted labelled neighbourhood out
-  to radius `4`
-- B has no ionic contacts, no zero-electron systems, no non-covalent
-  bonding-system edges, no parallel multigraph edges, no 3D geometry, and no
-  bonding-system token view
+- A uses ten SMILES atom-count features only
+- B uses twenty SMILES-decoded graph features: atom counts, bond-order counts,
+  heavy-atom count, component count, cycle rank, and heavy-degree summaries
+- C adds ten MolADT descriptors: size, polarity, surface proxy,
+  donor/acceptor counts, bonding-system counts, shared-electron total, and a
+  short-range bonding-system radial descriptor
+- no WL tokens, hashed fingerprints, or large sparse feature vocabularies are
+  used
 
 The current 20-split result is:
 
 | Label | Variant | Meaning | Test RMSE |
 | --- | --- | --- | ---: |
-| A | atom bag | atoms only, no connectivity | `1.857 +/- 0.361` |
-| B | standard covalent graph WL | atom labels plus a standard covalent bond-order adjacency graph | `1.049 +/- 0.142` |
-| C | full MolADT | Dietz edge labels plus explicit bonding-system tokens | `0.904 +/- 0.168` |
+| A | atom bag | 10 atom-count features | `1.971 +/- 0.567` |
+| B | SMILES adjacency graph | 20 graph-only features | `1.791 +/- 0.505` |
+| C | full MolADT | 30 features: graph baseline plus MolADT descriptors | `1.308 +/- 0.461` |
 
-The useful comparison is B against C. Full MolADT wins because bonding systems
-are represented as explicit objects in addition to graph edges.
+The useful comparison is B against C. Full MolADT wins because the ten MolADT
+descriptor additions improve the same small RBF GP over the graph-only baseline.
 
 ## Start
 
@@ -418,7 +392,7 @@ Output notes:
 | QM9 | dipole moment `mu` | `make qm9long` |
 | ZINC timing | representation throughput | `make timing` |
 
-Benchmark details are in [Inference and benchmarks](docs/inference-and-benchmarks.md), [Models and features](docs/models.md), [Outputs](docs/outputs.md), and [results README](results/README.md).
+Benchmark details are in [Inference and benchmarks](docs/inference-and-benchmarks.md), [Benchmarking models and features](docs/models.md), [Outputs](docs/outputs.md), and [results README](results/README.md).
 
 ## Python And Haskell
 
@@ -443,8 +417,8 @@ stack run moladtbayes -- from-json ../MolADT-Bayes-Python/morphine.moladt.json
 Python also writes standardized benchmark matrices that Haskell can consume:
 
 ```bash
-./.venv/bin/python -m scripts.run_all freesolv
-stack run moladtbayes -- freesolv-wl-system-gp
+./.venv/bin/python -m benchmarking.run_all freesolv
+stack run moladtbayes -- infer-benchmark freesolv_moladt_featurized mh:0.2
 ```
 
 ## Repo Map
@@ -453,7 +427,7 @@ stack run moladtbayes -- freesolv-wl-system-gp
 | --- | --- |
 | `moladt/` | molecule ADT, validation, parsers, renderers, viewer, examples |
 | `experiments/` | FreeSolv inverse design |
-| `scripts/` | data processing, feature generation, model runs, reporting |
+| `benchmarking/` | data processing, feature generation, benchmark model runs, reporting |
 | `stan/` | Bayesian model definitions |
 | `data/` | vendored and processed benchmark data |
 | `results/` | committed reference outputs and local run artifacts |

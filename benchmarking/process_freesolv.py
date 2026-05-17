@@ -589,7 +589,7 @@ def _load_freesolv_sdf_dataset(
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="python -m scripts.process_freesolv")
+    parser = argparse.ArgumentParser(prog="python -m benchmarking.process_freesolv")
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--skip-moladt", dest="skip_moladt", action="store_true")

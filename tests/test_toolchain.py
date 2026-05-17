@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 
-from scripts import toolchain
+from benchmarking import toolchain
 
 
 def test_darwin_compiler_environment_uses_xcrun_and_sdkroot(monkeypatch) -> None:

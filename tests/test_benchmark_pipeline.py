@@ -12,7 +12,7 @@ from rdkit.Chem import AllChem
 from moladt.io.sdf import molecule_to_sdf, parse_sdf_record
 from moladt.io.smiles import parse_smiles
 
-from scripts.benchmark_zinc import (
+from benchmarking.benchmark_zinc import (
     _load_smiles_rows_with_timing,
     _measure_json_to_smiles,
     _measure_moladt_csv_to_moladt,
@@ -24,7 +24,7 @@ from scripts.benchmark_zinc import (
     _prepare_timing_library,
     _read_timing_library_manifest,
 )
-from scripts.download_data import (
+from benchmarking.download_data import (
     download_freesolv,
     download_qm9,
     download_zinc,
@@ -34,7 +34,7 @@ from scripts.download_data import (
     zinc_normalized_source_name,
     zinc_raw_dir,
 )
-from scripts.features import (
+from benchmarking.features import (
     FeatureTable,
     MOLADT_FEATURE_GROUPS,
     canonicalize_smiles,
@@ -44,11 +44,11 @@ from scripts.features import (
     featurize_moladt_featurized_records,
     featurize_moladt_smiles_dataframe,
 )
-from scripts.process_freesolv import FreeSolvArtifacts, process_freesolv_dataset
-from scripts.process_qm9 import process_qm9_dataset
-from scripts.run_all import _stan_methods_for_artifacts, _stan_models_for_artifacts, build_parser
-from scripts.splits import ExportedDataset, deterministic_split_indices, deterministic_split_partition, export_standardized_splits
-from scripts.stan_runner import build_stan_data, write_stan_data_json
+from benchmarking.process_freesolv import FreeSolvArtifacts, process_freesolv_dataset
+from benchmarking.process_qm9 import process_qm9_dataset
+from benchmarking.run_all import _stan_methods_for_artifacts, _stan_models_for_artifacts, build_parser
+from benchmarking.splits import ExportedDataset, deterministic_split_indices, deterministic_split_partition, export_standardized_splits
+from benchmarking.stan_runner import build_stan_data, write_stan_data_json
 
 
 def test_download_path_resolution_is_deterministic() -> None:
@@ -60,7 +60,7 @@ def test_download_path_resolution_is_deterministic() -> None:
 
 
 def test_download_freesolv_prefers_vendored_snapshot_when_metadata_is_present(tmp_path, monkeypatch) -> None:
-    import scripts.download_data as download_data
+    import benchmarking.download_data as download_data
 
     raw_dir = tmp_path / "raw"
     freesolv_dir = raw_dir / "freesolv"
@@ -84,7 +84,7 @@ def test_download_freesolv_prefers_vendored_snapshot_when_metadata_is_present(tm
 
 
 def test_download_freesolv_fetches_metadata_archive_when_vendored_snapshot_is_incomplete(tmp_path, monkeypatch) -> None:
-    import scripts.download_data as download_data
+    import benchmarking.download_data as download_data
 
     raw_dir = tmp_path / "raw"
     freesolv_dir = raw_dir / "freesolv"
@@ -123,7 +123,7 @@ def test_download_freesolv_fetches_metadata_archive_when_vendored_snapshot_is_in
 
 
 def test_download_qm9_prefers_vendored_snapshot(tmp_path, monkeypatch) -> None:
-    import scripts.download_data as download_data
+    import benchmarking.download_data as download_data
 
     raw_dir = tmp_path / "raw"
     qm9_dir = raw_dir / "qm9"
@@ -147,7 +147,7 @@ def test_download_qm9_prefers_vendored_snapshot(tmp_path, monkeypatch) -> None:
 
 
 def test_download_qm9_prefers_3d_conformer_sdf_over_other_archive_variants(tmp_path, monkeypatch) -> None:
-    import scripts.download_data as download_data
+    import benchmarking.download_data as download_data
 
     raw_dir = tmp_path / "raw"
     qm9_dir = raw_dir / "qm9"
@@ -170,7 +170,7 @@ def test_download_qm9_prefers_3d_conformer_sdf_over_other_archive_variants(tmp_p
 
 
 def test_download_qm9_refreshes_truncated_cached_copy_from_extracted_source(tmp_path, monkeypatch) -> None:
-    import scripts.download_data as download_data
+    import benchmarking.download_data as download_data
 
     raw_dir = tmp_path / "raw"
     qm9_dir = raw_dir / "qm9"
@@ -202,7 +202,7 @@ def test_download_qm9_refreshes_truncated_cached_copy_from_extracted_source(tmp_
 
 
 def test_download_zinc_prefers_vendored_snapshot(tmp_path, monkeypatch) -> None:
-    import scripts.download_data as download_data
+    import benchmarking.download_data as download_data
 
     raw_dir = tmp_path / "raw"
     zinc_dir = raw_dir / "zinc"
@@ -225,7 +225,7 @@ def test_download_zinc_prefers_vendored_snapshot(tmp_path, monkeypatch) -> None:
 
 
 def test_download_zinc_prefers_2d_csv_from_archive(tmp_path, monkeypatch) -> None:
-    import scripts.download_data as download_data
+    import benchmarking.download_data as download_data
 
     raw_dir = tmp_path / "raw"
     zinc_dir = raw_dir / "zinc"
@@ -247,7 +247,7 @@ def test_download_zinc_prefers_2d_csv_from_archive(tmp_path, monkeypatch) -> Non
 
 
 def test_download_zinc_gracefully_falls_back_from_3d_to_2d(tmp_path, monkeypatch) -> None:
-    import scripts.download_data as download_data
+    import benchmarking.download_data as download_data
 
     raw_dir = tmp_path / "raw"
     zinc_dir = raw_dir / "zinc"
@@ -349,7 +349,7 @@ def test_run_all_defaults_freesolv_to_single_best_model() -> None:
 
     args = build_parser().parse_args(["freesolv"])
 
-    assert _stan_models_for_artifacts(artifacts, args) == ("moladt_wl_system_gp",)
+    assert _stan_models_for_artifacts(artifacts, args) == ("moladt_full30_rbf_gp",)
 
 
 def test_run_all_defaults_qm9_to_single_best_model() -> None:
@@ -378,7 +378,7 @@ def test_run_all_defaults_qm9_to_single_best_model() -> None:
         metadata_path=Path("demo_metadata.json"),
         feature_csv_path=Path("demo_features.csv"),
     )
-    from scripts.process_qm9 import QM9Artifacts
+    from benchmarking.process_qm9 import QM9Artifacts
 
     qm9_artifacts = QM9Artifacts(
         processed_csv_path=Path("qm9_processed.csv"),
@@ -464,7 +464,7 @@ def test_run_all_defaults_qm9_to_single_best_algorithm() -> None:
         metadata_path=Path("demo_metadata.json"),
         feature_csv_path=Path("demo_features.csv"),
     )
-    from scripts.process_qm9 import QM9Artifacts
+    from benchmarking.process_qm9 import QM9Artifacts
 
     qm9_artifacts = QM9Artifacts(
         processed_csv_path=Path("qm9_processed.csv"),
@@ -483,7 +483,7 @@ def test_run_all_defaults_qm9_to_single_best_algorithm() -> None:
 
 
 def test_stan_data_serialization_round_trip(tmp_path, monkeypatch) -> None:
-    import scripts.splits as splits
+    import benchmarking.splits as splits
 
     monkeypatch.setattr(splits, "PROCESSED_DATA_DIR", tmp_path)
     rows = pd.DataFrame(
@@ -559,7 +559,7 @@ def test_featurize_moladt_featurized_records_adds_pair_angle_and_torsion_feature
 
 
 def test_prepare_timing_library_creates_matched_local_corpus(tmp_path, monkeypatch) -> None:
-    import scripts.benchmark_zinc as benchmark_zinc
+    import benchmarking.benchmark_zinc as benchmark_zinc
 
     processed_dir = tmp_path / "processed"
     monkeypatch.setattr(benchmark_zinc, "PROCESSED_DATA_DIR", processed_dir)
@@ -587,7 +587,7 @@ def test_prepare_timing_library_creates_matched_local_corpus(tmp_path, monkeypat
 
 
 def test_timing_library_parse_stages_succeed_on_matched_entries(tmp_path, monkeypatch) -> None:
-    import scripts.benchmark_zinc as benchmark_zinc
+    import benchmarking.benchmark_zinc as benchmark_zinc
 
     processed_dir = tmp_path / "processed"
     monkeypatch.setattr(benchmark_zinc, "PROCESSED_DATA_DIR", processed_dir)
@@ -676,8 +676,8 @@ def test_timing_library_parse_stages_succeed_on_matched_entries(tmp_path, monkey
 
 
 def test_process_freesolv_creates_processed_directory_before_writing(tmp_path, monkeypatch) -> None:
-    import scripts.process_freesolv as process_freesolv
-    import scripts.splits as splits
+    import benchmarking.process_freesolv as process_freesolv
+    import benchmarking.splits as splits
 
     processed_dir = tmp_path / "processed"
     monkeypatch.setattr(process_freesolv, "PROCESSED_DATA_DIR", processed_dir)
@@ -732,8 +732,8 @@ def test_process_freesolv_creates_processed_directory_before_writing(tmp_path, m
 
 
 def test_process_freesolv_exports_sdf_backed_moladt_featurized_bundle(tmp_path, monkeypatch) -> None:
-    import scripts.process_freesolv as process_freesolv
-    import scripts.splits as splits
+    import benchmarking.process_freesolv as process_freesolv
+    import benchmarking.splits as splits
 
     processed_dir = tmp_path / "processed"
     monkeypatch.setattr(process_freesolv, "PROCESSED_DATA_DIR", processed_dir)
@@ -821,8 +821,8 @@ def test_process_freesolv_exports_sdf_backed_moladt_featurized_bundle(tmp_path, 
 
 
 def test_process_freesolv_prefers_3d_conformer_sdf_when_multiple_variants_exist(tmp_path) -> None:
-    from scripts.download_data import FreeSolvDownloads
-    from scripts.process_freesolv import _load_freesolv_sdf_dataset
+    from benchmarking.download_data import FreeSolvDownloads
+    from benchmarking.process_freesolv import _load_freesolv_sdf_dataset
 
     repo_root = tmp_path / "FreeSolv-master"
     preferred_dir = repo_root / "sdffiles_3d"
@@ -852,8 +852,8 @@ def test_process_freesolv_prefers_3d_conformer_sdf_when_multiple_variants_exist(
 
 
 def test_process_qm9_creates_processed_directory_before_writing(tmp_path, monkeypatch) -> None:
-    import scripts.process_qm9 as process_qm9
-    import scripts.splits as splits
+    import benchmarking.process_qm9 as process_qm9
+    import benchmarking.splits as splits
 
     processed_dir = tmp_path / "processed"
     monkeypatch.setattr(process_qm9, "PROCESSED_DATA_DIR", processed_dir)
@@ -986,8 +986,8 @@ def test_process_qm9_creates_processed_directory_before_writing(tmp_path, monkey
 
 
 def test_process_qm9_fixed_contract_skips_legacy_smiles_exports(tmp_path, monkeypatch) -> None:
-    import scripts.process_qm9 as process_qm9
-    import scripts.splits as splits
+    import benchmarking.process_qm9 as process_qm9
+    import benchmarking.splits as splits
 
     processed_dir = tmp_path / "processed"
     monkeypatch.setattr(process_qm9, "PROCESSED_DATA_DIR", processed_dir)
@@ -1089,8 +1089,8 @@ def test_process_qm9_fixed_contract_skips_legacy_smiles_exports(tmp_path, monkey
 
 
 def test_qm9_long_split_uses_all_rows_fractionally(tmp_path, monkeypatch) -> None:
-    import scripts.process_qm9 as process_qm9
-    import scripts.splits as splits
+    import benchmarking.process_qm9 as process_qm9
+    import benchmarking.splits as splits
 
     processed_dir = tmp_path / "processed"
     monkeypatch.setattr(process_qm9, "PROCESSED_DATA_DIR", processed_dir)
@@ -1191,7 +1191,7 @@ def test_qm9_long_split_uses_all_rows_fractionally(tmp_path, monkeypatch) -> Non
 
 
 def test_load_freesolv_sdf_dataset_requires_database_json(tmp_path, monkeypatch) -> None:
-    import scripts.process_freesolv as process_freesolv
+    import benchmarking.process_freesolv as process_freesolv
 
     sdf_dir = tmp_path / "sdffiles"
     sdf_dir.mkdir(parents=True)
@@ -1212,8 +1212,8 @@ def test_load_freesolv_sdf_dataset_requires_database_json(tmp_path, monkeypatch)
 
 
 def test_find_freesolv_database_json_recurses_into_nested_snapshot(tmp_path) -> None:
-    from scripts.download_data import FreeSolvDownloads
-    from scripts.process_freesolv import _find_freesolv_database_json
+    from benchmarking.download_data import FreeSolvDownloads
+    from benchmarking.process_freesolv import _find_freesolv_database_json
 
     nested = tmp_path / "FreeSolv-master" / "FreeSolv-master" / "metadata"
     nested.mkdir(parents=True)
@@ -1226,8 +1226,8 @@ def test_find_freesolv_database_json_recurses_into_nested_snapshot(tmp_path) -> 
 
 
 def test_find_freesolv_sdf_paths_recurses_into_nested_snapshot(tmp_path) -> None:
-    from scripts.download_data import FreeSolvDownloads
-    from scripts.process_freesolv import _find_freesolv_sdf_paths
+    from benchmarking.download_data import FreeSolvDownloads
+    from benchmarking.process_freesolv import _find_freesolv_sdf_paths
 
     sdf_dir = tmp_path / "FreeSolv-master" / "FreeSolv-master" / "sdffiles" / "sdffiles"
     sdf_dir.mkdir(parents=True)
@@ -1240,8 +1240,8 @@ def test_find_freesolv_sdf_paths_recurses_into_nested_snapshot(tmp_path) -> None
 
 
 def test_find_freesolv_sdf_paths_prefers_vendored_sdffiles_when_metadata_archive_only_has_database_json(tmp_path) -> None:
-    from scripts.download_data import FreeSolvDownloads
-    from scripts.process_freesolv import _find_freesolv_sdf_paths
+    from benchmarking.download_data import FreeSolvDownloads
+    from benchmarking.process_freesolv import _find_freesolv_sdf_paths
 
     raw_root = tmp_path / "freesolv"
     vendored_sdf_dir = raw_root / "sdffiles"
@@ -1264,7 +1264,7 @@ def test_find_freesolv_sdf_paths_prefers_vendored_sdffiles_when_metadata_archive
 
 
 def test_freesolv_split_partition_matches_baseline_counts_for_full_dataset() -> None:
-    from scripts.process_freesolv import _freesolv_split_partition
+    from benchmarking.process_freesolv import _freesolv_split_partition
 
     partition = _freesolv_split_partition(642, seed=1)
 
@@ -1275,7 +1275,7 @@ def test_freesolv_split_partition_matches_baseline_counts_for_full_dataset() -> 
 
 
 def test_freesolv_split_partition_scales_baseline_counts_when_rows_are_missing() -> None:
-    from scripts.process_freesolv import _freesolv_split_partition
+    from benchmarking.process_freesolv import _freesolv_split_partition
 
     partition = _freesolv_split_partition(186, seed=1)
 

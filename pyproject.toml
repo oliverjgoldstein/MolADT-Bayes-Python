@@ -28,7 +28,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-ml = [
+benchmarking = [
   "catboost>=1.2",
 ]
 geom = [
@@ -47,7 +47,7 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["moladt*", "experiments*"]
+include = ["moladt*", "experiments*", "benchmarking*"]
 
 [tool.setuptools.package-data]
 moladt = ["stan/*.stan"]

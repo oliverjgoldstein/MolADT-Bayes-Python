@@ -243,7 +243,7 @@ def download_zinc(*, dataset_size: str = "250K", dataset_dimension: str = "2D", 
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="python -m scripts.download_data")
+    parser = argparse.ArgumentParser(prog="python -m benchmarking.download_data")
     parser.add_argument("dataset", choices=["freesolv", "qm9", "zinc", "all"])
     parser.add_argument("--dataset-size", default="250K")
     parser.add_argument("--dataset-dimension", default="2D")

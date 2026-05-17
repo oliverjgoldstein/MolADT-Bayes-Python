@@ -26,14 +26,14 @@ from moladt.chem.validate import ValidationError, used_electrons_at, validate_mo
 from moladt.examples.sample_molecules import methane, water
 from moladt.io import molecule_from_dict, molecule_to_json_bytes, read_sdf
 from moladt.viewer import molecule_viewer_uri, open_molecule_viewer, write_molecule_viewer_collection_html
-from scripts.common import PROCESSED_DATA_DIR, PROJECT_ROOT, configured_results_dir, ensure_directory
-from scripts.freesolv_wl_system_gp import (
+from benchmarking.common import PROCESSED_DATA_DIR, PROJECT_ROOT, configured_results_dir, ensure_directory
+from benchmarking.freesolv_small_feature_gp import (
     DEFAULT_SINGLE_SPLIT_SEED as DEFAULT_FREESOLV_MODEL_SEED,
-    METHOD_NAME as WL_SYSTEM_METHOD_NAME,
-    MODEL_NAME as WL_SYSTEM_MODEL_NAME,
-    WLSystemPredictorState,
-    load_wl_system_predictor_state,
-    predict_with_wl_system_state,
+    METHOD_NAME as SMALL_FEATURE_METHOD_NAME,
+    MODEL_NAMES as SMALL_FEATURE_MODEL_NAMES,
+    SmallFeaturePredictorState,
+    load_small_feature_predictor_state,
+    predict_with_small_feature_state,
 )
 
 
@@ -58,8 +58,9 @@ _FREESOLV_PRIOR_CACHE: tuple[Molecule, ...] | None = None
 
 FREESOLV_TARGET_PREFIX = "freesolv_moladt_featurized"
 FREESOLV_RESULTS_DIR = PROJECT_ROOT / "results" / "freesolv"
-MODEL_NAME = WL_SYSTEM_MODEL_NAME
-METHOD_NAME = WL_SYSTEM_METHOD_NAME
+FREESOLV_ABLATION_RESULTS_DIR = PROJECT_ROOT / "results" / "freesolv_ablation"
+MODEL_NAME = SMALL_FEATURE_MODEL_NAMES["full_moladt"]
+METHOD_NAME = SMALL_FEATURE_METHOD_NAME
 TARGET_NAME = "expt"
 
 ALLOWED_FREE_SOLV_SYMBOLS = (
@@ -202,7 +203,7 @@ class SearchResult:
 
 @dataclass(frozen=True, slots=True)
 class FreeSolvBayesianPredictor:
-    state: WLSystemPredictorState
+    state: SmallFeaturePredictorState
     parameter_source_path: Path
     draw_source_path: Path
     model_name: str = MODEL_NAME
@@ -211,16 +212,16 @@ class FreeSolvBayesianPredictor:
     @classmethod
     def load(cls) -> FreeSolvBayesianPredictor:
         model_dir = _find_model_dir()
-        seed = _load_wl_system_seed(model_dir)
-        state = load_wl_system_predictor_state(seed=seed)
+        seed = _load_small_feature_seed(model_dir)
+        state = load_small_feature_predictor_state(seed=seed)
         return cls(
             state=state,
-            parameter_source_path=model_dir / "details" / "model_coefficients.csv",
-            draw_source_path=model_dir / "details" / "model_artifacts.csv",
+            parameter_source_path=_artifact_path(model_dir, "model_coefficients.csv"),
+            draw_source_path=_artifact_path(model_dir, "model_artifacts.csv"),
         )
 
     def predict(self, molecule: Molecule) -> Prediction:
-        mean, sd = predict_with_wl_system_state(self.state, molecule)
+        mean, sd = predict_with_small_feature_state(self.state, molecule)
         return Prediction(mean=mean, sd=sd)
 
 
@@ -1234,30 +1235,43 @@ def _bayesian_credible_score_percent(score: float) -> float:
 def _find_model_dir() -> Path:
     run_dirs = tuple(
         sorted(
-            (path for path in FREESOLV_RESULTS_DIR.glob("run_*") if path.is_dir()),
+            (
+                path
+                for results_dir in (FREESOLV_RESULTS_DIR, FREESOLV_ABLATION_RESULTS_DIR)
+                for path in results_dir.glob("run_*")
+                if path.is_dir()
+            ),
             key=lambda path: path.name,
         )
     )
     if not run_dirs:
-        raise FileNotFoundError(f"Missing FreeSolv result runs under {FREESOLV_RESULTS_DIR}")
+        searched = ", ".join(str(path) for path in (FREESOLV_RESULTS_DIR, FREESOLV_ABLATION_RESULTS_DIR))
+        raise FileNotFoundError(f"Missing FreeSolv result runs under {searched}")
 
     model_dir = run_dirs[-1]
-    coefficients_path = model_dir / "details" / "model_coefficients.csv"
+    coefficients_path = _artifact_path(model_dir, "model_coefficients.csv")
     if not coefficients_path.exists():
         raise FileNotFoundError(
-            "Latest FreeSolv run is missing the MolADT WL + bonding-system GP coefficient artifact: "
+            "Latest FreeSolv run is missing the MolADT small-feature GP coefficient artifact: "
             f"{coefficients_path}"
         )
-    if not _run_contains_wl_system_model(model_dir):
+    if not _run_contains_small_feature_model(model_dir):
         raise FileNotFoundError(
-            "Latest FreeSolv run is not the MolADT WL + bonding-system GP model. "
+            "Latest FreeSolv run is not the MolADT small-feature GP model. "
             f"Expected {MODEL_NAME}/{METHOD_NAME} in {coefficients_path}"
         )
     return model_dir
 
 
-def _run_contains_wl_system_model(model_dir: Path) -> bool:
-    coefficients_path = model_dir / "details" / "model_coefficients.csv"
+def _artifact_path(model_dir: Path, filename: str) -> Path:
+    details_path = model_dir / "details" / filename
+    if details_path.exists():
+        return details_path
+    return model_dir / filename
+
+
+def _run_contains_small_feature_model(model_dir: Path) -> bool:
+    coefficients_path = _artifact_path(model_dir, "model_coefficients.csv")
     try:
         coefficients = pd.read_csv(coefficients_path)
     except pd.errors.EmptyDataError:
@@ -1267,15 +1281,15 @@ def _run_contains_wl_system_model(model_dir: Path) -> bool:
         return False
     rows = coefficients.loc[
         (coefficients["dataset"] == "freesolv")
-        & (coefficients["representation"] == "moladt")
+        & (coefficients["representation"] == "moladt_small_descriptors")
         & (coefficients["model"] == MODEL_NAME)
         & (coefficients["method"] == METHOD_NAME)
     ]
     return not rows.empty
 
 
-def _load_wl_system_seed(model_dir: Path) -> int:
-    artifacts_path = model_dir / "details" / "model_artifacts.csv"
+def _load_small_feature_seed(model_dir: Path) -> int:
+    artifacts_path = _artifact_path(model_dir, "model_artifacts.csv")
     if not artifacts_path.exists():
         return DEFAULT_FREESOLV_MODEL_SEED
     try:
@@ -1287,7 +1301,7 @@ def _load_wl_system_seed(model_dir: Path) -> int:
         return DEFAULT_FREESOLV_MODEL_SEED
     rows = artifacts.loc[
         (artifacts["dataset"] == "freesolv")
-        & (artifacts["representation"] == "moladt")
+        & (artifacts["representation"] == "moladt_small_descriptors")
         & (artifacts["model"] == MODEL_NAME)
         & (artifacts["method"] == METHOD_NAME)
     ]

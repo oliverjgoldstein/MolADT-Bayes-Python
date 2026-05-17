@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.features import compute_moladt_featurized_descriptors
+from benchmarking.features import compute_moladt_featurized_descriptors
 
 from moladt.chem.dietz import AtomId, Edge, NonNegative, SystemId, mk_bonding_system
 from moladt.chem.molecule import AtomicSymbol, Molecule, molecule_edges

@@ -14,7 +14,7 @@ formal charge on the atoms.
 
 | Folder | Produced by |
 | --- | --- |
-| `freesolv/` | `make freesolv` |
+| `freesolv_ablation/` | `make freesolv-ablation` |
 | `inverse_design/` | `make inverse-design TARGET=-5.0` |
 | `qm9/` | `make qm9long` |
 | `timing/` | `make timing` |
@@ -24,5 +24,14 @@ formal charge on the atoms.
 - FreeSolv keeps compact benchmark outputs and model artifacts.
 - QM9 and timing keep paper-facing SVGs and captions.
 - Inverse design keeps reference molecule exports under `inverse_design/reference/`.
+
+Current FreeSolv reference:
+
+```text
+results/freesolv_ablation/run_20260512_small_feature_ablation/
+```
+
+That run is the 20-split A/B/C small-feature ablation. The full MolADT
+`moladt_full30_rbf_gp` row reports `1.308 +/- 0.461` kcal/mol test RMSE.
 
 For file names, see [docs/outputs.md](../docs/outputs.md). For benchmark meaning, see [docs/inference-and-benchmarks.md](../docs/inference-and-benchmarks.md).

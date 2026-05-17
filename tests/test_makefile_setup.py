@@ -63,7 +63,7 @@ def test_makefile_benchmark_defaults_to_verbose_output(tmp_path: Path) -> None:
         check=True,
     )
 
-    assert "./.venv/bin/python -m scripts.run_all benchmark" in result.stdout
+    assert "./.venv/bin/python -m benchmarking.run_all benchmark" in result.stdout
     assert "Running combined MolADT benchmark bundle." in result.stdout
     assert "--paper-mode" in result.stdout
     assert "--qm9-split-mode long" in result.stdout
@@ -84,9 +84,9 @@ def test_makefile_freesolv_target_prints_verbose_context(tmp_path: Path) -> None
 
     assert "Running reviewer-facing FreeSolv comparison." in result.stdout
     assert "paper baseline: MoleculeNet MPNN RMSE 1.15" in result.stdout
-    assert "./.venv/bin/python -m scripts.run_all freesolv" in result.stdout
+    assert "./.venv/bin/python -m benchmarking.run_all freesolv" in result.stdout
     assert "methods: empirical_bayes_exact_gp" in result.stdout
-    assert "models: moladt_wl_system_gp" in result.stdout
+    assert "models: moladt_full30_rbf_gp" in result.stdout
 
 
 def test_makefile_freesolv_20split_target_prints_output_contract(tmp_path: Path) -> None:
@@ -100,11 +100,11 @@ def test_makefile_freesolv_20split_target_prints_output_contract(tmp_path: Path)
         check=True,
     )
 
-    assert "Running FreeSolv 20-split MolADT WL + bonding-system GP." in result.stdout
+    assert "Running FreeSolv 20-split full MolADT small-feature GP." in result.stdout
     assert "split_count: 20" in result.stdout
     assert "seed_start: 0" in result.stdout
-    assert "results/freesolv_20split/run_" in result.stdout
-    assert "./.venv/bin/python -m scripts.freesolv_wl_system_gp --split-count 20 --seed-start 0" in result.stdout
+    assert "results/freesolv_small_feature_gp/run_" in result.stdout
+    assert "./.venv/bin/python -m benchmarking.freesolv_small_feature_gp --model full_moladt --split-count 20 --seed-start 0" in result.stdout
 
 
 def test_makefile_freesolv_ablation_target_prints_output_contract(tmp_path: Path) -> None:
@@ -119,11 +119,11 @@ def test_makefile_freesolv_ablation_target_prints_output_contract(tmp_path: Path
     )
 
     assert "Running FreeSolv A/B/C MolADT representation ablation." in result.stdout
-    assert "variants: A atom bag; B standard covalent graph WL; C full MolADT" in result.stdout
+    assert "variants: atom bag; SMILES adjacency graph; full MolADT" in result.stdout
     assert "split_count: 20" in result.stdout
     assert "seed_start: 0" in result.stdout
     assert "results/freesolv_ablation/run_" in result.stdout
-    assert "./.venv/bin/python -m scripts.freesolv_representation_ablation --split-count 20 --seed-start 0" in result.stdout
+    assert "./.venv/bin/python -m benchmarking.freesolv_representation_ablation --split-count 20 --seed-start 0" in result.stdout
 
 
 def test_makefile_inverse_design_target_uses_target_and_seed_flags(tmp_path: Path) -> None:
@@ -138,7 +138,7 @@ def test_makefile_inverse_design_target_uses_target_and_seed_flags(tmp_path: Pat
     )
 
     assert "Running reviewer-facing FreeSolv inverse design." in result.stdout
-    assert "model: latest results/freesolv/run_* MolADT WL + bonding-system GP artifact" in result.stdout
+    assert "model: latest FreeSolv moladt_full30_rbf_gp artifact" in result.stdout
     assert "cli_flags: --target, --seed-molecule, --open-viewer, --viewer-count" in result.stdout
     assert "seed_molecule: freesolv-prior" in result.stdout
     assert "open_viewer: 0" in result.stdout
@@ -371,7 +371,7 @@ def test_makefile_qm9_target_prints_recovered_predictive_path(tmp_path: Path) ->
 
     assert "Running reviewer-facing QM9 comparison." in result.stdout
     assert "paper baseline: MoleculeNet DTNN MAE 2.35" in result.stdout
-    assert "./.venv/bin/python -m scripts.run_all qm9" in result.stdout
+    assert "./.venv/bin/python -m benchmarking.run_all qm9" in result.stdout
     assert "qm9_split_mode: long" in result.stdout
     assert "qm9_limit: full-local-download" in result.stdout
     assert "target_property: mu (dipole moment)" in result.stdout
@@ -471,8 +471,8 @@ def test_makefile_catboost_geom_model_target_writes_model_results_subdirectory(t
         check=True,
     )
 
-    assert re.search(r"MOLADT_RESULTS_DIR=results/models/paper/run_\d{8}_\d{6}", result.stdout)
-    assert "./.venv/bin/python -m scripts.run_all models" in result.stdout
+    assert re.search(r"MOLADT_RESULTS_DIR=results/benchmarking/models/paper/run_\d{8}_\d{6}", result.stdout)
+    assert "./.venv/bin/python -m benchmarking.run_all benchmarking" in result.stdout
 
 
 def test_makefile_catboost_geom_model_paper_target_uses_paper_results_subdirectory(tmp_path: Path) -> None:
@@ -487,7 +487,7 @@ def test_makefile_catboost_geom_model_paper_target_uses_paper_results_subdirecto
     )
 
     assert "catboost-geom-model INFERENCE_PRESET=paper QM9_LIMIT= QM9_SPLIT_MODE=paper" in result.stdout
-    assert re.search(r"MOLADT_RESULTS_DIR=results/models/paper/run_\d{8}_\d{6}", result.stdout)
+    assert re.search(r"MOLADT_RESULTS_DIR=results/benchmarking/models/paper/run_\d{8}_\d{6}", result.stdout)
 
 
 def test_makefile_timing_target_writes_timing_results_subdirectory(tmp_path: Path) -> None:
@@ -502,7 +502,7 @@ def test_makefile_timing_target_writes_timing_results_subdirectory(tmp_path: Pat
     )
 
     assert re.search(r"MOLADT_RESULTS_DIR=results/timing/paper/run_\d{8}_\d{6}", result.stdout)
-    assert "./.venv/bin/python -m scripts.run_all zinc-timing" in result.stdout
+    assert "./.venv/bin/python -m benchmarking.run_all zinc-timing" in result.stdout
     assert "--include-moladt" in result.stdout
 
 
@@ -588,7 +588,7 @@ def test_makefile_cmdstan_install_uses_xcrun_toolchain_on_darwin(tmp_path: Path)
     assert 'CC="/apple/clang"' in result.stdout
     assert 'CXX="/apple/clang++"' in result.stdout
     assert 'SDKROOT="/apple/sdk"' in result.stdout
-    assert "./.venv/bin/python -m scripts.install_cmdstan" in result.stdout
+    assert "./.venv/bin/python -m benchmarking.install_cmdstan" in result.stdout
 
 
 def test_makefile_prints_windows_style_activate_hint(tmp_path: Path) -> None:

@@ -9,13 +9,13 @@ import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
-from scripts.features import FeatureTable, featurize_moladt_featurized_geometry_records, featurize_moladt_geometry_records
-from scripts.geometry_runner import GeometryRunConfig, _geometry_defaults, _import_geometry_stack, _train_member, run_geometry_ensemble
-from scripts.model_errors import OptionalModelDependencyError
-from scripts.model_registry import RegisteredModel
-from scripts.run_all import _extend_with_property_results, _parse_extra_models, _uses_sdf_only_qm9_predictive_contract, build_parser
-from scripts.splits import export_geometric_splits, export_standardized_splits
-from scripts.tabular_runner import CATBOOST_METHOD, CATBOOST_MODEL, CatBoostRunConfig, run_catboost_uncertainty
+from benchmarking.features import FeatureTable, featurize_moladt_featurized_geometry_records, featurize_moladt_geometry_records
+from benchmarking.geometry_runner import GeometryRunConfig, _geometry_defaults, _import_geometry_stack, _train_member, run_geometry_ensemble
+from benchmarking.model_errors import OptionalModelDependencyError
+from benchmarking.model_registry import RegisteredModel
+from benchmarking.run_all import _extend_with_property_results, _parse_extra_models, _uses_sdf_only_qm9_predictive_contract, build_parser
+from benchmarking.splits import export_geometric_splits, export_standardized_splits
+from benchmarking.tabular_runner import CATBOOST_METHOD, CATBOOST_MODEL, CatBoostRunConfig, run_catboost_uncertainty
 
 
 def test_run_all_parser_accepts_optional_model_flags() -> None:
@@ -42,10 +42,10 @@ def test_run_all_parser_accepts_optional_model_flags() -> None:
     assert args.skip_geom is True
 
 
-def test_run_all_models_parser_defaults_to_models_command() -> None:
-    args = build_parser().parse_args(["models", "--verbose"])
+def test_run_all_benchmarking_parser_defaults_to_benchmarking_command() -> None:
+    args = build_parser().parse_args(["benchmarking", "--verbose"])
 
-    assert args.command == "models"
+    assert args.command == "benchmarking"
     assert args.include_moladt_predictive is True
     assert args.qm9_split_mode == "long"
 
@@ -57,8 +57,8 @@ def test_run_all_qm9_parser_defaults_to_long_split() -> None:
     assert args.split_mode == "long"
 
 
-def test_models_command_defaults_include_both_geometry_families() -> None:
-    args = build_parser().parse_args(["models"])
+def test_benchmarking_command_defaults_include_both_geometry_families() -> None:
+    args = build_parser().parse_args(["benchmarking"])
 
     assert _parse_extra_models(args) == ("catboost_uncertainty", "visnet_ensemble", "dimenetpp_ensemble")
 
@@ -79,7 +79,7 @@ def test_qm9_predictive_contract_is_sdf_only() -> None:
 
 
 def test_moladt_geometry_export_creation(tmp_path, monkeypatch) -> None:
-    import scripts.splits as splits
+    import benchmarking.splits as splits
 
     monkeypatch.setattr(splits, "PROCESSED_DATA_DIR", tmp_path)
     molecule = Chem.AddHs(Chem.MolFromSmiles("CCO"))
@@ -115,7 +115,7 @@ def test_moladt_geometry_export_creation(tmp_path, monkeypatch) -> None:
 
 
 def test_moladt_featurized_geometry_export_creation(tmp_path, monkeypatch) -> None:
-    import scripts.splits as splits
+    import benchmarking.splits as splits
 
     monkeypatch.setattr(splits, "PROCESSED_DATA_DIR", tmp_path)
     molecule = Chem.AddHs(Chem.MolFromSmiles("CCO"))
@@ -153,8 +153,8 @@ def test_moladt_featurized_geometry_export_creation(tmp_path, monkeypatch) -> No
 
 
 def test_catboost_runner_outputs_expected_schema(tmp_path, monkeypatch) -> None:
-    import scripts.splits as splits
-    import scripts.tabular_runner as tabular_runner
+    import benchmarking.splits as splits
+    import benchmarking.tabular_runner as tabular_runner
 
     monkeypatch.setattr(splits, "PROCESSED_DATA_DIR", tmp_path / "processed")
     monkeypatch.setattr(tabular_runner, "RESULTS_DIR", tmp_path / "results")
@@ -215,7 +215,7 @@ def test_catboost_runner_outputs_expected_schema(tmp_path, monkeypatch) -> None:
 
 
 def test_extend_with_property_results_skips_missing_optional_geometry_dependency(monkeypatch) -> None:
-    import scripts.run_all as run_all
+    import benchmarking.run_all as run_all
 
     def failing_geometry_runner(*args, **kwargs):
         raise OptionalModelDependencyError("Geometry extension stack is incomplete.")
@@ -270,7 +270,7 @@ def test_extend_with_property_results_skips_missing_optional_geometry_dependency
 
 
 def test_extend_with_property_results_skips_smiles_tabular_bundle(monkeypatch) -> None:
-    import scripts.run_all as run_all
+    import benchmarking.run_all as run_all
 
     seen_representations: list[str] = []
 
@@ -324,7 +324,7 @@ def test_extend_with_property_results_skips_smiles_tabular_bundle(monkeypatch) -
 
 
 def test_extend_with_property_results_prefers_requested_qm9_geometry_representation(monkeypatch) -> None:
-    import scripts.run_all as run_all
+    import benchmarking.run_all as run_all
 
     seen_representations: list[str] = []
 
@@ -381,7 +381,7 @@ def test_extend_with_property_results_prefers_requested_qm9_geometry_representat
 
 
 def test_dimenet_reports_missing_torch_sparse_dependency(monkeypatch) -> None:
-    import scripts.geometry_runner as geometry_runner
+    import benchmarking.geometry_runner as geometry_runner
 
     def fake_import_module(name: str):
         if name == "torch_sparse":
@@ -395,7 +395,7 @@ def test_dimenet_reports_missing_torch_sparse_dependency(monkeypatch) -> None:
 
 
 def test_train_member_logs_every_epoch(monkeypatch, capsys) -> None:
-    import scripts.geometry_runner as geometry_runner
+    import benchmarking.geometry_runner as geometry_runner
 
     torch = pytest.importorskip("torch")
 
@@ -460,7 +460,7 @@ def test_train_member_logs_every_epoch(monkeypatch, capsys) -> None:
 
 
 def test_train_member_stops_immediately_on_nan_validation_and_restores_best(monkeypatch) -> None:
-    import scripts.geometry_runner as geometry_runner
+    import benchmarking.geometry_runner as geometry_runner
 
     torch = pytest.importorskip("torch")
 
@@ -534,7 +534,7 @@ def test_qm9_geometry_defaults_use_25_epochs() -> None:
 
 
 def test_run_geometry_ensemble_uses_unshuffled_train_loader_for_metrics(monkeypatch) -> None:
-    import scripts.geometry_runner as geometry_runner
+    import benchmarking.geometry_runner as geometry_runner
 
     torch = pytest.importorskip("torch")
 

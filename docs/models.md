@@ -1,6 +1,6 @@
-# Models
+# Benchmarking Models
 
-Models do not consume SMILES strings directly. They consume numeric features exported from typed MolADT molecules.
+Benchmarking models consume small numeric feature tables. The current FreeSolv benchmark keeps the SMILES graph baseline separate from the MolADT-only descriptor additions.
 
 ## Main Commands
 
@@ -16,41 +16,23 @@ make timing
 
 Current path:
 
-- representation: `moladt`
-- model: `moladt_wl_system_gp`
+- representation: `moladt_small_descriptors`
+- model: `moladt_full30_rbf_gp`
 - method: empirical-Bayes exact GP
 - target: hydration free energy, `expt`
 
-The GP uses only the parsed MolADT representation. It vectorizes Weisfeiler-Lehman graph tokens and Dietz bonding-system tokens, then fits a weighted Tanimoto-kernel exact GP on the deterministic seed-18 FreeSolv split.
+The GP uses 30 named features: 20 features from a SMILES-decoded adjacency graph and 10 MolADT descriptor extensions. It fits an RBF-kernel exact GP on the deterministic seed-18 FreeSolv split.
 
-The token features include:
-
-- element
-- formal charge
-- shell and orbital occupancy
-- shared electrons
-- effective bond order
-- bonding-system overlap counts
-- bonding-system kind, including covalent, ionic, bridge, pi, and coordination tags
-
-The exact sparse token vocabulary is listed in
-[FreeSolv GP feature list](freesolv-gp-feature-list.md), with a
-feature-by-feature plain-English companion in
-[FreeSolv GP feature translations](freesolv-gp-feature-layman.md).
+The feature manifest is written to `feature_manifest.csv` for every repeated-split run.
 
 The fitted kernel is:
 
 ```text
 k(x, x') =
-  w_all    * Tanimoto(WL + bonding-system tokens)
-  + w_sys  * Tanimoto(bonding-system tokens)
-  + w_wl   * Tanimoto(WL graph tokens)
+  signal_variance * exp(-||z(x) - z(x')||^2 / (2 * lengthscale^2))
 ```
 
-Tanimoto is used because these are sparse non-negative token counts. It measures
-shared token support relative to the active-token union, which is a better match
-to the representation than Euclidean distance over a standardized descriptor
-table.
+`z(x)` is the standardized small-feature vector.
 
 The benchmark writes predictive metrics, predictions, fitted kernel weights, target scaling, and noise variance under `results/freesolv/run_<timestamp>/details/`.
 
@@ -63,7 +45,7 @@ make freesolv-20split
 ```
 
 That target writes split-level metrics and the exact molecule assignments under
-`results/freesolv_20split/run_<timestamp>/`.
+`results/freesolv_small_feature_gp/run_<timestamp>/`.
 
 For the representation ablation, run:
 
@@ -71,22 +53,20 @@ For the representation ablation, run:
 make freesolv-ablation
 ```
 
-That target writes `metrics_by_seed.csv`, `summary.csv`, and
-`paired_against_full.csv` under `results/freesolv_ablation/run_<timestamp>/`.
-The A/B/C ladder is the main empirical test of the Dietz claim:
+That target writes `predictive_metrics.csv`, `summary.csv`,
+`paired_against_full_moladt.csv`, `feature_manifest.csv`, and
+`freesolv_small_feature_ablation.svg` under
+`results/freesolv_ablation/run_<timestamp>/`. The ladder is:
 
-- A is an atom bag: atom labels only, no connectivity.
-- B is a standard covalent graph WL encoding: atom labels plus ordinary
-  covalent bond-order edges labelled as `single_covalent`, `double_covalent`,
-  `triple_covalent`, `quadruple_covalent`, or `aromatic_covalent`.
-- C is the full MolADT encoding: WL edge labels include Dietz-derived
-  edge/system information and a separate bonding-system token view.
+- atom bag: 10 SMILES atom-count features
+- SMILES adjacency graph: the atom bag plus bond counts, component count, cycle rank, and degree summaries
+- full MolADT: the SMILES graph features plus 10 MolADT descriptor additions
 
 | Label | Variant | Meaning | Test RMSE |
 | --- | --- | --- | ---: |
-| A | atom bag | atoms only, no connectivity | `1.857 +/- 0.361` |
-| B | standard covalent graph WL | atom labels plus a standard covalent bond-order adjacency graph | `1.049 +/- 0.142` |
-| C | full MolADT | Dietz edge labels plus explicit bonding-system tokens | `0.904 +/- 0.168` |
+| A | atom bag | 10 SMILES atom-count features | `1.971 +/- 0.567` |
+| B | SMILES adjacency graph | 20 graph-only features | `1.791 +/- 0.505` |
+| C | full MolADT | 30 features: graph baseline plus MolADT descriptors | `1.308 +/- 0.461` |
 
 This table is preferred over the legacy RBF descriptor comparison because it
 isolates the representation question directly: ordinary graph structure versus
@@ -95,7 +75,7 @@ explicit Dietz bonding systems.
 Feature example:
 
 ```python
-from scripts.features import compute_moladt_featurized_descriptors
+from benchmarking.features import compute_moladt_featurized_descriptors
 from moladt.examples import ferrocene_pretty
 
 features = compute_moladt_featurized_descriptors(ferrocene_pretty)
@@ -144,7 +124,7 @@ The key point: all features are computed from the typed `Molecule`, not from a l
 
 ## Registered Model Names
 
-- `moladt_wl_system_gp`
+- `moladt_full30_rbf_gp`
 - `bayes_linear_student_t`
 - `bayes_hierarchical_shrinkage`
 - `catboost_uncertainty`

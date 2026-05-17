@@ -58,7 +58,7 @@ def _set_cmdstan_path(version_dir: Path) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="python -m scripts.install_cmdstan")
+    parser = argparse.ArgumentParser(prog="python -m benchmarking.install_cmdstan")
     parser.add_argument("--version", default=DEFAULT_CMDSTAN_VERSION)
     parser.add_argument("--force", action="store_true")
     return parser

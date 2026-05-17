@@ -431,7 +431,7 @@ def _build_qm9_aligned_frame(
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="python -m scripts.process_qm9")
+    parser = argparse.ArgumentParser(prog="python -m benchmarking.process_qm9")
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--limit", type=int, default=None)

@@ -16,11 +16,10 @@ from .model_errors import OptionalModelDependencyError
 from .model_registry import GEOMETRIC_MODEL_REGISTRY, TABULAR_MODEL_REGISTRY
 from .process_freesolv import FreeSolvArtifacts, process_freesolv_dataset
 from .process_qm9 import QM9Artifacts, process_qm9_dataset
-from .freesolv_wl_system_gp import (
-    DEFAULT_SINGLE_SPLIT_SEED as DEFAULT_FREESOLV_WL_SYSTEM_SEED,
-    METHOD_NAME as FREESOLV_WL_SYSTEM_METHOD,
-    MODEL_NAME as FREESOLV_WL_SYSTEM_MODEL,
-    run_freesolv_wl_system_gp,
+from .freesolv_small_feature_gp import (
+    METHOD_NAME as FREESOLV_SMALL_FEATURE_METHOD,
+    MODEL_NAMES as FREESOLV_SMALL_FEATURE_MODEL_NAMES,
+    run_freesolv_small_feature_gp_splits,
 )
 from .predictive_metrics import aggregate_seed_metrics, build_calibration_rows
 from .report_graphs import (
@@ -35,22 +34,23 @@ DEFAULT_STAN_METHODS = tuple(ALL_METHODS)
 DEFAULT_STAN_METHODS_ARG = ",".join(DEFAULT_STAN_METHODS)
 DEFAULT_STAN_MODELS = ("bayes_linear_student_t", "bayes_hierarchical_shrinkage")
 DEFAULT_STAN_MODELS_ARG = ",".join(DEFAULT_STAN_MODELS)
-DEFAULT_FREESOLV_MODELS = (FREESOLV_WL_SYSTEM_MODEL,)
+DEFAULT_FREESOLV_SMALL_FEATURE_SEED = 18
+DEFAULT_FREESOLV_MODELS = (FREESOLV_SMALL_FEATURE_MODEL_NAMES["full_moladt"],)
 DEFAULT_FREESOLV_MODELS_ARG = ",".join(DEFAULT_FREESOLV_MODELS)
 DEFAULT_QM9_STAN_METHODS = ("optimize",)
 DEFAULT_QM9_STAN_MODELS = ("bayes_linear_student_t",)
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="python -m scripts.run_all")
+    parser = argparse.ArgumentParser(prog="python -m benchmarking.run_all")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     freesolv = subparsers.add_parser("freesolv", help="Run the FreeSolv benchmark")
     _add_common_benchmark_args(freesolv)
     freesolv.set_defaults(
-        seed=DEFAULT_FREESOLV_WL_SYSTEM_SEED,
+        seed=DEFAULT_FREESOLV_SMALL_FEATURE_SEED,
         models=DEFAULT_FREESOLV_MODELS_ARG,
-        methods=FREESOLV_WL_SYSTEM_METHOD,
+        methods=FREESOLV_SMALL_FEATURE_METHOD,
     )
     freesolv.add_argument("--include-moladt-predictive", action="store_true")
     freesolv.add_argument("--skip-moladt", dest="skip_moladt", action="store_true")
@@ -82,13 +82,13 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark.add_argument("--skip-sdf", dest="skip_moladt", action="store_true", help=argparse.SUPPRESS)
     benchmark.add_argument("--include-moladt", action="store_true")
 
-    models = subparsers.add_parser("models", help="Run the predictive model suite and write per-model folders")
-    _add_common_benchmark_args(models)
-    models.add_argument("--qm9-limit", type=int, default=None)
-    models.add_argument("--qm9-split-mode", choices=("subset", "paper", "long"), default="long")
-    models.add_argument("--include-moladt-predictive", action="store_true", default=True)
-    models.add_argument("--skip-moladt", dest="skip_moladt", action="store_true")
-    models.add_argument("--skip-sdf", dest="skip_moladt", action="store_true", help=argparse.SUPPRESS)
+    benchmarking = subparsers.add_parser("benchmarking", help="Run the predictive model suite inside the benchmarking section")
+    _add_common_benchmark_args(benchmarking)
+    benchmarking.add_argument("--qm9-limit", type=int, default=None)
+    benchmarking.add_argument("--qm9-split-mode", choices=("subset", "paper", "long"), default="long")
+    benchmarking.add_argument("--include-moladt-predictive", action="store_true", default=True)
+    benchmarking.add_argument("--skip-moladt", dest="skip_moladt", action="store_true")
+    benchmarking.add_argument("--skip-sdf", dest="skip_moladt", action="store_true", help=argparse.SUPPRESS)
     return parser
 
 
@@ -103,7 +103,7 @@ def _add_common_benchmark_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--models",
         default=DEFAULT_STAN_MODELS_ARG,
-        help="Comma-separated model names. FreeSolv defaults to moladt_wl_system_gp.",
+        help="Comma-separated model names. FreeSolv defaults to moladt_full30_rbf_gp.",
     )
     parser.add_argument("--sample-chains", type=int, default=2)
     parser.add_argument("--sample-warmup", type=int, default=200)
@@ -271,7 +271,7 @@ def main(argv: list[str] | None = None) -> int:
             extra_models,
             args,
         )
-    elif args.command == "models":
+    elif args.command == "benchmarking":
         qm9_limit = None if args.full_qm9 or args.paper_mode else args.qm9_limit
         qm9_split_mode = "paper" if args.paper_mode else args.qm9_split_mode
         if args.verbose:
@@ -327,7 +327,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if metrics_rows:
         if args.verbose:
-            total_stages = 2 if args.command in {"freesolv", "qm9", "models"} else 3 if args.command == "benchmark" else 1
+            total_stages = 2 if args.command in {"freesolv", "qm9", "benchmarking"} else 3 if args.command == "benchmark" else 1
             log_stage(
                 "benchmark",
                 total_stages,
@@ -415,9 +415,10 @@ def _extend_with_property_results(
     methods = _stan_methods_for_artifacts(artifacts, args)
     models = _stan_models_for_artifacts(artifacts, args)
     if isinstance(artifacts, FreeSolvArtifacts) and models == DEFAULT_FREESOLV_MODELS:
-        result = run_freesolv_wl_system_gp(
-            artifacts,
-            seed=int(args.seed),
+        result = run_freesolv_small_feature_gp_splits(
+            model_keys=("full_moladt",),
+            seeds=(int(args.seed),),
+            noise_floor=0.01,
             verbose=bool(args.verbose),
         )
         metrics_rows.extend(result.metric_rows)
@@ -539,9 +540,9 @@ def _stan_methods_for_artifacts(
     if (
         isinstance(artifacts, FreeSolvArtifacts)
         and requested_models in (DEFAULT_FREESOLV_MODELS, DEFAULT_STAN_MODELS)
-        and args.methods in (DEFAULT_STAN_METHODS_ARG, FREESOLV_WL_SYSTEM_METHOD)
+        and args.methods in (DEFAULT_STAN_METHODS_ARG, FREESOLV_SMALL_FEATURE_METHOD)
     ):
-        return (FREESOLV_WL_SYSTEM_METHOD,)
+        return (FREESOLV_SMALL_FEATURE_METHOD,)
     if isinstance(artifacts, QM9Artifacts) and args.methods == DEFAULT_STAN_METHODS_ARG:
         return DEFAULT_QM9_STAN_METHODS
     return requested
@@ -828,16 +829,15 @@ def _format_freesolv_bayesian_model_text(
                 f"  mean_log_predictive_density = {float(row['mean_log_predictive_density']):.6f}",
             ]
         )
-    if str(selected.get("model", "")) == FREESOLV_WL_SYSTEM_MODEL:
+    if str(selected.get("model", "")) == FREESOLV_SMALL_FEATURE_MODEL_NAMES["full_moladt"]:
         lines.extend(
             [
                 "",
                 "Empirical-Bayes GP hyperparameters",
-                "- kernel = w_wl_system * Tanimoto(WL + bonding-system tokens)",
-                "-        + w_system * Tanimoto(bonding-system tokens)",
-                "-        + w_wl * Tanimoto(WL graph tokens)",
-                "- atom tokens include element, formal charge, shells, orbitals, and shell occupancy",
-                "- edge/system tokens include shared electrons, effective order, overlap counts, and bonding-system kind",
+                "- kernel = signal_variance * exp(-||z(a) - z(b)||^2 / (2 * lengthscale^2))",
+                "- z uses 20 SMILES graph features plus 10 MolADT descriptor extensions",
+                "- the SMILES graph part uses atom counts, bond-order counts, component count, cycle rank, and degree summaries",
+                "- the MolADT extension adds size, polarity, bonding-system, and short-range system-edge descriptors",
             ]
         )
         for _, row in coefficient_rows.sort_values("importance_rank").iterrows():
@@ -1335,7 +1335,7 @@ def _qm9_review_note(
 
 def _parse_extra_models(args: argparse.Namespace) -> tuple[str, ...]:
     models = [item.strip() for item in str(getattr(args, "extra_models", "")).split(",") if item.strip()]
-    if not models and getattr(args, "command", "") == "models":
+    if not models and getattr(args, "command", "") == "benchmarking":
         models = ["catboost_uncertainty", "visnet_ensemble", "dimenetpp_ensemble"]
     geom_model = getattr(args, "geom_model", None)
     if geom_model is not None:

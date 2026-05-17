@@ -10,14 +10,13 @@ Start here when you need more than the root [README](../README.md).
 | Understand the representation | [Representation](representation.md) |
 | Inspect molecules | [Examples](examples.md), [Parsing](parsing.md), [CLI](cli.md) |
 | Compare reordered molecules | [Molecule equality](molecule-equality.md) |
-| Run models | [Models](models.md), [Inference and benchmarks](inference-and-benchmarks.md) |
+| Run benchmarking models | [Benchmarking Models](models.md), [Inference and benchmarks](inference-and-benchmarks.md) |
+| Inspect the current FreeSolv GP features | [FreeSolv GP feature list](freesolv-gp-feature-list.md), [plain English](freesolv-gp-feature-layman.md) |
 | Find result files | [Outputs](outputs.md), [results README](../results/README.md) |
 
 ## Reference
 
 - [Orbitals](orbitals.md): local shell and orbital records on atoms.
-- [FreeSolv GP feature list](freesolv-gp-feature-list.md): literal sparse token vocabulary for the default FreeSolv GP.
-- [FreeSolv GP feature translations](freesolv-gp-feature-layman.md): plain-English explanation for each feature index.
 - [Molecule equality](molecule-equality.md): compare MolADT values modulo container ordering.
 - [SMILES scope](smiles-scope-and-validation.md): what the conservative SMILES parser and renderer support.
 - [Haskell interop](haskell_interop.md): shared JSON and processed matrix contracts.

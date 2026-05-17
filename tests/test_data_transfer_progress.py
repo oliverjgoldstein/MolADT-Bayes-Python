@@ -4,7 +4,7 @@ import io
 import tarfile
 from pathlib import Path
 
-from scripts import common
+from benchmarking import common
 
 
 class _FakeResponse:

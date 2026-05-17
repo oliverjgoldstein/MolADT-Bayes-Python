@@ -4,7 +4,7 @@ The Python repo produces benchmark exports consumed by the sibling Haskell repo:
 
 https://github.com/oliverjgoldstein/MolADT-Bayes-Haskell
 
-The default cross-repo FreeSolv model is the MolADT WL + bonding-system GP. The Python repo refreshes the parsed FreeSolv exports with `make freesolv`; the Haskell repo can replay the same seed-18 split with `stack run moladtbayes -- freesolv-wl-system-gp`.
+The current Python FreeSolv benchmark is the `moladt_full30_rbf_gp` small-feature GP. The Python repo refreshes the parsed FreeSolv exports with `make freesolv`; Haskell interop still consumes the standardized processed CSV exports.
 
 ## Shared Files
 
@@ -33,17 +33,17 @@ For `freesolv_moladt_featurized`, Python writes:
 Refresh Python exports:
 
 ```bash
-./.venv/bin/python -m scripts.run_all freesolv
+./.venv/bin/python -m benchmarking.run_all freesolv
 ```
 
 Run the Haskell consumer:
 
 ```bash
-stack run moladtbayes -- freesolv-wl-system-gp
+stack run moladtbayes -- --help
 ```
 
 ## Source Files
 
-- [`scripts/splits.py`](../scripts/splits.py)
-- [`scripts/process_freesolv.py`](../scripts/process_freesolv.py)
-- [`scripts/run_all.py`](../scripts/run_all.py)
+- [`benchmarking/splits.py`](../benchmarking/splits.py)
+- [`benchmarking/process_freesolv.py`](../benchmarking/process_freesolv.py)
+- [`benchmarking/run_all.py`](../benchmarking/run_all.py)

@@ -39,14 +39,14 @@ OPEN_VIEWER_ARG := $(if $(filter 1 true yes TRUE YES,$(OPEN_VIEWER)),--open-view
 PRETTY_VIEWER_OUTPUT_ARG := $(if $(PRETTY_VIEWER_OUTPUT),--viewer-output "$(PRETTY_VIEWER_OUTPUT)",)
 INVERSE_VIEWER_COUNT_ARG := $(if $(filter 1 true yes TRUE YES,$(OPEN_VIEWER)),--viewer-count $(VIEWER_COUNT),)
 MODELS ?= bayes_linear_student_t,bayes_hierarchical_shrinkage
-FREESOLV_MODELS ?= moladt_wl_system_gp
+FREESOLV_MODELS ?= moladt_full30_rbf_gp
 FREESOLV_SEED ?= 18
 FREESOLV_SPLIT_COUNT ?= 20
 FREESOLV_SPLIT_SEED_START ?= 0
 FREESOLV_ABLATION_SPLIT_COUNT ?= 20
 FREESOLV_ABLATION_SEED_START ?= 0
 QM9_MODELS ?= bayes_linear_student_t
-PYTHON_EXTRAS ?= dev,ml,geom
+PYTHON_EXTRAS ?= dev,benchmarking,geom
 RESULTS_SUBDIR ?=
 RUN_TIMESTAMP ?= $(shell date +%Y%m%d_%H%M%S)
 
@@ -131,10 +131,10 @@ endif
 
 TOOLCHAIN_ENV := $(if $(DARWIN_SDKROOT),env CC="$(DARWIN_CLANG)" CXX="$(DARWIN_CLANGXX)" SDKROOT="$(DARWIN_SDKROOT)" CFLAGS="$${CFLAGS:+$$CFLAGS }-isysroot $(DARWIN_SDKROOT)" CXXFLAGS="$${CXXFLAGS:+$$CXXFLAGS }-isysroot $(DARWIN_SDKROOT)",)
 
-MODEL_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),models/paper/run_$(RUN_TIMESTAMP),models/run_$(RUN_TIMESTAMP))
+MODEL_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),benchmarking/models/paper/run_$(RUN_TIMESTAMP),benchmarking/models/run_$(RUN_TIMESTAMP))
 TIMING_RESULTS_SUBDIR := $(if $(filter paper,$(INFERENCE_PRESET)),timing/paper/run_$(RUN_TIMESTAMP),timing/run_$(RUN_TIMESTAMP))
 FREESOLV_RESULTS_SUBDIR := freesolv/run_$(RUN_TIMESTAMP)
-FREESOLV_20_SPLIT_RESULTS_SUBDIR := freesolv_20split/run_$(RUN_TIMESTAMP)
+FREESOLV_20_SPLIT_RESULTS_SUBDIR := freesolv_small_feature_gp/run_$(RUN_TIMESTAMP)
 FREESOLV_ABLATION_RESULTS_SUBDIR := freesolv_ablation/run_$(RUN_TIMESTAMP)
 INVERSE_DESIGN_RESULTS_SUBDIR := inverse_design/run_$(RUN_TIMESTAMP)
 BEST_QM9_EXTRA_MODELS := visnet_ensemble
@@ -160,7 +160,7 @@ help:
 		"  make molecule-viewer        Export a standalone 3D molecule viewer HTML file; add OPEN_VIEWER=1 to open it" \
 		"  make test-molecule-viewer   Run the molecule viewer tests, then open the viewer" \
 		"  make freesolv              Run the long FreeSolv MolADT-vs-MoleculeNet comparison" \
-		"  make freesolv-20split      Run the FreeSolv MolADT WL + bonding-system GP over 20 random splits" \
+		"  make freesolv-20split      Run the FreeSolv full30 small-feature GP over 20 random splits" \
 		"  make freesolv-ablation     Run the A/B/C FreeSolv representation ablation over 20 random splits" \
 		"  make inverse-design        Run the FreeSolv MolADT inverse-design proof of concept" \
 		"  make inverse-design-view   Open saved inverse-design molecules in the viewer" \
@@ -372,7 +372,7 @@ python-cmdstan-install:
 	"  tested cmdstanpy version: $(TESTED_CMDSTANPY)" \
 	"  tested CmdStan version: $(TESTED_CMDSTAN)" \
 	"  toolchain_env: $(if $(DARWIN_SDKROOT),apple-xcrun,default)"
-	$(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.install_cmdstan
+	$(TOOLCHAIN_ENV) $(PYTHON_CMD) -m benchmarking.install_cmdstan
 
 python-test:
 	@start=$$(date +%s); \
@@ -461,7 +461,7 @@ python-benchmark-qm9:
 	"Running QM9 benchmark export and Stan sweep." \
 	"  repo: MolADT-Bayes-Python" \
 	"  first benchmark run prerequisite: make python-cmdstan-install" \
-	"  command: scripts.run_all qm9" \
+	"  command: benchmarking.run_all qm9" \
 	"  dataset: QM9 (mu task, MolADT only)" \
 	"  results_dir: $(RESULTS_ROOT)" \
 	"  inference_preset: $(INFERENCE_PRESET)" \
@@ -475,14 +475,14 @@ python-benchmark-qm9:
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
 	"  toolchain_env: $(if $(DARWIN_SDKROOT),apple-xcrun,default)" \
 	"  expected outputs: $(RESULTS_ROOT)/results.csv and $(RESULTS_ROOT)/details/"
-	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 $(QM9_LIMIT_QM9_ARG) --split-mode $(QM9_SPLIT_MODE) $(if $(filter paper,$(INFERENCE_PRESET)),--paper-mode,) $(VERBOSE_ARG) $(QM9_BENCHMARK_ARGS)
+	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m benchmarking.run_all qm9 $(QM9_LIMIT_QM9_ARG) --split-mode $(QM9_SPLIT_MODE) $(if $(filter paper,$(INFERENCE_PRESET)),--paper-mode,) $(VERBOSE_ARG) $(QM9_BENCHMARK_ARGS)
 
 python-benchmark-zinc:
 	@printf "%s\n" \
 	"Running ZINC timing benchmark." \
 	"  repo: MolADT-Bayes-Python" \
 	"  first benchmark run prerequisite: make python-cmdstan-install" \
-	"  command: scripts.run_all zinc-timing" \
+	"  command: benchmarking.run_all zinc-timing" \
 	"  dataset: ZINC" \
 	"  results_dir: $(RESULTS_ROOT)" \
 	"  dataset_size: $(ZINC_DATASET_SIZE)" \
@@ -492,14 +492,14 @@ python-benchmark-zinc:
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
 	"  toolchain_env: $(if $(DARWIN_SDKROOT),apple-xcrun,default)" \
 	"  expected outputs: $(RESULTS_ROOT)/timing_summary.csv and $(RESULTS_ROOT)/details/"
-	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all zinc-timing --dataset-size $(ZINC_DATASET_SIZE) --dataset-dimension $(ZINC_DATASET_DIMENSION) $(ZINC_LIMIT_TIMING_ARG) $(INCLUDE_MOLADT_ARG) $(VERBOSE_ARG)
+	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m benchmarking.run_all zinc-timing --dataset-size $(ZINC_DATASET_SIZE) --dataset-dimension $(ZINC_DATASET_DIMENSION) $(ZINC_LIMIT_TIMING_ARG) $(INCLUDE_MOLADT_ARG) $(VERBOSE_ARG)
 
 freesolv:
 	@printf "%s\n" \
 	"Running reviewer-facing FreeSolv comparison." \
 	"  repo: MolADT-Bayes-Python" \
-	"  default model: MolADT WL + bonding-system empirical-Bayes GP; CmdStan is only needed for explicit Stan overrides" \
-	"  command: scripts.run_all freesolv" \
+	"  default model: MolADT full30 small-feature empirical-Bayes GP; CmdStan is only needed for explicit Stan overrides" \
+	"  command: benchmarking.run_all freesolv" \
 	"  dataset: FreeSolv" \
 	"  results_dir: results/$(FREESOLV_RESULTS_SUBDIR)" \
 	"  paper baseline: MoleculeNet MPNN RMSE 1.15" \
@@ -509,43 +509,43 @@ freesolv:
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
 	"  expected figure: results/$(FREESOLV_RESULTS_SUBDIR)/freesolv_rmse_vs_moleculenet.svg"
 	@find results/freesolv -mindepth 1 -maxdepth 1 -type d -name 'run_*' -exec rm -rf {} + 2>/dev/null || true
-	MOLADT_RESULTS_DIR=results/$(FREESOLV_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all freesolv $(VERBOSE_ARG) $(FREESOLV_BENCHMARK_ARGS)
+	MOLADT_RESULTS_DIR=results/$(FREESOLV_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m benchmarking.run_all freesolv $(VERBOSE_ARG) $(FREESOLV_BENCHMARK_ARGS)
 
 freesolv-20split:
 	@printf "%s\n" \
-	"Running FreeSolv 20-split MolADT WL + bonding-system GP." \
+	"Running FreeSolv 20-split full MolADT small-feature GP." \
 	"  repo: MolADT-Bayes-Python" \
-	"  command: scripts.freesolv_wl_system_gp" \
+	"  command: benchmarking.freesolv_small_feature_gp" \
 	"  dataset: FreeSolv" \
-	"  model: moladt_wl_system_gp" \
+	"  model: moladt_full30_rbf_gp" \
 	"  method: empirical_bayes_exact_gp" \
 	"  split_count: $(FREESOLV_SPLIT_COUNT)" \
 	"  seed_start: $(FREESOLV_SPLIT_SEED_START)" \
 	"  results_dir: results/$(FREESOLV_20_SPLIT_RESULTS_SUBDIR)" \
 	"  expected outputs: predictive_metrics.csv, summary.csv, split_assignments.csv"
-	@find results/freesolv_20split -mindepth 1 -maxdepth 1 -type d -name 'run_*' -exec rm -rf {} + 2>/dev/null || true
-	MOLADT_RESULTS_DIR=results/$(FREESOLV_20_SPLIT_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.freesolv_wl_system_gp --split-count $(FREESOLV_SPLIT_COUNT) --seed-start $(FREESOLV_SPLIT_SEED_START) --output-dir results/$(FREESOLV_20_SPLIT_RESULTS_SUBDIR) $(VERBOSE_ARG)
+	@find results/freesolv_small_feature_gp -mindepth 1 -maxdepth 1 -type d -name 'run_*' -exec rm -rf {} + 2>/dev/null || true
+	MOLADT_RESULTS_DIR=results/$(FREESOLV_20_SPLIT_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m benchmarking.freesolv_small_feature_gp --model full_moladt --split-count $(FREESOLV_SPLIT_COUNT) --seed-start $(FREESOLV_SPLIT_SEED_START) --output-dir results/$(FREESOLV_20_SPLIT_RESULTS_SUBDIR) $(VERBOSE_ARG)
 
 freesolv-ablation:
 	@printf "%s\n" \
 	"Running FreeSolv A/B/C MolADT representation ablation." \
 	"  repo: MolADT-Bayes-Python" \
-	"  command: scripts.freesolv_representation_ablation" \
+	"  command: benchmarking.freesolv_representation_ablation" \
 	"  dataset: FreeSolv" \
-	"  variants: A atom bag; B standard covalent graph WL; C full MolADT" \
+	"  variants: atom bag; SMILES adjacency graph; full MolADT" \
 	"  split_count: $(FREESOLV_ABLATION_SPLIT_COUNT)" \
 	"  seed_start: $(FREESOLV_ABLATION_SEED_START)" \
 	"  results_dir: results/$(FREESOLV_ABLATION_RESULTS_SUBDIR)" \
-	"  expected outputs: metrics_by_seed.csv, summary.csv, paired_against_full.csv, metadata.csv"
+	"  expected outputs: predictive_metrics.csv, summary.csv, feature_manifest.csv, freesolv_small_feature_ablation.svg"
 	@find results/freesolv_ablation -mindepth 1 -maxdepth 1 -type d -name 'run_*' -exec rm -rf {} + 2>/dev/null || true
-	MOLADT_RESULTS_DIR=results/$(FREESOLV_ABLATION_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.freesolv_representation_ablation --split-count $(FREESOLV_ABLATION_SPLIT_COUNT) --seed-start $(FREESOLV_ABLATION_SEED_START) --output-dir results/$(FREESOLV_ABLATION_RESULTS_SUBDIR) $(VERBOSE_ARG)
+	MOLADT_RESULTS_DIR=results/$(FREESOLV_ABLATION_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m benchmarking.freesolv_representation_ablation --split-count $(FREESOLV_ABLATION_SPLIT_COUNT) --seed-start $(FREESOLV_ABLATION_SEED_START) --output-dir results/$(FREESOLV_ABLATION_RESULTS_SUBDIR) $(VERBOSE_ARG)
 
 inverse-design:
 	@printf "%s\n" \
 	"Running reviewer-facing FreeSolv inverse design." \
 	"  repo: MolADT-Bayes-Python" \
 	"  command: experiments.freesolv_inverse_design" \
-	"  model: latest results/freesolv/run_* MolADT WL + bonding-system GP artifact" \
+	"  model: latest FreeSolv moladt_full30_rbf_gp artifact" \
 	"  cli_flags: --target, --seed-molecule, --open-viewer, --viewer-count" \
 	"  target: $(if $(TARGET),$(TARGET),median experimental FreeSolv value)" \
 	"  seed_molecule: $(if $(SEED_MOLECULE),$(SEED_MOLECULE),freesolv-prior)" \
@@ -575,7 +575,7 @@ qm9long:
 	@printf "%s\n" \
 	"Running reviewer-facing QM9 comparison." \
 	"  repo: MolADT-Bayes-Python" \
-	"  command: scripts.run_all qm9" \
+	"  command: benchmarking.run_all qm9" \
 	"  dataset: QM9 (mu task, MolADT only)" \
 	"  results_dir: results/$(QM9_LONG_RESULTS_SUBDIR)" \
 	"  paper baseline: MoleculeNet DTNN MAE 2.35" \
@@ -593,14 +593,14 @@ qm9long:
 	"  per_epoch_logs: train_loss + validation RMSE + validation MAE" \
 	"  benchmark_verbose=1 (forced for qm9long)" \
 	"  expected figure: results/$(QM9_LONG_RESULTS_SUBDIR)/qm9_mae_vs_moleculenet.svg"
-	PYTHONUNBUFFERED=1 MOLADT_RESULTS_DIR=results/$(QM9_LONG_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all qm9 --seed $(QM9_LONG_SEED) --split-mode long --include-moladt-predictive --models "" --extra-models $(BEST_QM9_EXTRA_MODELS) --preferred-qm9-geometry-representation moladt_featurized_geom --verbose
+	PYTHONUNBUFFERED=1 MOLADT_RESULTS_DIR=results/$(QM9_LONG_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m benchmarking.run_all qm9 --seed $(QM9_LONG_SEED) --split-mode long --include-moladt-predictive --models "" --extra-models $(BEST_QM9_EXTRA_MODELS) --preferred-qm9-geometry-representation moladt_featurized_geom --verbose
 
 benchmark:
 	@printf "%s\n" \
 	"Running combined MolADT benchmark bundle." \
 	"  repo: MolADT-Bayes-Python" \
 	"  first benchmark run prerequisite: make python-cmdstan-install" \
-	"  command: scripts.run_all benchmark" \
+	"  command: benchmarking.run_all benchmark" \
 	"  datasets: FreeSolv RMSE + QM9 mu MAE" \
 	"  results_dir: $(RESULTS_ROOT)" \
 	"  inference_preset: $(INFERENCE_PRESET)" \
@@ -615,7 +615,7 @@ benchmark:
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
 	"  paper baselines: FreeSolv RMSE 1.15; QM9 DTNN MAE 2.35" \
 	"  expected outputs: $(RESULTS_ROOT)/results.csv, $(RESULTS_ROOT)/freesolv_rmse_vs_moleculenet.svg, $(RESULTS_ROOT)/qm9_mae_vs_moleculenet.svg"
-	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all benchmark $(QM9_LIMIT_BENCHMARK_ARG) --qm9-split-mode $(QM9_SPLIT_MODE) $(if $(filter paper,$(INFERENCE_PRESET)),--paper-mode,) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
+	$(RESULTS_ENV) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m benchmarking.run_all benchmark $(QM9_LIMIT_BENCHMARK_ARG) --qm9-split-mode $(QM9_SPLIT_MODE) $(if $(filter paper,$(INFERENCE_PRESET)),--paper-mode,) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
 
 benchmark-bg:
 	@mkdir -p $(dir $(BENCHMARK_LOG))
@@ -638,7 +638,7 @@ timing:
 	"Running MolADT timing benchmark." \
 	"  repo: MolADT-Bayes-Python" \
 	"  first benchmark run prerequisite: make python-cmdstan-install" \
-	"  command: scripts.run_all zinc-timing --include-moladt" \
+	"  command: benchmarking.run_all zinc-timing --include-moladt" \
 	"  results_dir: results/$(TIMING_RESULTS_SUBDIR)" \
 	"  dataset_size: $(ZINC_DATASET_SIZE)" \
 	"  dataset_dimension: $(ZINC_DATASET_DIMENSION)" \
@@ -646,13 +646,13 @@ timing:
 	"  stage_contract: SMILES CSV -> string, SMILES -> JSON, SDF -> MolADT, SDF -> SMILES, MolADT -> JSON, JSON -> MolADT" \
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)" \
 	"  expected outputs: results/$(TIMING_RESULTS_SUBDIR)/timing_summary.csv and details/"
-	MOLADT_RESULTS_DIR=results/$(TIMING_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all zinc-timing --dataset-size $(ZINC_DATASET_SIZE) --dataset-dimension $(ZINC_DATASET_DIMENSION) $(ZINC_LIMIT_TIMING_ARG) --include-moladt $(VERBOSE_ARG)
+	MOLADT_RESULTS_DIR=results/$(TIMING_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m benchmarking.run_all zinc-timing --dataset-size $(ZINC_DATASET_SIZE) --dataset-dimension $(ZINC_DATASET_DIMENSION) $(ZINC_LIMIT_TIMING_ARG) --include-moladt $(VERBOSE_ARG)
 
 catboost-geom-model:
 	@printf "%s\n" \
 	"Running CatBoost geometry-backed model sweep." \
 	"  repo: MolADT-Bayes-Python" \
-	"  command: scripts.run_all models" \
+	"  command: benchmarking.run_all benchmarking" \
 	"  results_dir: results/$(MODEL_RESULTS_SUBDIR)" \
 	"  inference_preset: $(INFERENCE_PRESET)" \
 	"  qm9_split_mode: $(QM9_SPLIT_MODE)" \
@@ -660,7 +660,7 @@ catboost-geom-model:
 	"  methods: $(METHODS)" \
 	"  models: $(MODELS)" \
 	"  benchmark_verbose=$(BENCHMARK_VERBOSE)"
-	MOLADT_RESULTS_DIR=results/$(MODEL_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m scripts.run_all models $(QM9_LIMIT_BENCHMARK_ARG) --qm9-split-mode $(QM9_SPLIT_MODE) $(if $(filter paper,$(INFERENCE_PRESET)),--paper-mode,) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
+	MOLADT_RESULTS_DIR=results/$(MODEL_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m benchmarking.run_all benchmarking $(QM9_LIMIT_BENCHMARK_ARG) --qm9-split-mode $(QM9_SPLIT_MODE) $(if $(filter paper,$(INFERENCE_PRESET)),--paper-mode,) $(VERBOSE_ARG) $(BENCHMARK_ARGS)
 
 catboost-geom-model-paper:
 	@$(MAKE) --no-print-directory catboost-geom-model INFERENCE_PRESET=paper QM9_LIMIT= QM9_SPLIT_MODE=paper

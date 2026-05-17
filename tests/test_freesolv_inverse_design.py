@@ -505,6 +505,7 @@ def test_freesolv_model_dir_uses_latest_run_directory(tmp_path, monkeypatch) -> 
     old_run = _write_minimal_freesolv_model_run(tmp_path / "run_20240101_000000")
     latest_run = _write_minimal_freesolv_model_run(tmp_path / "run_20240102_000000")
     monkeypatch.setattr(inverse_design, "FREESOLV_RESULTS_DIR", tmp_path)
+    monkeypatch.setattr(inverse_design, "FREESOLV_ABLATION_RESULTS_DIR", tmp_path / "missing_ablation")
 
     assert _find_model_dir() == latest_run
     assert _find_model_dir() != old_run
@@ -514,6 +515,7 @@ def test_latest_freesolv_model_dir_fails_fast_when_artifacts_are_missing(tmp_pat
     _write_minimal_freesolv_model_run(tmp_path / "run_20240101_000000")
     (tmp_path / "run_20240102_000000" / "details").mkdir(parents=True)
     monkeypatch.setattr(inverse_design, "FREESOLV_RESULTS_DIR", tmp_path)
+    monkeypatch.setattr(inverse_design, "FREESOLV_ABLATION_RESULTS_DIR", tmp_path / "missing_ablation")
 
     with pytest.raises(FileNotFoundError, match="Latest FreeSolv run"):
         _find_model_dir()
@@ -523,12 +525,12 @@ def test_freesolv_predictor_loads_committed_freesolv_gp_parameters() -> None:
     predictor = FreeSolvBayesianPredictor.load()
     model_dir = _find_model_dir()
 
-    assert predictor.parameter_source_path == model_dir / "details" / "model_coefficients.csv"
-    assert predictor.draw_source_path == model_dir / "details" / "model_artifacts.csv"
-    assert predictor.model_name == "moladt_wl_system_gp"
+    assert predictor.parameter_source_path.name == "model_coefficients.csv"
+    assert predictor.draw_source_path.name == "model_artifacts.csv"
+    assert predictor.model_name == "moladt_full30_rbf_gp"
     assert predictor.method_name == "empirical_bayes_exact_gp"
-    assert predictor.state.seed == 18
-    assert predictor.state.fit.weights.shape == (3,)
+    assert predictor.state.seed == 0
+    assert predictor.state.fit.feature_names[-1] == "aprdf_system_edge_1p5a"
     assert predictor.state.fit.noise_variance > 0.0
     assert predictor.state.fit.alpha.shape == (577,)
 
@@ -540,7 +542,7 @@ def _write_minimal_freesolv_model_run(run_dir):
         "\n".join(
             [
                 "dataset,representation,target,model,method,parameter_name,posterior_mean",
-                "freesolv,moladt,expt,moladt_wl_system_gp,empirical_bayes_exact_gp,noise_variance,0.001",
+                "freesolv,moladt_small_descriptors,expt,moladt_full30_rbf_gp,empirical_bayes_exact_gp,noise_variance,0.001",
             ]
         )
         + "\n",
@@ -550,7 +552,7 @@ def _write_minimal_freesolv_model_run(run_dir):
         "\n".join(
             [
                 "dataset,representation,model,method,artifact_type,seed",
-                "freesolv,moladt,moladt_wl_system_gp,empirical_bayes_exact_gp,moladt_token_gp,18",
+                "freesolv,moladt_small_descriptors,moladt_full30_rbf_gp,empirical_bayes_exact_gp,small_feature_rbf_gp,18",
             ]
         )
         + "\n",

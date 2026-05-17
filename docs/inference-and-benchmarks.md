@@ -34,18 +34,18 @@ browser automatically.
 - dataset: FreeSolv, `642` SDF-backed rows
 - split: deterministic `513 / 64 / 65`, seed `18`
 - final fit: train plus validation rows, tested on the held-out 65 rows
-- representation: `moladt`
-- model: `moladt_wl_system_gp`
+- representation: `moladt_small_descriptors`
+- model: `moladt_full30_rbf_gp`
 - method: empirical-Bayes exact GP
-- kernel: weighted Tanimoto over WL graph tokens, bonding-system tokens, and the combined token set
-- tokens include element, formal charge, shells, orbitals, shared electrons, effective order, overlap counts, and bonding-system kind
+- kernel: RBF over 30 standardized small features
+- features: 20 SMILES-decoded graph features plus 10 MolADT descriptor extensions
 - metric: RMSE
 
-The result is a local benchmark artifact, not a universal leaderboard claim. The committed seed-18 run lands around `0.638` kcal/mol test RMSE on this split.
+The result is a local benchmark artifact, not a universal leaderboard claim.
 
 The comparison figure uses the MoleculeNet MPNN RMSE row `1.15` as the paper bar.
 
-`make freesolv-20split` runs the same MolADT WL + bonding-system GP on 20
+`make freesolv-20split` runs the same 30-feature full MolADT GP on 20
 deterministic random splits, using seeds `0..19` by default. It writes:
 
 - `predictive_metrics.csv`
@@ -58,33 +58,33 @@ deterministic random splits, using seeds `0..19` by default. It writes:
 The target is for repeated-split uncertainty checks. It is separate from the
 single seed-18 artifact used by inverse design.
 
-`make freesolv-ablation` runs the A/B/C representation ladder over the same 20
+`make freesolv-ablation` runs the representation ladder over the same 20
 split seeds:
 
-- A: atom bag
-- B: standard covalent graph WL
-- C: full MolADT WL + bonding-system GP
+- atom bag: 10 SMILES atom-count features
+- SMILES adjacency graph: 20 graph-only features
+- full MolADT: the graph baseline plus 10 MolADT descriptor additions
 
 It writes:
 
-- `metrics_by_seed.csv`
+- `predictive_metrics.csv`
 - `summary.csv`
-- `paired_against_full.csv`
-- `metadata.csv`
+- `paired_against_full_moladt.csv`
+- `feature_manifest.csv`
+- `freesolv_small_feature_ablation.svg`
 
-In B, graph edges are standard covalent labels only: sorted element pair plus
-`single_covalent`, `double_covalent`, `triple_covalent`,
-`quadruple_covalent`, or `aromatic_covalent`. B has no ionic contacts,
-zero-electron systems, non-covalent bonding-system edges, edge multiplicity, 3D
-geometry, shared-electron count, or bonding-system token view. The current
-result has full MolADT at `0.904 +/- 0.168` kcal/mol test RMSE, ahead of
-standard covalent graph WL (`1.049 +/- 0.142`).
+The SMILES adjacency graph variant is deliberately limited to information a
+SMILES-decoded graph provides: atom counts, bond-order counts, component count,
+cycle rank, and heavy-atom degree summaries. It has no MolADT bonding-system
+features, 3D geometry, shared-electron counts, or hashed/tokenized WL features.
+The current 20-split result has full MolADT at `1.308 +/- 0.461` kcal/mol test
+RMSE, ahead of the SMILES adjacency graph (`1.791 +/- 0.505`).
 
 ## FreeSolv Inverse Design
 
 `make inverse-design TARGET=-5.0` does this:
 
-1. Loads the latest `results/freesolv/run_*` MolADT WL + bonding-system GP artifact.
+1. Loads the latest FreeSolv `moladt_full30_rbf_gp` artifact.
 2. Samples initial molecules from the valid MolADT FreeSolv prior by default, reweighted by the unchanged GP target likelihood.
 3. Generates at least `1,000` unique valid molecules.
 4. Prints progress and ETA while loading/scoring the FreeSolv prior, periodic proposal-attempt progress, then one progress line per generated molecule with count and elapsed time.
