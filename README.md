@@ -39,11 +39,9 @@ Haskell repo.
 The default FreeSolv model is `moladt_full30_rbf_gp`, an exact Gaussian process
 over a deliberately small, listable feature set:
 
-- 20 features come only from a SMILES-decoded graph: atom counts, bond-order
-  counts, component count, cycle rank, and heavy-atom degree summaries
-- 10 features add MolADT information: size, polarity, surface proxy,
-  bonding-system counts, shared-electron total, and a short-range
-  bonding-system radial descriptor
+- 30 features now come from MolADT-native descriptors: composition and polarity
+  signals, explicit bonding-system counts, effective bond-order summaries,
+  delocalised/multicentre channels, and short-range radial structure
 - no Weisfeiler-Lehman tokens, hashed fingerprints, or large sparse feature
   vocabularies are used
 - the empirical-Bayes fit optimizes the RBF kernel signal variance, lengthscale,
@@ -81,8 +79,8 @@ free energy.
 ### Representation Ablation
 
 The main FreeSolv evidence is the A/B/C small-feature ablation. It asks whether
-the 10 MolADT descriptor additions improve an exact RBF GP beyond an atom bag and
-a graph-only baseline while keeping the whole feature set listable.
+the MolADT multigraph feature panel improves an exact RBF GP beyond an atom bag
+and a graph-only baseline while keeping the whole feature set listable.
 
 Run it with:
 
@@ -95,22 +93,22 @@ The ladder is deliberately compact:
 - A uses ten SMILES atom-count features only
 - B uses twenty SMILES-decoded graph features: atom counts, bond-order counts,
   heavy-atom count, component count, cycle rank, and heavy-degree summaries
-- C adds ten MolADT descriptors: size, polarity, surface proxy,
-  donor/acceptor counts, bonding-system counts, shared-electron total, and a
-  short-range bonding-system radial descriptor
+- C uses thirty MolADT-native descriptors: size, polarity, donor/acceptor
+  counts, explicit bonding-system/effective-order summaries, ring and
+  rotatable-bond structure, and short-range radial descriptors
 - no WL tokens, hashed fingerprints, or large sparse feature vocabularies are
   used
 
-The current 20-split result is:
+The latest committed 20-split result before the multigraph feature redo was:
 
 | Label | Variant | Meaning | Test RMSE |
 | --- | --- | --- | ---: |
 | A | atom bag | 10 atom-count features | `1.971 +/- 0.567` |
 | B | SMILES adjacency graph | 20 graph-only features | `1.791 +/- 0.505` |
-| C | full MolADT | 30 features: graph baseline plus MolADT descriptors | `1.308 +/- 0.461` |
+| C | full MolADT | previous 20 graph features plus 10 MolADT descriptors | `1.308 +/- 0.461` |
 
-The useful comparison is B against C. Full MolADT wins because the ten MolADT
-descriptor additions improve the same small RBF GP over the graph-only baseline.
+Re-run `make freesolv-ablation` before citing a C-row RMSE for the current
+multigraph-first feature contract.
 
 ## Start
 
@@ -235,6 +233,8 @@ class Atom:
 - simple atom builders can use `element_attributes(symbol)`
 - atom builders can omit `shells`
 - there is no separate shell lookup layer
+- all 118 official elements are present for atomic number and mass; elements
+  outside the audited shell subset keep `shells=None`
 
 Delocalised and multicentre bonding is represented explicitly:
 

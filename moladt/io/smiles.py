@@ -34,23 +34,11 @@ _BOND_DIRECTIONS: dict[str, SmilesBondStereoDirection] = {
 }
 
 _TWO_CHAR_SYMBOLS: dict[str, AtomicSymbol] = {
-    "Br": AtomicSymbol.Br,
-    "Cl": AtomicSymbol.Cl,
-    "Fe": AtomicSymbol.Fe,
-    "Na": AtomicSymbol.Na,
-    "Si": AtomicSymbol.Si,
+    symbol.value: symbol for symbol in AtomicSymbol if len(symbol.value) == 2
 }
 
 _ONE_CHAR_SYMBOLS: dict[str, AtomicSymbol] = {
-    "B": AtomicSymbol.B,
-    "C": AtomicSymbol.C,
-    "F": AtomicSymbol.F,
-    "H": AtomicSymbol.H,
-    "I": AtomicSymbol.I,
-    "N": AtomicSymbol.N,
-    "O": AtomicSymbol.O,
-    "P": AtomicSymbol.P,
-    "S": AtomicSymbol.S,
+    symbol.value: symbol for symbol in AtomicSymbol if len(symbol.value) == 1
 }
 
 _AROMATIC_SYMBOLS: dict[str, AtomicSymbol] = {

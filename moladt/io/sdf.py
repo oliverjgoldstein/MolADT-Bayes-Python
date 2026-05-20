@@ -7,6 +7,7 @@ import shlex
 from types import MappingProxyType
 from typing import Any, Iterator, Mapping
 
+from ..chem.bonding_perception import perceive_sdf_bonding
 from ..chem.constants import element_attributes
 from ..chem.coordinate import Coordinate, mk_angstrom
 from ..chem.dietz import AtomId, BondingSystem, Edge, NonNegative, SystemId, mk_bonding_system, mk_edge
@@ -326,15 +327,26 @@ def _parse_properties(lines: list[str]) -> dict[str, str]:
 
 def _build_molecule(atoms: list[Atom], bonds: list[tuple[Edge, int]]) -> Molecule:
     atom_map = {atom.atom_id: atom for atom in atoms}
-    aromatic_rings = _detect_six_rings(bonds)
-    aromatic_ring_edges = frozenset(edge for ring in aromatic_rings for edge in ring)
+    perception = perceive_sdf_bonding(atom_map, bonds)
     systems: list[tuple[SystemId, BondingSystem]] = []
     system_index = 1
-    for ring_edges in aromatic_rings:
-        systems.append((SystemId(system_index), mk_bonding_system(NonNegative(6), ring_edges, "pi_ring")))
+    for inferred in perception.inferred_systems:
+        systems.append(
+            (
+                SystemId(system_index),
+                mk_bonding_system(NonNegative(inferred.shared_electrons), inferred.member_edges, inferred.tag),
+            )
+        )
         system_index += 1
     for edge, order in bonds:
-        shared_electrons, tag = _bond_electron_system(atom_map, edge, order, edge in aromatic_ring_edges)
+        if edge in perception.suppressed_edges:
+            continue
+        shared_electrons, tag = _bond_electron_system(
+            atom_map,
+            edge,
+            order,
+            edge in perception.sigma_override_edges,
+        )
         systems.append((SystemId(system_index), mk_bonding_system(NonNegative(shared_electrons), frozenset({edge}), tag)))
         system_index += 1
     return Molecule(atoms=atom_map, systems=tuple(systems))
@@ -344,11 +356,11 @@ def _bond_electron_system(
     atom_map: Mapping[AtomId, Atom],
     edge: Edge,
     order: int,
-    in_aromatic_ring: bool,
+    force_sigma: bool,
 ) -> tuple[int, str | None]:
     if order == 1 and _is_ionic_edge(atom_map, edge):
         return 0, "ionic"
-    if in_aromatic_ring and order in {1, 2, 4}:
+    if force_sigma and order in {1, 2, 4}:
         return 2, None
     if order == 1:
         return 2, None
@@ -487,58 +499,3 @@ def _format_charge_lines(molecule: Molecule) -> list[str]:
         payload = " ".join(f"{atom_id.value:>3} {charge:>3}" for atom_id, charge in chunk)
         lines.append(f"M  CHG {len(chunk):>3} {payload}")
     return lines
-
-
-def _detect_six_rings(bonds: list[tuple[Edge, int]]) -> list[frozenset[Edge]]:
-    adjacency: dict[AtomId, list[tuple[AtomId, int]]] = {}
-    for edge, order in bonds:
-        adjacency.setdefault(edge.a, []).append((edge.b, order))
-        adjacency.setdefault(edge.b, []).append((edge.a, order))
-
-    def alternate(order: int) -> int:
-        if order == 1:
-            return 2
-        if order == 2:
-            return 1
-        return 0
-
-    discovered: set[frozenset[Edge]] = set()
-
-    def search_alternating(path: list[AtomId], current: AtomId, previous_order: int | None) -> None:
-        if len(path) == 6:
-            if previous_order is None:
-                return
-            for neighbor, order in adjacency.get(current, []):
-                if neighbor == path[0] and order == alternate(previous_order):
-                    atoms = path + [path[0]]
-                    ring_edges = frozenset(mk_edge(atoms[index], atoms[index + 1]) for index in range(6))
-                    if path[0] == min(path, key=lambda atom_id: atom_id.value):
-                        discovered.add(ring_edges)
-            return
-        for neighbor, order in adjacency.get(current, []):
-            if order not in {1, 2}:
-                continue
-            if previous_order is not None and order != alternate(previous_order):
-                continue
-            if neighbor in path:
-                continue
-            search_alternating(path + [neighbor], neighbor, order)
-
-    def search_aromatic(path: list[AtomId], current: AtomId) -> None:
-        if len(path) == 6:
-            for neighbor, order in adjacency.get(current, []):
-                if neighbor == path[0] and order == 4:
-                    atoms = path + [path[0]]
-                    ring_edges = frozenset(mk_edge(atoms[index], atoms[index + 1]) for index in range(6))
-                    if path[0] == min(path, key=lambda atom_id: atom_id.value):
-                        discovered.add(ring_edges)
-            return
-        for neighbor, order in adjacency.get(current, []):
-            if order != 4 or neighbor in path:
-                continue
-            search_aromatic(path + [neighbor], neighbor)
-
-    for start in adjacency:
-        search_alternating([start], start, None)
-        search_aromatic([start], start)
-    return sorted(discovered, key=lambda ring: sorted((edge.a.value, edge.b.value) for edge in ring))

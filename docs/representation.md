@@ -49,7 +49,7 @@ sigma edge systems follow.
 An atom is the point where element data, position, charge, and orbital shells meet:
 
 ```haskell
-data AtomicSymbol = H | C | N | O | S | P | Si | F | Cl | Br | I | Fe | B | Na
+data AtomicSymbol = H | ... | Og
 
 data ElementAttributes = ElementAttributes
   { symbol       :: AtomicSymbol
@@ -70,19 +70,8 @@ data Atom = Atom
 ```python
 class AtomicSymbol(Enum):
     H = "H"
-    C = "C"
-    N = "N"
-    O = "O"
-    S = "S"
-    P = "P"
-    Si = "Si"
-    F = "F"
-    Cl = "Cl"
-    Br = "Br"
-    I = "I"
-    Fe = "Fe"
-    B = "B"
-    Na = "Na"
+    ...
+    Og = "Og"
 
 @dataclass(frozen=True, slots=True)
 class ElementAttributes:
@@ -99,6 +88,12 @@ class Atom:
     shells: Shells | None = None
     formal_charge: int = 0
 ```
+
+`AtomicSymbol` covers all 118 official elements. `element_attributes(symbol)`
+uses CIAAW 2024 standard atomic weights where they exist; elements without a
+standard atomic weight use the NIST SP 966 June 2024 longest-lived-isotope mass
+number. Detailed default shell objects are still only attached for the
+project's audited element subset; other elements keep `shells=None`.
 
 The `formalCharge` field is explicit. Shells are optional on atoms and are also
 available from `ElementAttributes`, so simple constructors can take defaults

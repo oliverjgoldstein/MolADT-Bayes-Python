@@ -11,6 +11,7 @@ Run:
 | Command | Use |
 | --- | --- |
 | `parse` | Read one SDF record, validate it, and print a MolADT report. |
+| `perceive-sdf` | Print parser-inferred delocalised or multicentre systems from one SDF record. |
 | `parse-smiles` | Read a supported SMILES string and print the typed molecule. |
 | `to-smiles` | Render a supported classical MolADT molecule back to SMILES. |
 | `to-json` | Convert one SDF molecule to shared MolADT JSON. |
@@ -27,6 +28,8 @@ Run:
 ./.venv/bin/python -m moladt.cli parse molecules/benzene.sdf
 ./.venv/bin/python -m moladt.cli parse molecules/sodium_chloride.sdf
 ./.venv/bin/python -m moladt.cli parse --properties molecules/benzene.sdf
+./.venv/bin/python -m moladt.cli perceive-sdf molecules/benzene.sdf
+./.venv/bin/python scripts/audit_sdf_bonding_perception.py data/raw/freesolv/sdffiles --limit 20
 ./.venv/bin/python -m moladt.cli parse-smiles 'c1ccccc1'
 ./.venv/bin/python -m moladt.cli parse-smiles '[Na+][Cl-]'
 ./.venv/bin/python -m moladt.cli to-smiles molecules/benzene.sdf

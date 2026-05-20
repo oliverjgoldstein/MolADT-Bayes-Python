@@ -1,6 +1,8 @@
 # Benchmarking Models
 
-Benchmarking models consume small numeric feature tables. The current FreeSolv benchmark keeps the SMILES graph baseline separate from the MolADT-only descriptor additions.
+Benchmarking models consume small numeric feature tables. The current FreeSolv
+benchmark keeps the atom-bag and SMILES-graph baselines separate from the
+MolADT multigraph feature panel.
 
 ## Main Commands
 
@@ -21,7 +23,10 @@ Current path:
 - method: empirical-Bayes exact GP
 - target: hydration free energy, `expt`
 
-The GP uses 30 named features: 20 features from a SMILES-decoded adjacency graph and 10 MolADT descriptor extensions. It fits an RBF-kernel exact GP on the deterministic seed-18 FreeSolv split.
+The GP uses 30 named MolADT-native features: composition and polarity signals,
+explicit bonding-system counts, effective bond-order summaries, ring and
+rotatable-bond structure, and short-range radial descriptors. It fits an
+RBF-kernel exact GP on the deterministic seed-18 FreeSolv split.
 
 The feature manifest is written to `feature_manifest.csv` for every repeated-split run.
 
@@ -60,17 +65,17 @@ That target writes `predictive_metrics.csv`, `summary.csv`,
 
 - atom bag: 10 SMILES atom-count features
 - SMILES adjacency graph: the atom bag plus bond counts, component count, cycle rank, and degree summaries
-- full MolADT: the SMILES graph features plus 10 MolADT descriptor additions
+- full MolADT: the current 30-feature MolADT multigraph panel
 
 | Label | Variant | Meaning | Test RMSE |
 | --- | --- | --- | ---: |
 | A | atom bag | 10 SMILES atom-count features | `1.971 +/- 0.567` |
 | B | SMILES adjacency graph | 20 graph-only features | `1.791 +/- 0.505` |
-| C | full MolADT | 30 features: graph baseline plus MolADT descriptors | `1.308 +/- 0.461` |
+| C | full MolADT | previous 20 graph features plus 10 MolADT descriptors | `1.308 +/- 0.461` |
 
-This table is preferred over the legacy RBF descriptor comparison because it
-isolates the representation question directly: ordinary graph structure versus
-explicit Dietz bonding systems.
+This table is the last committed ablation before the multigraph feature redo.
+Re-run `make freesolv-ablation` before citing a C-row RMSE for the current
+feature contract.
 
 Feature example:
 

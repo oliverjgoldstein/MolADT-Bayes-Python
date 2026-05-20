@@ -107,6 +107,68 @@ M  END
 $$$$
 """
 
+V2000_FORMATE = """formate
+MolADT
+generated
+  4  3  0  0  0  0            999 V2000
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.2300    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.2300    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.0900    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  2  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+M  CHG  1   3  -1
+M  END
+$$$$
+"""
+
+V2000_NITRO_METHANE = """nitromethane
+MolADT
+generated
+  4  3  0  0  0  0            999 V2000
+    0.0000    0.0000    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0
+    1.2200    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.2200    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.4500    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  2  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+M  CHG  2   1   1   3  -1
+M  END
+$$$$
+"""
+
+V2000_AMIDE = """amide
+MolADT
+generated
+  4  3  0  0  0  0            999 V2000
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.2300    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.3500    0.0000    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.0900    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  2  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+M  END
+$$$$
+"""
+
+V2000_BUTADIENE = """butadiene
+MolADT
+generated
+  4  3  0  0  0  0            999 V2000
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.3400    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.8100    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    4.1500    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  2  0  0  0  0
+  2  3  1  0  0  0  0
+  3  4  2  0  0  0  0
+M  END
+$$$$
+"""
+
 
 def test_benzene_round_trip_preserves_atom_count_and_sigma_bonds() -> None:
     molecule = read_sdf(PROJECT_ROOT / "molecules" / "benzene.sdf")
@@ -122,6 +184,22 @@ def test_benzene_detects_one_pi_ring() -> None:
     assert record.molecule.systems[0][1].tag == "pi_ring"
     assert _count_unnamed_edge_systems(record.molecule, 2) == 12
     assert _count_tag(record.molecule, "pi_ring") == 1
+
+
+def test_freesolv_aromatic_sample_detects_pi_rings_from_sdf_bond_table() -> None:
+    record = read_sdf_record(
+        PROJECT_ROOT / "data" / "raw" / "freesolv" / "sdffiles" / "mobley_1034539.sdf"
+    )
+    partial_bond_orders = record.property("partial_bond_orders")
+    atom_types = record.property("atom_types")
+
+    assert partial_bond_orders is not None
+    assert atom_types is not None
+    assert len(partial_bond_orders.splitlines()) == len(molecule_edges(record.molecule))
+    assert "ca" in atom_types.splitlines()
+    assert len(record.molecule.systems) == 25
+    assert _count_unnamed_edge_systems(record.molecule, 2) == 23
+    assert _count_tag(record.molecule, "pi_ring") == 2
 
 
 def test_water_smoke_parse() -> None:
@@ -158,15 +236,31 @@ def test_manuscript_example_sdfs_smoke_parse() -> None:
     morphine = read_sdf(PROJECT_ROOT / "molecules" / "morphine.sdf")
 
     assert len(diborane.atoms) == 8
-    assert len(molecule_edges(diborane)) == 5
-    assert _count_unnamed_edge_systems(diborane, 2) == 5
+    assert len(molecule_edges(diborane)) == 8
+    assert _count_unnamed_edge_systems(diborane, 2) == 4
+    assert _count_tag_prefix(diborane, "inferred_borane_bridge_") == 2
     assert len(ferrocene.atoms) == 21
-    assert len(molecule_edges(ferrocene)) == 20
+    assert len(molecule_edges(ferrocene)) == 30
     assert _count_unnamed_edge_systems(ferrocene, 2) == 20
+    assert _count_tag_prefix(ferrocene, "inferred_cp") == 2
     assert len(morphine.atoms) == 21
     assert len(molecule_edges(morphine)) == 25
     assert _count_unnamed_edge_systems(morphine, 2) == 24
     assert _count_unnamed_edge_systems(morphine, 4) == 1
+
+
+def test_sdf_perception_infers_common_resonance_and_conjugation_rules() -> None:
+    formate = parse_sdf(V2000_FORMATE)
+    nitro = parse_sdf(V2000_NITRO_METHANE)
+    amide = parse_sdf(V2000_AMIDE)
+    butadiene = parse_sdf(V2000_BUTADIENE)
+
+    assert _count_tag(formate, "inferred_carboxylate_pi") == 1
+    assert _count_unnamed_edge_systems(formate, 2) == 3
+    assert _count_unnamed_edge_systems(formate, 4) == 0
+    assert _count_tag(nitro, "inferred_nitro_pi") == 1
+    assert _count_tag(amide, "inferred_amide_pi") == 1
+    assert _count_tag(butadiene, "inferred_conjugated_diene_pi") == 1
 
 
 def test_v3000_water_record_parse_preserves_properties() -> None:
@@ -337,6 +431,10 @@ def test_smiles_stereochemistry_survives_json_round_trip() -> None:
 
 def _count_tag(molecule, expected: str) -> int:
     return sum(1 for _, system in molecule.systems if system.tag == expected)
+
+
+def _count_tag_prefix(molecule, prefix: str) -> int:
+    return sum(1 for _, system in molecule.systems if system.tag is not None and system.tag.startswith(prefix))
 
 
 def _count_unnamed_edge_systems(molecule, electrons: int) -> int:

@@ -25,13 +25,15 @@ formal charge on the atoms.
 - QM9 and timing keep paper-facing SVGs and captions.
 - Inverse design keeps reference molecule exports under `inverse_design/reference/`.
 
-Current FreeSolv reference:
+Historical FreeSolv reference:
 
 ```text
 results/freesolv_ablation/run_20260512_small_feature_ablation/
 ```
 
-That run is the 20-split A/B/C small-feature ablation. The full MolADT
-`moladt_full30_rbf_gp` row reports `1.308 +/- 0.461` kcal/mol test RMSE.
+That run is the 20-split A/B/C small-feature ablation before the multigraph
+feature-contract redo. The old full MolADT `moladt_full30_rbf_gp` row reports
+`1.308 +/- 0.461` kcal/mol test RMSE. Re-run `make freesolv-ablation` before
+citing updated RMSE for the current 30-feature MolADT multigraph panel.
 
 For file names, see [docs/outputs.md](../docs/outputs.md). For benchmark meaning, see [docs/inference-and-benchmarks.md](../docs/inference-and-benchmarks.md).

@@ -7,6 +7,8 @@ MolADT can start from SDF, SMILES, or MolADT JSON.
 ```bash
 ./.venv/bin/python -m moladt.cli parse molecules/benzene.sdf
 ./.venv/bin/python -m moladt.cli parse --properties molecules/benzene.sdf
+./.venv/bin/python -m moladt.cli perceive-sdf molecules/benzene.sdf
+./.venv/bin/python scripts/audit_sdf_bonding_perception.py data/raw/freesolv/sdffiles --limit 20
 ```
 
 The parser accepts SDF V2000 and a core V3000 CTAB subset: atom coordinates, bond tables, atom-local charges, and property blocks. Bond table entries become bonding systems: single, double, triple, and non-aromatic quadruple bonds are one-edge systems sharing 2, 4, 6, and 8 electrons, displayed as `single covalent`, `double covalent`, `triple covalent`, and `quadruple covalent`.
@@ -15,6 +17,16 @@ When an SDF single edge connects a charged sodium cation to a charged anion in
 the supported set (`F`, `Cl`, `Br`, `I`, `O`, `N`, or `S`), the parser stores
 that edge as one `ionic` bonding system with `0` shared electrons. The atom
 formal charges remain on the atoms.
+
+Delocalised systems are inferred from structure-table evidence, not from an
+arbitrary SDF property convention. The parser calls the shared bonding
+perception rules in `moladt.chem.bonding_perception`. Those rules currently
+cover aromatic six-rings, two-edge oxo resonance such as carboxylate and nitro
+groups, amide C(O)-N resonance, conjugated diene paths, borane B-H-B bridges
+from geometry, and Fe-cyclopentadienyl systems. FreeSolv SDF files keep fields
+such as `partial_bond_orders` and `atom_types` as properties; those fields are
+parsed for inspection but are not treated as authoritative delocalisation
+annotations.
 
 ## MolADT JSON
 

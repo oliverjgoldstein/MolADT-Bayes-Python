@@ -1,63 +1,56 @@
 # FreeSolv GP Feature List
 
-This is the current 30-feature FreeSolv GP list for `moladt_full30_rbf_gp`.
-It replaces the older overfit sparse-token feature vocabulary.
+This is the current fixed 30-feature contract for `moladt_full30_rbf_gp`.
+It replaces the previous 20 SMILES-graph features plus 10 MolADT additions
+with a MolADT-native panel that uses explicit bonding systems, effective bond
+orders, and bonding-system radial structure.
 
-Source run:
+The A/B baselines remain the same for representation ablation:
 
-```text
-results/freesolv_ablation/run_20260512_small_feature_ablation/
-```
+- A: `atom_bag10_rbf_gp`, ten SMILES atom-count features
+- B: `adjacency_graph20_rbf_gp`, twenty SMILES adjacency-graph features
+- C: `moladt_full30_rbf_gp`, the 30 MolADT multigraph features below
 
-## Feature Groups
+The committed May 12, 2026 ablation artifact is still available as a historical
+result, but it was generated before this multigraph feature redo. Re-run
+`make freesolv-ablation` before citing updated C-row RMSE for this feature
+contract.
 
-- atom bag: 10 atom-count features
-- graph baseline: 10 additional SMILES adjacency graph features
-- MolADT additions: 10 descriptor features from the MolADT representation
+## Composition And Polarity
 
-## Atom Bag Features
+1. `weight`
+2. `polar`
+3. `surface`
+4. `donor_count`
+5. `acceptor_count`
+6. `heavy_atoms`
+7. `halogens`
+8. `atom_count_c`
+9. `atom_count_n`
+10. `atom_count_o`
 
-1. `smiles_atom_count_c`
-2. `smiles_atom_count_n`
-3. `smiles_atom_count_o`
-4. `smiles_atom_count_f`
-5. `smiles_atom_count_p`
-6. `smiles_atom_count_s`
-7. `smiles_atom_count_cl`
-8. `smiles_atom_count_br`
-9. `smiles_atom_count_i`
-10. `smiles_atom_count_h`
+## Multigraph Bonding Systems
 
-## Graph Baseline Additions
+11. `sigma_edge_count`
+12. `effective_bond_order_sum`
+13. `effective_bond_order_mean`
+14. `effective_bond_order_max`
+15. `edge_order_sigma_like_count`
+16. `edge_order_delocalized_count`
+17. `edge_order_double_like_count`
+18. `edge_order_triple_plus_count`
+19. `bonding_system_count`
+20. `multicentre_system_count`
+21. `pi_ring_system_count`
+22. `system_member_edges_max`
+23. `system_shared_electrons_sum`
+24. `system_shared_electrons_mean`
 
-11. `smiles_bond_count_single`
-12. `smiles_bond_count_aromatic`
-13. `smiles_bond_count_double`
-14. `smiles_bond_count_triple`
-15. `smiles_bond_count_total`
-16. `smiles_heavy_atom_count`
-17. `smiles_component_count`
-18. `smiles_cycle_rank`
-19. `smiles_heavy_degree_mean`
-20. `smiles_heavy_degree_max`
+## Geometry And Radial Structure
 
-## MolADT Additions
-
-21. `weight`
-22. `polar`
-23. `surface`
-24. `donor_count`
-25. `acceptor_count`
-26. `bonding_system_count`
-27. `multicentre_system_count`
-28. `pi_ring_system_count`
-29. `system_shared_electrons_sum`
+25. `ring_edge_fraction`
+26. `rotatable_bonds`
+27. `heavy_atom_degree_mean`
+28. `heavy_atom_degree_max`
+29. `aprdf_edge_order_1p5a`
 30. `aprdf_system_edge_1p5a`
-
-## Latest 20-Split Result
-
-| Label | Model | Feature count | Test RMSE |
-| --- | --- | ---: | ---: |
-| A | `atom_bag10_rbf_gp` | 10 | `1.971 +/- 0.567` |
-| B | `adjacency_graph20_rbf_gp` | 20 | `1.791 +/- 0.505` |
-| C | `moladt_full30_rbf_gp` | 30 | `1.308 +/- 0.461` |

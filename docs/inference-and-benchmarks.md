@@ -38,7 +38,8 @@ browser automatically.
 - model: `moladt_full30_rbf_gp`
 - method: empirical-Bayes exact GP
 - kernel: RBF over 30 standardized small features
-- features: 20 SMILES-decoded graph features plus 10 MolADT descriptor extensions
+- features: 30 MolADT-native composition, bonding-system, effective-order, and
+  radial descriptors
 - metric: RMSE
 
 The result is a local benchmark artifact, not a universal leaderboard claim.
@@ -63,7 +64,7 @@ split seeds:
 
 - atom bag: 10 SMILES atom-count features
 - SMILES adjacency graph: 20 graph-only features
-- full MolADT: the graph baseline plus 10 MolADT descriptor additions
+- full MolADT: 30 MolADT-native multigraph descriptors
 
 It writes:
 
@@ -77,8 +78,10 @@ The SMILES adjacency graph variant is deliberately limited to information a
 SMILES-decoded graph provides: atom counts, bond-order counts, component count,
 cycle rank, and heavy-atom degree summaries. It has no MolADT bonding-system
 features, 3D geometry, shared-electron counts, or hashed/tokenized WL features.
-The current 20-split result has full MolADT at `1.308 +/- 0.461` kcal/mol test
-RMSE, ahead of the SMILES adjacency graph (`1.791 +/- 0.505`).
+The latest committed 20-split result before the multigraph feature redo had
+full MolADT at `1.308 +/- 0.461` kcal/mol test RMSE. Re-run
+`make freesolv-ablation` before citing an RMSE for the current C-row feature
+contract.
 
 ## FreeSolv Inverse Design
 

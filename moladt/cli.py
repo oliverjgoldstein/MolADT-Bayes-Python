@@ -59,6 +59,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print the raw SDF properties block after the molecule report",
     )
 
+    perceive_parser = subparsers.add_parser("perceive-sdf", help="Print parser-inferred bonding systems for an SDF file")
+    perceive_parser.add_argument("path")
+
     parse_smiles_parser = subparsers.add_parser("parse-smiles", help="Parse and validate a SMILES string")
     parse_smiles_parser.add_argument("smiles")
 
@@ -139,6 +142,8 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "parse":
         return _handle_parse(Path(args.path), include_properties=args.properties)
+    if args.command == "perceive-sdf":
+        return _handle_perceive_sdf(Path(args.path))
     if args.command == "parse-smiles":
         return _handle_parse_smiles(args.smiles)
     if args.command == "to-smiles":
@@ -186,6 +191,18 @@ def _handle_parse(path: Path, *, include_properties: bool = False) -> int:
         print("Properties:")
         for key in sorted(record.properties):
             print(f"  {key}: {record.properties[key]}")
+    return 0
+
+
+def _handle_perceive_sdf(path: Path) -> int:
+    record = read_sdf_record(path)
+    validate_molecule(record.molecule)
+    print(f"Title: {record.title or '(blank)'}")
+    for system_id, system in record.molecule.systems:
+        if system.tag is None or not (system.tag == "pi_ring" or system.tag.startswith("inferred_")):
+            continue
+        edges = ", ".join(f"{edge.a.value}-{edge.b.value}" for edge in sorted(system.member_edges))
+        print(f"#{system_id.value}\t{system.tag}\t{system.shared_electrons.value}e\t{edges}")
     return 0
 
 

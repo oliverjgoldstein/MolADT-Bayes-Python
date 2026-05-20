@@ -60,22 +60,49 @@ ADJACENCY_GRAPH_FEATURES: tuple[str, ...] = (
     "smiles_heavy_degree_max",
 )
 
-MOLADT_EXTENSION_FEATURES: tuple[str, ...] = (
+MOLADT_COMPOSITION_FEATURES: tuple[str, ...] = (
     "weight",
     "polar",
     "surface",
     "donor_count",
     "acceptor_count",
+    "heavy_atoms",
+    "halogens",
+    "atom_count_c",
+    "atom_count_n",
+    "atom_count_o",
+)
+
+MOLADT_MULTIGRAPH_FEATURES: tuple[str, ...] = (
+    "sigma_edge_count",
+    "effective_bond_order_sum",
+    "effective_bond_order_mean",
+    "effective_bond_order_max",
+    "edge_order_sigma_like_count",
+    "edge_order_delocalized_count",
+    "edge_order_double_like_count",
+    "edge_order_triple_plus_count",
     "bonding_system_count",
     "multicentre_system_count",
     "pi_ring_system_count",
+    "system_member_edges_max",
     "system_shared_electrons_sum",
+    "system_shared_electrons_mean",
+)
+
+MOLADT_GEOMETRY_FEATURES: tuple[str, ...] = (
+    "ring_edge_fraction",
+    "rotatable_bonds",
+    "heavy_atom_degree_mean",
+    "heavy_atom_degree_max",
+    "aprdf_edge_order_1p5a",
     "aprdf_system_edge_1p5a",
 )
 
 FULL_MOLADT_FEATURES: tuple[str, ...] = (
-    *ADJACENCY_GRAPH_FEATURES,
-    *MOLADT_EXTENSION_FEATURES,
+    *MOLADT_COMPOSITION_FEATURES,
+    *MOLADT_MULTIGRAPH_FEATURES,
+    *MOLADT_GEOMETRY_FEATURES,
 )
 
 MODEL_FEATURES: dict[str, tuple[str, ...]] = {
@@ -610,7 +637,7 @@ def _smiles_graph_features(smiles: str) -> dict[str, float]:
 def _molecule_feature_vector(molecule: Molecule, feature_names: tuple[str, ...]) -> np.ndarray:
     smiles_features = _smiles_graph_features(molecule_to_smiles(molecule))
     descriptor_values: dict[str, float] = {}
-    if any(name in MOLADT_EXTENSION_FEATURES for name in feature_names):
+    if any(name in FULL_MOLADT_FEATURES for name in feature_names):
         from .features import compute_moladt_featurized_descriptors
 
         descriptor_values = compute_moladt_featurized_descriptors(molecule)
