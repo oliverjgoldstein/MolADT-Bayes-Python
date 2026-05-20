@@ -19,6 +19,7 @@ from .process_qm9 import QM9Artifacts, process_qm9_dataset
 from .freesolv_small_feature_gp import (
     METHOD_NAME as FREESOLV_SMALL_FEATURE_METHOD,
     MODEL_NAMES as FREESOLV_SMALL_FEATURE_MODEL_NAMES,
+    freesolv_model_keys_from_names,
     run_freesolv_small_feature_gp_splits,
 )
 from .predictive_metrics import aggregate_seed_metrics, build_calibration_rows
@@ -103,7 +104,7 @@ def _add_common_benchmark_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--models",
         default=DEFAULT_STAN_MODELS_ARG,
-        help="Comma-separated model names. FreeSolv defaults to moladt_full30_rbf_gp.",
+        help="Comma-separated model names. FreeSolv accepts moladt_full30_rbf_gp and gp_wl.",
     )
     parser.add_argument("--sample-chains", type=int, default=2)
     parser.add_argument("--sample-warmup", type=int, default=200)
@@ -134,7 +135,7 @@ def _parsed_models_arg(args: argparse.Namespace) -> tuple[str, ...]:
 
 def _uses_fixed_freesolv_contract(args: argparse.Namespace) -> bool:
     requested = _parsed_models_arg(args)
-    return requested in (DEFAULT_FREESOLV_MODELS, DEFAULT_STAN_MODELS)
+    return requested in (DEFAULT_FREESOLV_MODELS, DEFAULT_STAN_MODELS) or freesolv_model_keys_from_names(requested) is not None
 
 
 def _uses_fixed_qm9_contract(args: argparse.Namespace) -> bool:
@@ -414,6 +415,20 @@ def _extend_with_property_results(
 ) -> None:
     methods = _stan_methods_for_artifacts(artifacts, args)
     models = _stan_models_for_artifacts(artifacts, args)
+    if isinstance(artifacts, FreeSolvArtifacts):
+        freesolv_gp_keys = freesolv_model_keys_from_names(models)
+        if freesolv_gp_keys is not None:
+            result = run_freesolv_small_feature_gp_splits(
+                model_keys=freesolv_gp_keys,
+                seeds=(int(args.seed),),
+                noise_floor=0.01,
+                verbose=bool(args.verbose),
+            )
+            metrics_rows.extend(result.metric_rows)
+            prediction_rows.extend(result.prediction_rows)
+            coefficient_rows.extend(result.coefficient_rows)
+            model_artifact_rows.extend(result.artifact_rows)
+            return
     if isinstance(artifacts, FreeSolvArtifacts) and models == DEFAULT_FREESOLV_MODELS:
         result = run_freesolv_small_feature_gp_splits(
             model_keys=("full_moladt",),

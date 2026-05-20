@@ -46,6 +46,14 @@ The result is a local benchmark artifact, not a universal leaderboard claim.
 
 The comparison figure uses the MoleculeNet MPNN RMSE row `1.15` as the paper bar.
 
+The orbital-aware WL model is also available as `gp_wl`. It uses parsed SDF
+MolADT molecules, WL neighbourhood tokens, bonding-system tokens, and atom
+labels that include shell/orbital occupancy. To run it as an additional model:
+
+```bash
+FREESOLV_MODELS=moladt_full30_rbf_gp,gp_wl make freesolv
+```
+
 `make freesolv-20split` runs the same 30-feature full MolADT GP on 20
 deterministic random splits, using seeds `0..19` by default. It writes:
 
@@ -58,6 +66,10 @@ deterministic random splits, using seeds `0..19` by default. It writes:
 
 The target is for repeated-split uncertainty checks. It is separate from the
 single seed-18 artifact used by inverse design.
+
+Use `FREESOLV_20SPLIT_MODEL=gp_wl make freesolv-20split` for the WL-token GP, or
+`FREESOLV_20SPLIT_MODEL=all make freesolv-20split` to compare every GP variant
+in that runner.
 
 `make freesolv-ablation` runs the representation ladder over the same 20
 split seeds:

@@ -76,6 +76,17 @@ by empirical Bayes on the training split. The model then uses exact GP
 conditioning to produce a predictive mean and standard deviation for hydration
 free energy.
 
+The earlier strong WL-token GP is also available as an additional model:
+
+```bash
+FREESOLV_MODELS=moladt_full30_rbf_gp,gp_wl make freesolv
+FREESOLV_20SPLIT_MODEL=gp_wl make freesolv-20split
+```
+
+`gp_wl` uses parsed MolADT SDF molecules, bonding-system tokens, and
+Weisfeiler-Lehman atom labels that include formal charge plus shell/orbital
+occupancy.
+
 ### Representation Ablation
 
 The main FreeSolv evidence is the A/B/C small-feature ablation. It asks whether
@@ -235,6 +246,8 @@ class Atom:
 - there is no separate shell lookup layer
 - all 118 official elements are present for atomic number and mass; elements
   outside the audited shell subset keep `shells=None`
+- audited default shell tables are regression-tested against neutral atomic
+  electron counts and representative orbital occupancy signatures
 
 Delocalised and multicentre bonding is represented explicitly:
 

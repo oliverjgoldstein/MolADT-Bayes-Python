@@ -43,6 +43,7 @@ FREESOLV_MODELS ?= moladt_full30_rbf_gp
 FREESOLV_SEED ?= 18
 FREESOLV_SPLIT_COUNT ?= 20
 FREESOLV_SPLIT_SEED_START ?= 0
+FREESOLV_20SPLIT_MODEL ?= full_moladt
 FREESOLV_ABLATION_SPLIT_COUNT ?= 20
 FREESOLV_ABLATION_SEED_START ?= 0
 QM9_MODELS ?= bayes_linear_student_t
@@ -176,6 +177,7 @@ help:
 		"  preset=$(INFERENCE_PRESET)" \
 		"  results_root=$(RESULTS_ROOT)" \
 	"  freesolv_split_count=$(FREESOLV_SPLIT_COUNT)" \
+	"  freesolv_20split_model=$(FREESOLV_20SPLIT_MODEL)" \
 	"  freesolv_ablation_split_count=$(FREESOLV_ABLATION_SPLIT_COUNT)" \
 		"  qm9_split_mode=$(QM9_SPLIT_MODE)" \
 		"  qm9_limit=$(if $(QM9_LIMIT),$(QM9_LIMIT),full-local-download)" \
@@ -498,7 +500,7 @@ freesolv:
 	@printf "%s\n" \
 	"Running reviewer-facing FreeSolv comparison." \
 	"  repo: MolADT-Bayes-Python" \
-	"  default model: MolADT full30 small-feature empirical-Bayes GP; CmdStan is only needed for explicit Stan overrides" \
+	"  default model: MolADT full30 small-feature empirical-Bayes GP; set FREESOLV_MODELS=moladt_full30_rbf_gp,gp_wl to include GP_WL" \
 	"  command: benchmarking.run_all freesolv" \
 	"  dataset: FreeSolv" \
 	"  results_dir: results/$(FREESOLV_RESULTS_SUBDIR)" \
@@ -513,18 +515,18 @@ freesolv:
 
 freesolv-20split:
 	@printf "%s\n" \
-	"Running FreeSolv 20-split full MolADT small-feature GP." \
+	"Running FreeSolv 20-split GP." \
 	"  repo: MolADT-Bayes-Python" \
 	"  command: benchmarking.freesolv_small_feature_gp" \
 	"  dataset: FreeSolv" \
-	"  model: moladt_full30_rbf_gp" \
+	"  model: $(FREESOLV_20SPLIT_MODEL) (use gp_wl for the orbital-aware WL model, all for every GP variant)" \
 	"  method: empirical_bayes_exact_gp" \
 	"  split_count: $(FREESOLV_SPLIT_COUNT)" \
 	"  seed_start: $(FREESOLV_SPLIT_SEED_START)" \
 	"  results_dir: results/$(FREESOLV_20_SPLIT_RESULTS_SUBDIR)" \
 	"  expected outputs: predictive_metrics.csv, summary.csv, split_assignments.csv"
 	@find results/freesolv_small_feature_gp -mindepth 1 -maxdepth 1 -type d -name 'run_*' -exec rm -rf {} + 2>/dev/null || true
-	MOLADT_RESULTS_DIR=results/$(FREESOLV_20_SPLIT_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m benchmarking.freesolv_small_feature_gp --model full_moladt --split-count $(FREESOLV_SPLIT_COUNT) --seed-start $(FREESOLV_SPLIT_SEED_START) --output-dir results/$(FREESOLV_20_SPLIT_RESULTS_SUBDIR) $(VERBOSE_ARG)
+	MOLADT_RESULTS_DIR=results/$(FREESOLV_20_SPLIT_RESULTS_SUBDIR) $(TOOLCHAIN_ENV) $(PYTHON_CMD) -m benchmarking.freesolv_small_feature_gp --model $(FREESOLV_20SPLIT_MODEL) --split-count $(FREESOLV_SPLIT_COUNT) --seed-start $(FREESOLV_SPLIT_SEED_START) --output-dir results/$(FREESOLV_20_SPLIT_RESULTS_SUBDIR) $(VERBOSE_ARG)
 
 freesolv-ablation:
 	@printf "%s\n" \

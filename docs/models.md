@@ -43,6 +43,27 @@ The benchmark writes predictive metrics, predictions, fitted kernel weights, tar
 
 Inverse design always loads the latest `results/freesolv/run_*` artifact.
 
+Additional FreeSolv GP:
+
+- model: `gp_wl`
+- representation: `moladt_wl_bonding`
+- kernel: fixed empirical-Bayes Tanimoto mixture over WL graph tokens,
+  bonding-system tokens, and their combined vocabulary
+- atom labels include element, formal-charge bucket, shell count, orbital count,
+  total shell electrons, and orbital occupancy signature
+
+Run it alongside the current default with:
+
+```bash
+FREESOLV_MODELS=moladt_full30_rbf_gp,gp_wl make freesolv
+```
+
+For repeated split checks:
+
+```bash
+FREESOLV_20SPLIT_MODEL=gp_wl make freesolv-20split
+```
+
 For repeated-split uncertainty, run:
 
 ```bash

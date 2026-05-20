@@ -1,27 +1,31 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
 import math
 from pathlib import Path
 import time
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 import numpy as np
 import pandas as pd
 from scipy.linalg import LinAlgError, cho_factor, cho_solve
 from scipy.optimize import minimize
 
+from moladt.chem.dietz import AtomId, BondingSystem, Edge
 from moladt.chem.molecule import Molecule, molecule_edges
 from moladt.chem.molecule_ops import effective_order
+from moladt.io.sdf import parse_sdf
 from moladt.io.smiles import molecule_to_smiles, parse_smiles
 
-from .common import PROCESSED_DATA_DIR, ensure_directory
+from .common import PROCESSED_DATA_DIR, PROJECT_ROOT, ensure_directory
 from .predictive_metrics import build_metric_row, build_prediction_rows
 
 
 REPRESENTATION = "moladt_small_descriptors"
+WL_REPRESENTATION = "moladt_wl_bonding"
 METHOD_NAME = "empirical_bayes_exact_gp"
 DEFAULT_SPLIT_COUNT = 20
 DEFAULT_SINGLE_SPLIT_SEED = 18
@@ -111,11 +115,48 @@ MODEL_FEATURES: dict[str, tuple[str, ...]] = {
     "full_moladt": FULL_MOLADT_FEATURES,
 }
 
+WL_MODEL_KEY = "gp_wl"
+ALL_MODEL_KEYS: tuple[str, ...] = (*MODEL_FEATURES.keys(), WL_MODEL_KEY)
+
 MODEL_NAMES: dict[str, str] = {
     "atom_bag": "atom_bag10_rbf_gp",
     "adjacency_graph": "adjacency_graph20_rbf_gp",
     "full_moladt": "moladt_full30_rbf_gp",
+    WL_MODEL_KEY: "gp_wl",
 }
+
+MODEL_ALIASES: dict[str, str] = {
+    **{key: key for key in ALL_MODEL_KEYS},
+    **{name: key for key, name in MODEL_NAMES.items()},
+    "GP_WL": WL_MODEL_KEY,
+    "moladt_gp_wl": WL_MODEL_KEY,
+    "moladt_wl_bonding_gp": WL_MODEL_KEY,
+}
+
+MODEL_REPRESENTATIONS: dict[str, str] = {
+    "atom_bag": REPRESENTATION,
+    "adjacency_graph": REPRESENTATION,
+    "full_moladt": REPRESENTATION,
+    WL_MODEL_KEY: WL_REPRESENTATION,
+}
+
+WL_SYSTEM_KERNEL_WEIGHT = 0.00033546262790251185
+WL_BONDING_SYSTEM_KERNEL_WEIGHT = 4.232146253796119
+WL_GRAPH_KERNEL_WEIGHT = 0.23803398404993845
+WL_NOISE_VARIANCE = 0.002070630985235373
+WL_KERNEL_JITTER = 1.0e-8
+WL_MINIMUM_VARIANCE = 1.0e-9
+
+
+def freesolv_model_keys_from_names(model_names: Sequence[str]) -> tuple[str, ...] | None:
+    keys: list[str] = []
+    for raw_name in model_names:
+        name = str(raw_name).strip()
+        key = MODEL_ALIASES.get(name)
+        if key is None:
+            return None
+        keys.append(key)
+    return tuple(dict.fromkeys(keys))
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,6 +188,32 @@ class _RBFGPFit:
 
 
 @dataclass(frozen=True, slots=True)
+class _WLTokenViews:
+    wl_tokens: Mapping[str, float]
+    system_tokens: Mapping[str, float]
+
+
+@dataclass(frozen=True, slots=True)
+class _PreparedWLDataset:
+    rows: pd.DataFrame
+    mol_ids: tuple[str, ...]
+    y: np.ndarray
+    views: tuple[_WLTokenViews, ...]
+    full_kernel: np.ndarray
+    feature_names: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _WLGPFit:
+    train_idx: np.ndarray
+    y_mean: float
+    y_scale: float
+    alpha: np.ndarray
+    cholesky: tuple[np.ndarray, bool]
+    full_kernel: np.ndarray
+
+
+@dataclass(frozen=True, slots=True)
 class SmallFeaturePredictorState:
     fit: _RBFGPFit
     seed: int
@@ -168,8 +235,21 @@ def run_freesolv_small_feature_gp_splits(
     coefficient_rows: list[dict[str, Any]] = []
     artifact_rows: list[dict[str, Any]] = []
     feature_rows: list[dict[str, Any]] = []
+    prepared_wl: _PreparedWLDataset | None = None
 
     for model_key in model_keys:
+        if model_key == WL_MODEL_KEY:
+            if prepared_wl is None:
+                prepared_wl = _load_wl_dataset(rows)
+                feature_rows.extend(_feature_manifest_rows(model_key, prepared_wl.feature_names))
+            for seed in seeds:
+                result = _evaluate_wl_model_split(prepared_wl, seed=int(seed), verbose=verbose)
+                metric_rows.extend(result.metric_rows)
+                prediction_rows.extend(result.prediction_rows)
+                coefficient_rows.extend(result.coefficient_rows)
+                artifact_rows.extend(result.artifact_rows)
+            continue
+
         feature_names = MODEL_FEATURES[model_key]
         x = _feature_matrix(rows, feature_names)
         y = rows["expt"].to_numpy(dtype=float)
@@ -206,6 +286,8 @@ def load_small_feature_predictor_state(
     model_key: str = "full_moladt",
     noise_floor: float = 0.01,
 ) -> SmallFeaturePredictorState:
+    if model_key == WL_MODEL_KEY:
+        raise ValueError("gp_wl is a dataset GP and is not available for single-molecule inverse-design prediction")
     rows = _load_feature_rows()
     feature_names = MODEL_FEATURES[model_key]
     x = _feature_matrix(rows, feature_names)
@@ -329,12 +411,13 @@ def _evaluate_model_split(
 
     runtime = time.perf_counter() - start
     model_name = MODEL_NAMES[model_key]
+    representation = MODEL_REPRESENTATIONS[model_key]
     feature_count = len(feature_names)
     parameter_count = 5
     metric_rows = [
         build_metric_row(
             dataset_name="freesolv",
-            representation=REPRESENTATION,
+            representation=representation,
             model_name=model_name,
             method=METHOD_NAME,
             split_name="train",
@@ -354,7 +437,7 @@ def _evaluate_model_split(
         ),
         build_metric_row(
             dataset_name="freesolv",
-            representation=REPRESENTATION,
+            representation=representation,
             model_name=model_name,
             method=METHOD_NAME,
             split_name="valid",
@@ -375,7 +458,7 @@ def _evaluate_model_split(
         ),
         build_metric_row(
             dataset_name="freesolv",
-            representation=REPRESENTATION,
+            representation=representation,
             model_name=model_name,
             method=METHOD_NAME,
             split_name="test",
@@ -398,7 +481,7 @@ def _evaluate_model_split(
     prediction_rows = [
         *build_prediction_rows(
             dataset_name="freesolv",
-            representation=REPRESENTATION,
+            representation=representation,
             model_name=model_name,
             method=METHOD_NAME,
             split_name="train",
@@ -410,7 +493,7 @@ def _evaluate_model_split(
         ),
         *build_prediction_rows(
             dataset_name="freesolv",
-            representation=REPRESENTATION,
+            representation=representation,
             model_name=model_name,
             method=METHOD_NAME,
             split_name="valid",
@@ -422,7 +505,7 @@ def _evaluate_model_split(
         ),
         *build_prediction_rows(
             dataset_name="freesolv",
-            representation=REPRESENTATION,
+            representation=representation,
             model_name=model_name,
             method=METHOD_NAME,
             split_name="test",
@@ -436,7 +519,7 @@ def _evaluate_model_split(
     artifact_rows = [
         {
             "dataset": "freesolv",
-            "representation": REPRESENTATION,
+            "representation": representation,
             "model": model_name,
             "method": METHOD_NAME,
             "artifact_type": "small_feature_rbf_gp",
@@ -454,6 +537,164 @@ def _evaluate_model_split(
         metric_rows=metric_rows,
         prediction_rows=prediction_rows,
         coefficient_rows=_coefficient_rows(final_fit, runtime_seconds=runtime),
+        artifact_rows=artifact_rows,
+        feature_rows=[],
+    )
+
+
+def _evaluate_wl_model_split(
+    prepared: _PreparedWLDataset,
+    *,
+    seed: int,
+    verbose: bool,
+) -> SmallFeatureResult:
+    start = time.perf_counter()
+    y = prepared.y
+    mol_ids = prepared.mol_ids
+    train_idx, valid_idx, test_idx = train_valid_test_indices(len(y), seed)
+
+    if verbose:
+        print(
+            f"[freesolv/gp-wl] model={WL_MODEL_KEY} seed={seed} "
+            f"features={len(prepared.feature_names)}",
+            flush=True,
+        )
+
+    selection_fit = _fit_wl_gp(prepared.full_kernel, y, train_idx)
+    valid_mean, valid_sd = _predict_wl_gp(selection_fit, valid_idx)
+
+    final_train_idx = np.sort(np.concatenate([train_idx, valid_idx]))
+    final_fit = _fit_wl_gp(prepared.full_kernel, y, final_train_idx)
+    train_mean, train_sd = _predict_wl_gp(final_fit, final_train_idx)
+    test_mean, test_sd = _predict_wl_gp(final_fit, test_idx)
+
+    runtime = time.perf_counter() - start
+    model_name = MODEL_NAMES[WL_MODEL_KEY]
+    feature_count = len(prepared.feature_names)
+    parameter_count = 5
+    representation = MODEL_REPRESENTATIONS[WL_MODEL_KEY]
+    metric_rows = [
+        build_metric_row(
+            dataset_name="freesolv",
+            representation=representation,
+            model_name=model_name,
+            method=METHOD_NAME,
+            split_name="train",
+            mol_ids=tuple(mol_ids[int(index)] for index in final_train_idx),
+            actual=y[final_train_idx],
+            predicted_mean=train_mean,
+            predictive_sd=train_sd,
+            runtime_seconds=runtime,
+            feature_count=feature_count,
+            n_train=int(len(final_train_idx)),
+            split_scheme=SPLIT_SCHEME,
+            source_row_count=len(prepared.rows),
+            used_row_count=len(prepared.rows),
+            seed=seed,
+            draw_count=1,
+            parameter_count=parameter_count,
+        ),
+        build_metric_row(
+            dataset_name="freesolv",
+            representation=representation,
+            model_name=model_name,
+            method=METHOD_NAME,
+            split_name="valid",
+            mol_ids=tuple(mol_ids[int(index)] for index in valid_idx),
+            actual=y[valid_idx],
+            predicted_mean=valid_mean,
+            predictive_sd=valid_sd,
+            runtime_seconds=runtime,
+            feature_count=feature_count,
+            n_train=int(len(train_idx)),
+            split_scheme=SPLIT_SCHEME,
+            source_row_count=len(prepared.rows),
+            used_row_count=len(prepared.rows),
+            seed=seed,
+            draw_count=1,
+            parameter_count=parameter_count,
+        ),
+        build_metric_row(
+            dataset_name="freesolv",
+            representation=representation,
+            model_name=model_name,
+            method=METHOD_NAME,
+            split_name="test",
+            mol_ids=tuple(mol_ids[int(index)] for index in test_idx),
+            actual=y[test_idx],
+            predicted_mean=test_mean,
+            predictive_sd=test_sd,
+            runtime_seconds=runtime,
+            feature_count=feature_count,
+            n_train=int(len(final_train_idx)),
+            split_scheme=SPLIT_SCHEME,
+            source_row_count=len(prepared.rows),
+            used_row_count=len(prepared.rows),
+            seed=seed,
+            draw_count=1,
+            parameter_count=parameter_count,
+        ),
+    ]
+    prediction_rows = [
+        *build_prediction_rows(
+            dataset_name="freesolv",
+            representation=representation,
+            model_name=model_name,
+            method=METHOD_NAME,
+            split_name="train",
+            mol_ids=tuple(mol_ids[int(index)] for index in final_train_idx),
+            actual=y[final_train_idx],
+            predicted_mean=train_mean,
+            predictive_sd=train_sd,
+            seed=seed,
+        ),
+        *build_prediction_rows(
+            dataset_name="freesolv",
+            representation=representation,
+            model_name=model_name,
+            method=METHOD_NAME,
+            split_name="valid",
+            mol_ids=tuple(mol_ids[int(index)] for index in valid_idx),
+            actual=y[valid_idx],
+            predicted_mean=valid_mean,
+            predictive_sd=valid_sd,
+            seed=seed,
+        ),
+        *build_prediction_rows(
+            dataset_name="freesolv",
+            representation=representation,
+            model_name=model_name,
+            method=METHOD_NAME,
+            split_name="test",
+            mol_ids=tuple(mol_ids[int(index)] for index in test_idx),
+            actual=y[test_idx],
+            predicted_mean=test_mean,
+            predictive_sd=test_sd,
+            seed=seed,
+        ),
+    ]
+    artifact_rows = [
+        {
+            "dataset": "freesolv",
+            "representation": representation,
+            "model": model_name,
+            "method": METHOD_NAME,
+            "artifact_type": "wl_bonding_tanimoto_gp",
+            "seed": seed,
+            "split_scheme": SPLIT_SCHEME,
+            "train_mol_ids": ";".join(mol_ids[int(index)] for index in train_idx),
+            "valid_mol_ids": ";".join(mol_ids[int(index)] for index in valid_idx),
+            "test_mol_ids": ";".join(mol_ids[int(index)] for index in test_idx),
+            "feature_count": feature_count,
+            "feature_names": ";".join(prepared.feature_names),
+            "source_sdf_dir": str(PROJECT_ROOT / "data" / "raw" / "freesolv" / "sdffiles"),
+            "source_feature_table": str(PROCESSED_DATA_DIR / "freesolv_moladt_featurized_features.csv"),
+        }
+    ]
+    return SmallFeatureResult(
+        metric_rows=metric_rows,
+        prediction_rows=prediction_rows,
+        coefficient_rows=_wl_coefficient_rows(runtime_seconds=runtime),
         artifact_rows=artifact_rows,
         feature_rows=[],
     )
@@ -553,6 +794,41 @@ def _predict_rbf_gp(fit: _RBFGPFit, target_idx: np.ndarray) -> tuple[np.ndarray,
     return mean, sd
 
 
+def _fit_wl_gp(full_kernel: np.ndarray, y: np.ndarray, train_idx: np.ndarray) -> _WLGPFit:
+    y_train_raw = y[train_idx]
+    y_mean = float(y_train_raw.mean())
+    y_scale = float(y_train_raw.std(ddof=0))
+    if y_scale < 1.0e-12:
+        y_scale = 1.0
+    y_train = (y_train_raw - y_mean) / y_scale
+    kernel_train = full_kernel[np.ix_(train_idx, train_idx)].copy()
+    kernel_train += (WL_NOISE_VARIANCE + WL_KERNEL_JITTER) * np.eye(len(train_idx))
+    cholesky = cho_factor(kernel_train, lower=True, check_finite=False)
+    alpha = cho_solve(cholesky, y_train, check_finite=False)
+    return _WLGPFit(
+        train_idx=train_idx.copy(),
+        y_mean=y_mean,
+        y_scale=y_scale,
+        alpha=alpha,
+        cholesky=cholesky,
+        full_kernel=full_kernel,
+    )
+
+
+def _predict_wl_gp(fit: _WLGPFit, target_idx: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    cross = fit.full_kernel[np.ix_(fit.train_idx, target_idx)]
+    mean_scaled = cross.T @ fit.alpha
+    solved = cho_solve(fit.cholesky, cross, check_finite=False)
+    latent_var = np.maximum(
+        np.diag(fit.full_kernel)[target_idx] - np.sum(cross * solved, axis=0),
+        WL_MINIMUM_VARIANCE,
+    )
+    observed_var = np.maximum(latent_var + WL_NOISE_VARIANCE, WL_MINIMUM_VARIANCE)
+    mean = fit.y_mean + fit.y_scale * mean_scaled
+    sd = fit.y_scale * np.sqrt(observed_var)
+    return mean, sd
+
+
 def _load_feature_rows() -> pd.DataFrame:
     path = PROCESSED_DATA_DIR / "freesolv_moladt_featurized_features.csv"
     if not path.exists():
@@ -561,6 +837,260 @@ def _load_feature_rows() -> pd.DataFrame:
     rows.loc[:, "mol_id"] = rows["mol_id"].astype(str)
     rows = rows.sort_values("mol_id").reset_index(drop=True)
     return rows
+
+
+def _load_wl_dataset(rows: pd.DataFrame) -> _PreparedWLDataset:
+    sdf_dir = PROJECT_ROOT / "data" / "raw" / "freesolv" / "sdffiles"
+    views: list[_WLTokenViews] = []
+    for mol_id in rows["mol_id"].astype(str).tolist():
+        sdf_path = sdf_dir / f"{mol_id}.sdf"
+        if not sdf_path.exists():
+            raise FileNotFoundError(f"Expected FreeSolv SDF for gp_wl at {sdf_path}")
+        molecule = parse_sdf(sdf_path.read_text(encoding="utf-8"))
+        views.append(_token_views(molecule))
+    view_tuple = tuple(views)
+    feature_names = _wl_feature_names(view_tuple)
+    return _PreparedWLDataset(
+        rows=rows,
+        mol_ids=tuple(rows["mol_id"].astype(str).tolist()),
+        y=rows["expt"].to_numpy(dtype=float),
+        views=view_tuple,
+        full_kernel=_wl_full_kernel(view_tuple),
+        feature_names=feature_names,
+    )
+
+
+def _token_views(molecule: Molecule) -> _WLTokenViews:
+    return _WLTokenViews(
+        wl_tokens=_wl_token_counts(molecule),
+        system_tokens=_system_token_counts(molecule),
+    )
+
+
+def _wl_token_counts(molecule: Molecule) -> dict[str, float]:
+    initial_labels = {atom_id: _atom_label(atom) for atom_id, atom in molecule.atoms.items()}
+    adjacency = _adjacency_labels(molecule)
+    edge_counts: Counter[str] = Counter()
+    for neighbors in adjacency.values():
+        for _, label in neighbors:
+            edge_counts[f"edge_label:{label}"] += 1.0
+    counts = Counter(edge_counts)
+    labels = initial_labels
+    for radius in range(5):
+        for label in labels.values():
+            counts[f"wl{radius}:{label}"] += 1.0
+        if radius >= 4:
+            break
+        labels = {
+            atom_id: label
+            + "|"
+            + ";".join(
+                sorted(
+                    edge_label + "->" + labels.get(neighbor, "")
+                    for neighbor, edge_label in adjacency.get(atom_id, ())
+                )
+            )
+            for atom_id, label in labels.items()
+        }
+    return dict(counts)
+
+
+def _adjacency_labels(molecule: Molecule) -> dict[AtomId, list[tuple[AtomId, str]]]:
+    adjacency: dict[AtomId, list[tuple[AtomId, str]]] = {}
+    for edge in sorted(molecule_edges(molecule)):
+        label = _edge_label(molecule, edge)
+        adjacency.setdefault(edge.a, []).append((edge.b, label))
+        adjacency.setdefault(edge.b, []).append((edge.a, label))
+    return adjacency
+
+
+def _system_token_counts(molecule: Molecule) -> dict[str, float]:
+    counts: Counter[str] = Counter()
+    systems = tuple(molecule.systems)
+    for atom in molecule.atoms.values():
+        counts[f"atom:{atom.attributes.symbol.value}:{_charge_bucket(atom.formal_charge)}"] += 1.0
+        counts[f"atom_shell:{_atom_label(atom)}"] += 1.0
+    for edge in sorted(molecule_edges(molecule)):
+        containing = [system for _, system in systems if edge in system.member_edges]
+        left = molecule.atoms.get(edge.a)
+        right = molecule.atoms.get(edge.b)
+        charge_text = ":".join(sorted([str(0 if left is None else left.formal_charge), str(0 if right is None else right.formal_charge)]))
+        base_label = f"{_edge_symbol_pair(molecule, edge)}:{_order_bucket(effective_order(molecule, edge))}"
+        counts[f"edge:{base_label}"] += 1.0
+        counts[f"edge_overlap:{base_label}:{len(containing)}"] += 1.0
+        counts[f"edge_charge:{base_label}:{charge_text}"] += 1.0
+        for system in containing:
+            counts[
+                "edge_in_system:"
+                + base_label
+                + f":{system.shared_electrons.value}:{len(system.member_edges)}:{_system_kind(system)}"
+            ] += 1.0
+    for _, system in systems:
+        atom_symbols = ".".join(
+            sorted(
+                molecule.atoms[atom_id].attributes.symbol.value
+                for atom_id in system.member_atoms
+                if atom_id in molecule.atoms
+            )
+        )
+        edge_pairs = ".".join(sorted(_edge_symbol_pair(molecule, edge) for edge in system.member_edges))
+        shared = str(system.shared_electrons.value)
+        kind = _system_kind(system)
+        atom_count = str(len(system.member_atoms))
+        edge_count = str(len(system.member_edges))
+        counts[f"system:{shared}:{atom_count}:{edge_count}:{kind}"] += 1.0
+        counts[f"system_atoms:{shared}:{edge_count}:{kind}:{atom_symbols}"] += 1.0
+        counts[f"system_edges:{shared}:{atom_count}:{kind}:{edge_pairs}"] += 1.0
+    return dict(counts)
+
+
+def _atom_label(atom: Any) -> str:
+    shell_count, orbital_count, electron_count, signature = _shell_stats(atom.shells)
+    return (
+        f"{atom.attributes.symbol.value}:{_charge_bucket(atom.formal_charge)}:"
+        f"sh{shell_count}:orb{orbital_count}:e{electron_count}:{signature}"
+    )
+
+
+def _shell_stats(shells: Any) -> tuple[int, int, int, str]:
+    if shells is None:
+        return 0, 0, 0, ""
+    parts: list[tuple[str, int, int]] = []
+    for shell in shells:
+        parts.extend(_shell_parts(shell))
+    shell_count = len(shells)
+    orbital_count = sum(count for _, count, _ in parts)
+    electron_count = sum(electrons for _, _, electrons in parts)
+    signature = ".".join(text for text, _, _ in parts)
+    return shell_count, orbital_count, electron_count, signature
+
+
+def _shell_parts(shell: Any) -> list[tuple[str, int, int]]:
+    parts: list[tuple[str, int, int]] = []
+    for label, subshell in (
+        ("s", shell.s_subshell),
+        ("p", shell.p_subshell),
+        ("d", shell.d_subshell),
+        ("f", shell.f_subshell),
+    ):
+        if subshell is None:
+            continue
+        counts = [int(orbital.electron_count) for orbital in subshell.orbitals]
+        parts.append((f"{shell.principal_quantum_number}{label}{''.join(str(value) for value in counts)}", len(counts), sum(counts)))
+    return parts
+
+
+def _edge_label(molecule: Molecule, edge: Edge) -> str:
+    containing = [system for _, system in molecule.systems if edge in system.member_edges]
+    system_bits = ".".join(
+        sorted(
+            f"{system.shared_electrons.value}e:{len(system.member_edges)}m:{_system_kind(system)}"
+            for system in containing
+        )
+    )
+    return (
+        f"{_edge_symbol_pair(molecule, edge)}:"
+        f"{_order_bucket(effective_order(molecule, edge))}:"
+        f"overlap{len(containing)}:{system_bits}"
+    )
+
+
+def _edge_symbol_pair(molecule: Molecule, edge: Edge) -> str:
+    labels = sorted(
+        [
+            molecule.atoms.get(edge.a).attributes.symbol.value if edge.a in molecule.atoms else "?",
+            molecule.atoms.get(edge.b).attributes.symbol.value if edge.b in molecule.atoms else "?",
+        ]
+    )
+    return "-".join(labels)
+
+
+def _order_bucket(order: float) -> str:
+    if order <= 0.25:
+        return "ionic_zero"
+    if order < 1.25:
+        return "single"
+    if order < 1.80:
+        return "delocalised_1p5"
+    if order < 2.50:
+        return "double"
+    if order < 3.50:
+        return "triple"
+    return "quadruple_plus"
+
+
+def _system_kind(system: BondingSystem) -> str:
+    if system.tag is not None:
+        return system.tag
+    if len(system.member_edges) == 1 and system.shared_electrons.value == 2:
+        return "single_covalent"
+    if len(system.member_edges) == 1 and system.shared_electrons.value == 4:
+        return "double_covalent"
+    if len(system.member_edges) == 1 and system.shared_electrons.value == 6:
+        return "triple_covalent"
+    if len(system.member_edges) == 1 and system.shared_electrons.value == 8:
+        return "quadruple_covalent"
+    if system.shared_electrons.value == 0:
+        return "zero_electron"
+    if len(system.member_edges) > 1:
+        return "delocalised_bonding"
+    return "other_bonding"
+
+
+def _charge_bucket(charge: int) -> str:
+    if charge <= -3:
+        return "neg3plus"
+    if charge < 0:
+        return f"neg{abs(charge)}"
+    if charge == 0:
+        return "neutral"
+    if charge >= 3:
+        return "pos3plus"
+    return f"pos{charge}"
+
+
+def _wl_feature_names(views: Sequence[_WLTokenViews]) -> tuple[str, ...]:
+    wl_names = sorted({name for view in views for name in view.wl_tokens})
+    system_names = sorted({name for view in views for name in view.system_tokens})
+    return tuple([f"wl_graph:{name}" for name in wl_names] + [f"bonding_system:{name}" for name in system_names])
+
+
+def _wl_full_kernel(views: Sequence[_WLTokenViews]) -> np.ndarray:
+    n = len(views)
+    kernel = np.zeros((n, n), dtype=float)
+    for row in range(n):
+        kernel[row, row] = _wl_kernel_value(views[row], views[row])
+        for col in range(row + 1, n):
+            value = _wl_kernel_value(views[row], views[col])
+            kernel[row, col] = value
+            kernel[col, row] = value
+    return kernel
+
+
+def _wl_kernel_value(left: _WLTokenViews, right: _WLTokenViews) -> float:
+    return (
+        WL_SYSTEM_KERNEL_WEIGHT * _tanimoto(_combined_tokens(left), _combined_tokens(right))
+        + WL_BONDING_SYSTEM_KERNEL_WEIGHT * _tanimoto(left.system_tokens, right.system_tokens)
+        + WL_GRAPH_KERNEL_WEIGHT * _tanimoto(left.wl_tokens, right.wl_tokens)
+    )
+
+
+def _combined_tokens(view: _WLTokenViews) -> dict[str, float]:
+    combined: Counter[str] = Counter(view.wl_tokens)
+    combined.update(view.system_tokens)
+    return dict(combined)
+
+
+def _tanimoto(left: Mapping[str, float], right: Mapping[str, float]) -> float:
+    if len(left) > len(right):
+        left, right = right, left
+    dot = sum(float(value) * float(right.get(key, 0.0)) for key, value in left.items())
+    left_norm = sum(float(value) * float(value) for value in left.values())
+    right_norm = sum(float(value) * float(value) for value in right.values())
+    denominator = left_norm + right_norm - dot
+    if denominator <= 0.0:
+        return 0.0
+    return float(dot / denominator)
 
 
 def train_valid_test_indices(row_count: int, seed: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -706,7 +1236,7 @@ def _coefficient_rows(fit: _RBFGPFit, *, runtime_seconds: float) -> list[dict[st
         rows.append(
             {
                 "dataset": "freesolv",
-                "representation": REPRESENTATION,
+                "representation": MODEL_REPRESENTATIONS[fit.model_key],
                 "target": "expt",
                 "model": MODEL_NAMES[fit.model_key],
                 "method": METHOD_NAME,
@@ -728,11 +1258,46 @@ def _coefficient_rows(fit: _RBFGPFit, *, runtime_seconds: float) -> list[dict[st
     return rows
 
 
+def _wl_coefficient_rows(*, runtime_seconds: float) -> list[dict[str, Any]]:
+    values = {
+        "wl_system_kernel_weight": WL_SYSTEM_KERNEL_WEIGHT,
+        "system_kernel_weight": WL_BONDING_SYSTEM_KERNEL_WEIGHT,
+        "wl_kernel_weight": WL_GRAPH_KERNEL_WEIGHT,
+        "noise_variance": WL_NOISE_VARIANCE,
+        "kernel_jitter": WL_KERNEL_JITTER,
+    }
+    rows: list[dict[str, Any]] = []
+    for rank, (name, value) in enumerate(values.items(), start=1):
+        rows.append(
+            {
+                "dataset": "freesolv",
+                "representation": MODEL_REPRESENTATIONS[WL_MODEL_KEY],
+                "target": "expt",
+                "model": MODEL_NAMES[WL_MODEL_KEY],
+                "method": METHOD_NAME,
+                "parameter_type": "fixed_kernel_hyperparameter",
+                "parameter_name": name,
+                "feature_group": WL_MODEL_KEY,
+                "equation_term": name,
+                "draw_count": 1,
+                "runtime_seconds": runtime_seconds,
+                "posterior_mean": float(value),
+                "posterior_abs_mean": abs(float(value)),
+                "posterior_sd": 0.0,
+                "posterior_median": float(value),
+                "posterior_p05": float(value),
+                "posterior_p95": float(value),
+                "importance_rank": rank,
+            }
+        )
+    return rows
+
+
 def _feature_manifest_rows(model_key: str, feature_names: tuple[str, ...]) -> list[dict[str, Any]]:
     return [
         {
             "dataset": "freesolv",
-            "representation": REPRESENTATION,
+            "representation": MODEL_REPRESENTATIONS[model_key],
             "model": MODEL_NAMES[model_key],
             "feature_rank": index,
             "feature_name": name,
@@ -818,7 +1383,7 @@ def _write_ablation_svg(summary: pd.DataFrame, destination: Path) -> None:
     if test.empty:
         destination.write_text("", encoding="utf-8")
         return
-    order = [MODEL_NAMES[key] for key in MODEL_FEATURES if MODEL_NAMES[key] in set(test["model"])]
+    order = [MODEL_NAMES[key] for key in ALL_MODEL_KEYS if MODEL_NAMES[key] in set(test["model"])]
     test.loc[:, "model_order"] = test["model"].map({model: index for index, model in enumerate(order)})
     test = test.sort_values("model_order")
     width = 980
@@ -835,11 +1400,13 @@ def _write_ablation_svg(summary: pd.DataFrame, destination: Path) -> None:
         MODEL_NAMES["atom_bag"]: "#2563eb",
         MODEL_NAMES["adjacency_graph"]: "#059669",
         MODEL_NAMES["full_moladt"]: "#dc2626",
+        MODEL_NAMES[WL_MODEL_KEY]: "#7c3aed",
     }
     labels = {
         MODEL_NAMES["atom_bag"]: "Atom bag",
         MODEL_NAMES["adjacency_graph"]: "Adjacency graph",
         MODEL_NAMES["full_moladt"]: "Full MolADT",
+        MODEL_NAMES[WL_MODEL_KEY]: "GP WL",
     }
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-label="FreeSolv small-feature ablation">',
@@ -892,9 +1459,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", type=Path, default=_default_output_dir())
     parser.add_argument(
         "--model",
-        choices=("atom_bag", "adjacency_graph", "full_moladt", "all"),
+        choices=(*ALL_MODEL_KEYS, "all"),
         default="all",
-        help="Small feature set to evaluate.",
+        help="FreeSolv GP model to evaluate. gp_wl is the orbital-aware WL + bonding-system Tanimoto GP.",
     )
     parser.add_argument(
         "--noise-floor",
@@ -912,7 +1479,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise ValueError("--split-count must be positive")
     if args.noise_floor <= 0.0:
         raise ValueError("--noise-floor must be positive")
-    model_keys = tuple(MODEL_FEATURES) if args.model == "all" else (str(args.model),)
+    model_keys = ALL_MODEL_KEYS if args.model == "all" else (str(args.model),)
     seeds = tuple(range(int(args.seed_start), int(args.seed_start) + int(args.split_count)))
     result = run_freesolv_small_feature_gp_splits(
         model_keys=model_keys,

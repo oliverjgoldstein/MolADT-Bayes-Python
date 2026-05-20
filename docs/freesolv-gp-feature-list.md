@@ -16,6 +16,14 @@ result, but it was generated before this multigraph feature redo. Re-run
 `make freesolv-ablation` before citing updated C-row RMSE for this feature
 contract.
 
+`gp_wl` is also available as an additional FreeSolv model. It is intentionally
+not part of the compact 30-feature contract below: it uses a sparse
+Weisfeiler-Lehman token vocabulary built from parsed MolADT SDF molecules,
+including shell/orbital occupancy in the atom labels and explicit
+bonding-system tokens. Run it with
+`FREESOLV_MODELS=moladt_full30_rbf_gp,gp_wl make freesolv` or
+`FREESOLV_20SPLIT_MODEL=gp_wl make freesolv-20split`.
+
 ## Composition And Polarity
 
 1. `weight`
