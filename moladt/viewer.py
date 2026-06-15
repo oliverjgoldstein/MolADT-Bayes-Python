@@ -264,7 +264,7 @@ def open_molecule_viewer(path: str | Path) -> bool:
         return _run_viewer_opener(["open", uri])
     if os.name == "nt":
         try:
-            os.startfile(uri)  # type: ignore[attr-defined]
+            os.startfile(uri)
             return True
         except OSError:
             return False

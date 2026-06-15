@@ -4,9 +4,16 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 SHOWCASE_PATH = WORKSPACE_ROOT / "scripts" / "showcase.py"
+
+pytestmark = pytest.mark.skipif(
+    not SHOWCASE_PATH.exists(),
+    reason="workspace showcase script is not present in a standalone MolADT-Bayes-Python clone",
+)
 
 
 def _load_showcase_module():

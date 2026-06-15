@@ -9,6 +9,22 @@ make python-setup
 ```
 
 This creates `./.venv` and installs the package locally. It does not touch your system Python.
+The setup target needs Python 3.11+. It first looks for versioned interpreters
+such as `python3.14`, `python3.13`, `python3.12`, and `python3.11`; if none is
+available, it attempts a platform install with Homebrew on macOS or apt on
+Debian, Ubuntu, and WSL.
+
+To force a specific interpreter:
+
+```bash
+SYSTEM_PYTHON=/path/to/python3.11 make python-setup
+```
+
+To skip automatic system package installation:
+
+```bash
+AUTO_INSTALL_PYTHON=0 AUTO_INSTALL_VENV=0 make python-setup
+```
 
 The default FreeSolv benchmark does not need CmdStan. Install CmdStan only if you explicitly run the legacy Stan model overrides:
 
@@ -70,11 +86,20 @@ make python-typecheck
 
 ## Common Fixes
 
-If Ubuntu, Debian, or WSL is missing `ensurepip`:
+If automatic installation is disabled or not available, install Python manually.
+
+On macOS with Homebrew:
+
+```bash
+brew install python@3.11
+make python-setup
+```
+
+On Ubuntu, Debian, or WSL:
 
 ```bash
 sudo apt update
-sudo apt install -y python3-venv
+sudo apt install -y python3.11 python3.11-venv
 make python-setup
 ```
 

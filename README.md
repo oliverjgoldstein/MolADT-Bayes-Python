@@ -129,6 +129,10 @@ make python-parse
 make view
 ```
 
+`make python-setup` creates `./.venv`, prefers an installed Python 3.11+
+interpreter such as `python3.11`, and can install one with Homebrew or apt when
+the normal `python3` on PATH is too old.
+
 For the default FreeSolv model and inverse-design loop:
 
 ```bash

@@ -12,6 +12,11 @@ import pytest
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 WORKSPACE_MAKEFILE_PATH = WORKSPACE_ROOT / "Makefile"
 
+pytestmark = pytest.mark.skipif(
+    not WORKSPACE_MAKEFILE_PATH.exists(),
+    reason="workspace Makefile is not present in a standalone MolADT-Bayes-Python clone",
+)
+
 
 def _write_executable(path: Path, contents: str = "#!/bin/sh\nexit 0\n") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -73,11 +73,11 @@ def _ensure_system_ids(systems: tuple[tuple[SystemId, BondingSystem], ...]) -> N
 
 
 def _ensure_stereochemistry(molecule: Molecule, atom_set: set[AtomId]) -> None:
-    for annotation in molecule.smiles_stereochemistry.atom_stereo:
-        if annotation.center not in atom_set:
+    for atom_annotation in molecule.smiles_stereochemistry.atom_stereo:
+        if atom_annotation.center not in atom_set:
             raise ValidationError("SMILES atom stereochemistry references non-existent atom")
-    for annotation in molecule.smiles_stereochemistry.bond_stereo:
-        if annotation.start_atom not in atom_set or annotation.end_atom not in atom_set:
+    for bond_annotation in molecule.smiles_stereochemistry.bond_stereo:
+        if bond_annotation.start_atom not in atom_set or bond_annotation.end_atom not in atom_set:
             raise ValidationError("SMILES bond stereochemistry references non-existent atom")
 
 

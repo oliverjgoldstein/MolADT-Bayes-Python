@@ -106,7 +106,7 @@ def build_parser() -> argparse.ArgumentParser:
     view_examples_parser.add_argument(
         "names",
         nargs="*",
-        choices=tuple(sorted(EXAMPLE_VIEWER_MOLECULES)),
+        metavar="name",
         help=(
             "Built-in examples to include. Defaults to benzene, diborane, ferrocene, morphine, "
             "methane, water, sodium_chloride."
@@ -284,6 +284,11 @@ def _handle_view_examples(
     title: str | None,
     open_viewer: bool = False,
 ) -> int:
+    unknown_names = tuple(name for name in names if name not in EXAMPLE_VIEWER_MOLECULES)
+    if unknown_names:
+        available = ", ".join(sorted(EXAMPLE_VIEWER_MOLECULES))
+        requested = ", ".join(unknown_names)
+        raise ValueError(f"Unknown built-in example(s): {requested}. Choose from: {available}")
     entries = tuple(EXAMPLE_VIEWER_MOLECULES[name] for name in names)
     for _, molecule in entries:
         validate_molecule(molecule)

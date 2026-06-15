@@ -576,33 +576,42 @@ def _usable_freesolv_prior_molecules(*, progress_stream: TextIO | None = None) -
 
     index_path = PROCESSED_DATA_DIR / "freesolv_moladt_index.csv"
     raw_root = PROJECT_ROOT / "data" / "raw" / "freesolv"
-    if not index_path.exists():
-        raise FileNotFoundError(f"Missing processed FreeSolv molecule index: {index_path}")
 
     molecules: list[Molecule] = []
-    with index_path.open(newline="", encoding="utf-8") as handle:
-        rows = tuple(csv.DictReader(handle))
-        total = len(rows)
-        start = time.perf_counter()
-        _print_prior_load_progress(progress_stream, scanned=0, total=total, usable_count=0, start=start)
-        for index, row in enumerate(rows, start=1):
-            sdf_relpath = row.get("sdf_relpath")
-            if not sdf_relpath:
-                continue
-            try:
-                molecule = read_sdf(raw_root / sdf_relpath)
-                molecules.append(_enforce_generation_contract(molecule))
-            except (OSError, ValueError, ValidationError):
-                continue
-            finally:
-                if _should_print_interval(index, total):
-                    _print_prior_load_progress(
-                        progress_stream,
-                        scanned=index,
-                        total=total,
-                        usable_count=len(molecules),
-                        start=start,
-                    )
+    if index_path.exists():
+        with index_path.open(newline="", encoding="utf-8") as handle:
+            sdf_paths = tuple(
+                raw_root / sdf_relpath
+                for row in csv.DictReader(handle)
+                if (sdf_relpath := row.get("sdf_relpath"))
+            )
+    else:
+        sdf_root = raw_root / "sdffiles"
+        sdf_paths = tuple(sorted(sdf_root.glob("*.sdf"))) if sdf_root.exists() else ()
+        if not sdf_paths:
+            raise FileNotFoundError(
+                "Missing FreeSolv prior molecule inputs. Expected either processed index "
+                f"{index_path} or raw SDF files under {sdf_root}."
+            )
+
+    total = len(sdf_paths)
+    start = time.perf_counter()
+    _print_prior_load_progress(progress_stream, scanned=0, total=total, usable_count=0, start=start)
+    for index, sdf_path in enumerate(sdf_paths, start=1):
+        try:
+            molecule = read_sdf(sdf_path)
+            molecules.append(_enforce_generation_contract(molecule))
+        except (OSError, ValueError, ValidationError):
+            continue
+        finally:
+            if _should_print_interval(index, total):
+                _print_prior_load_progress(
+                    progress_stream,
+                    scanned=index,
+                    total=total,
+                    usable_count=len(molecules),
+                    start=start,
+                )
     if not molecules:
         raise ValueError("FreeSolv molecule index did not contain any valid generated-prior molecules")
     _FREESOLV_PRIOR_CACHE = tuple(molecules)

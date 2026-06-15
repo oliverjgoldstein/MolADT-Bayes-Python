@@ -1,4 +1,6 @@
-SYSTEM_PYTHON ?= $(strip $(shell command -v python3 2>/dev/null || command -v python 2>/dev/null))
+SYSTEM_PYTHON_INPUT_ORIGIN := $(origin SYSTEM_PYTHON)
+PYTHON_CANDIDATES ?= python3.14 python3.13 python3.12 python3.11 python3 python /opt/homebrew/bin/python3.14 /opt/homebrew/bin/python3.13 /opt/homebrew/bin/python3.12 /opt/homebrew/bin/python3.11 /usr/local/bin/python3.14 /usr/local/bin/python3.13 /usr/local/bin/python3.12 /usr/local/bin/python3.11
+SYSTEM_PYTHON ?= $(strip $(shell for python_cmd in $(PYTHON_CANDIDATES); do python_path="$$(command -v "$$python_cmd" 2>/dev/null || true)"; if [ -n "$$python_path" ] && "$$python_path" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' >/dev/null 2>&1; then printf "%s" "$$python_path"; break; fi; done))
 OS_NAME ?= $(strip $(shell uname -s 2>/dev/null))
 XCRUN ?= $(strip $(shell command -v xcrun 2>/dev/null))
 TESTED_PYTHON := 3.14.3
@@ -12,7 +14,9 @@ PYTHON_CMD := $(if $(wildcard $(VENV_PYTHON_UNIX)),./$(VENV_PYTHON_UNIX),$(if $(
 PYTHON_NO_CACHE := PYTHONDONTWRITEBYTECODE=1
 BASH := $(strip $(shell command -v bash 2>/dev/null || printf "%s" /bin/bash))
 APT_GET ?= apt-get
+BREW ?= brew
 SUDO ?= sudo
+AUTO_INSTALL_PYTHON ?= 1
 AUTO_INSTALL_VENV ?= 1
 
 INFERENCE_PRESET ?= paper
@@ -197,19 +201,90 @@ help:
 python-setup:
 	@set -e; \
 	system_python="$(SYSTEM_PYTHON)"; \
+	system_python_origin="$(SYSTEM_PYTHON_INPUT_ORIGIN)"; \
+	python_candidates="$(PYTHON_CANDIDATES)"; \
+	auto_install_python="$(AUTO_INSTALL_PYTHON)"; \
 	auto_install_venv="$(AUTO_INSTALL_VENV)"; \
 	apt_get_cmd="$(APT_GET)"; \
+	brew_cmd="$(BREW)"; \
 	sudo_cmd="$(SUDO)"; \
 	venv_error_log=".venv-setup.log"; \
+	is_root=0; \
+	if command -v id >/dev/null 2>&1 && [ "$$(id -u)" = "0" ]; then \
+		is_root=1; \
+	fi; \
+	pkg_prefix=""; \
+	if [ "$$is_root" != "1" ] && { [ -x "$$sudo_cmd" ] || command -v "$$sudo_cmd" >/dev/null 2>&1; }; then \
+		pkg_prefix="$$sudo_cmd"; \
+	fi; \
+	run_apt() { \
+		if [ -n "$$pkg_prefix" ]; then \
+			"$$pkg_prefix" "$$apt_get_cmd" "$$@"; \
+		else \
+			"$$apt_get_cmd" "$$@"; \
+		fi; \
+	}; \
+	python_is_supported() { \
+		[ -n "$$1" ] && "$$1" -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)" >/dev/null 2>&1; \
+	}; \
+	find_supported_python() { \
+		for python_candidate in $$python_candidates; do \
+			if [ -x "$$python_candidate" ]; then \
+				python_path="$$python_candidate"; \
+			else \
+				python_path="$$(command -v "$$python_candidate" 2>/dev/null || true)"; \
+			fi; \
+			if python_is_supported "$$python_path"; then \
+				printf "%s\n" "$$python_path"; \
+				return 0; \
+			fi; \
+		done; \
+		return 1; \
+	}; \
+	if ! python_is_supported "$$system_python" && [ "$$system_python_origin" = "undefined" ] && [ "$$auto_install_python" != "0" ]; then \
+		printf "%s\n" \
+			"" \
+			"No Python 3.11+ interpreter was found on PATH." \
+			"Attempting automatic Python installation for this platform."; \
+		if [ "$(OS_NAME)" = "Darwin" ] && { [ -x "$$brew_cmd" ] || command -v "$$brew_cmd" >/dev/null 2>&1; }; then \
+			printf "%s\n" "Trying Homebrew package: python@3.11"; \
+			if "$$brew_cmd" list --versions python@3.11 >/dev/null 2>&1 || "$$brew_cmd" install python@3.11; then \
+				:; \
+			fi; \
+		elif { [ -x "$$apt_get_cmd" ] || command -v "$$apt_get_cmd" >/dev/null 2>&1; } && { [ "$$is_root" = "1" ] || [ -n "$$pkg_prefix" ]; }; then \
+			printf "%s\n" "Trying apt packages for Python 3.11+ and venv support."; \
+			if run_apt update; then \
+				for packages in "python3.11 python3.11-venv" "python3 python3-venv"; do \
+					printf "%s\n" "Trying packages: $$packages"; \
+					if run_apt install -y $$packages; then \
+						break; \
+					fi; \
+				done; \
+			fi; \
+		else \
+			printf "%s\n" "No supported automatic installer was found."; \
+		fi; \
+		system_python="$$(find_supported_python || true)"; \
+	fi; \
 	if [ -z "$$system_python" ]; then \
 		printf "%s\n" \
 		"" \
-		"Could not find a Python interpreter." \
-		"Install Python 3.11+ and ensure \`python3\` or \`python\` is on PATH, then rerun:" \
-		"  make python-setup"; \
+		"Could not find a Python 3.11+ interpreter." \
+		"Install Python 3.11+ and rerun:" \
+		"  make python-setup" \
+		"" \
+		"macOS with Homebrew:" \
+		"  brew install python@3.11" \
+		"" \
+		"Ubuntu, Debian, or WSL:" \
+		"  sudo apt update" \
+		"  sudo apt install -y python3.11 python3.11-venv" \
+		"" \
+		"Or point Make at an existing interpreter:" \
+		"  SYSTEM_PYTHON=/path/to/python3.11 make python-setup"; \
 		exit 1; \
 	fi; \
-	if ! "$$system_python" -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)"; then \
+	if ! python_is_supported "$$system_python"; then \
 		python_version="$$( "$$system_python" -V 2>&1 || printf "%s" "unknown version" )"; \
 		printf "%s\n" \
 		"" \

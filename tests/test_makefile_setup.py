@@ -24,6 +24,46 @@ def _copy_makefile(tmp_path: Path) -> None:
     shutil.copy(MAKEFILE_PATH, tmp_path / "Makefile")
 
 
+def test_makefile_default_python_discovery_prefers_supported_versioned_python(tmp_path: Path) -> None:
+    _copy_makefile(tmp_path)
+    bin_dir = tmp_path / "bin"
+    _write_executable(
+        bin_dir / "python3",
+        "#!/bin/sh\n"
+        "if [ \"$1\" = \"-c\" ]; then\n"
+        "  exit 1\n"
+        "fi\n"
+        "exit 0\n",
+    )
+    _write_executable(
+        bin_dir / "python3.11",
+        "#!/bin/sh\n"
+        "if [ \"$1\" = \"-c\" ]; then\n"
+        "  exit 0\n"
+        "fi\n"
+        "exit 0\n",
+    )
+
+    env = dict(os.environ)
+    env["PATH"] = f"{bin_dir}:/usr/bin:/bin"
+    result = subprocess.run(
+        [
+            "make",
+            "-C",
+            str(tmp_path),
+            "-n",
+            "python-parse",
+            "PYTHON_CANDIDATES=python3.11 python3",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+        env=env,
+    )
+
+    assert f"{bin_dir}/python3.11 -m moladt.cli parse molecules/benzene.sdf" in result.stdout
+
+
 def test_makefile_prefers_unix_style_venv_python(tmp_path: Path) -> None:
     _copy_makefile(tmp_path)
     _write_executable(tmp_path / ".venv" / "bin" / "python", "#!/bin/sh\nexit 0\n")
@@ -100,7 +140,7 @@ def test_makefile_freesolv_20split_target_prints_output_contract(tmp_path: Path)
         check=True,
     )
 
-    assert "Running FreeSolv 20-split full MolADT small-feature GP." in result.stdout
+    assert "Running FreeSolv 20-split GP." in result.stdout
     assert "split_count: 20" in result.stdout
     assert "seed_start: 0" in result.stdout
     assert "results/freesolv_small_feature_gp/run_" in result.stdout
@@ -751,6 +791,69 @@ def test_makefile_python_setup_auto_installs_venv_support_with_apt(tmp_path: Pat
     assert "update" in apt_log
     assert "install" in apt_log
     assert "python3.11-venv" in apt_log
+    setup_log = (tmp_path / "setup.log").read_text(encoding="utf-8")
+    assert "pip" in setup_log
+
+
+def test_makefile_python_setup_auto_installs_python_with_homebrew(tmp_path: Path) -> None:
+    _copy_makefile(tmp_path)
+    bin_dir = tmp_path / "bin"
+    python_path = bin_dir / "python3.11"
+    _write_executable(
+        bin_dir / "brew",
+        "#!/bin/sh\n"
+        "printf \"%s\\n\" \"$@\" >> brew.log\n"
+        "if [ \"$1\" = \"list\" ]; then\n"
+        "  exit 1\n"
+        "fi\n"
+        "if [ \"$1\" = \"install\" ] && [ \"$2\" = \"python@3.11\" ]; then\n"
+        f"  cat <<'PYTHON' > '{python_path.as_posix()}'\n"
+        "#!/bin/sh\n"
+        "set -e\n"
+        "if [ \"$1\" = \"-c\" ]; then\n"
+        "  exit 0\n"
+        "fi\n"
+        "if [ \"$1\" = \"-m\" ] && [ \"$2\" = \"venv\" ]; then\n"
+        "  mkdir -p .venv/bin\n"
+        "  cat <<'VENV' > .venv/bin/python\n"
+        "#!/bin/sh\n"
+        "printf \"%s\\n\" \"$@\" >> setup.log\n"
+        "exit 0\n"
+        "VENV\n"
+        "  chmod +x .venv/bin/python\n"
+        "  exit 0\n"
+        "fi\n"
+        "exit 1\n"
+        "PYTHON\n"
+        f"  chmod +x '{python_path.as_posix()}'\n"
+        "  exit 0\n"
+        "fi\n"
+        "exit 1\n",
+    )
+
+    env = dict(os.environ)
+    env["PATH"] = f"{bin_dir}:/usr/bin:/bin"
+    result = subprocess.run(
+        [
+            "make",
+            "-C",
+            str(tmp_path),
+            "python-setup",
+            "OS_NAME=Darwin",
+            "PYTHON_CANDIDATES=python3.11",
+            "PYTHON_EXTRAS=",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "No Python 3.11+ interpreter was found on PATH." in result.stdout
+    assert "Trying Homebrew package: python@3.11" in result.stdout
+    brew_log = (tmp_path / "brew.log").read_text(encoding="utf-8")
+    assert re.search(r"install\npython@3\.11", brew_log)
     setup_log = (tmp_path / "setup.log").read_text(encoding="utf-8")
     assert "pip" in setup_log
 
